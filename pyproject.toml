@@ -92,3 +92,6 @@ fail_under = 95
 testpaths = ["tests"]
 addopts = "--tb native -v -r fxX --maxfail=25 -p no:warnings"
 python_files = "tests/*test_*.py"
+markers = [
+    "integration: tests that require a running CUBRID instance",
+]
