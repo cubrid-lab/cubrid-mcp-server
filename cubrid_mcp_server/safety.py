@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import sqlparse
 from sqlparse.sql import Statement
-from sqlparse.tokens import DML, Keyword
+from sqlparse.tokens import Keyword
 
 READ_ONLY_KEYWORDS: frozenset[str] = frozenset(
     {"SELECT", "SHOW", "DESC", "DESCRIBE", "EXPLAIN", "WITH"}
@@ -56,7 +56,7 @@ def _leading_keyword(statement: Statement) -> str | None:
     for token in statement.tokens:
         if token.is_whitespace:
             continue
-        if token.ttype in (DML, Keyword):
+        if token.ttype is not None and token.ttype in Keyword:
             return str(token.value)
         if token.ttype is None and hasattr(token, "tokens"):
             inner = _leading_keyword(token)

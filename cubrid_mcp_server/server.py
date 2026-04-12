@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastmcp import FastMCP  # type: ignore[import-not-found]
+from fastmcp import FastMCP
 
 from cubrid_mcp_server.config import Config
-from cubrid_mcp_server.database import Database  # type: ignore[import-not-found]
-from cubrid_mcp_server.safety import ensure_read_only  # type: ignore[import-not-found]
+from cubrid_mcp_server.database import Database
+from cubrid_mcp_server.safety import ensure_read_only
 
 mcp = FastMCP("cubrid-mcp-server")
 
@@ -24,7 +24,7 @@ def _db() -> Database:
     return _database
 
 
-@mcp.tool  # type: ignore[misc]
+@mcp.tool
 def all_table_names() -> list[str]:
     """Return every user table in the connected CUBRID database."""
     rows = _db().fetch_all(
@@ -33,7 +33,7 @@ def all_table_names() -> list[str]:
     return [row[0] for row in rows]
 
 
-@mcp.tool  # type: ignore[misc]
+@mcp.tool
 def filter_table_names(substring: str) -> list[str]:
     """Return user tables whose name contains ``substring`` (case-insensitive)."""
     needle = substring.strip().lower()
@@ -42,7 +42,7 @@ def filter_table_names(substring: str) -> list[str]:
     return [name for name in all_table_names() if needle in name.lower()]
 
 
-@mcp.tool  # type: ignore[misc]
+@mcp.tool
 def schema_definitions(table_name: str) -> list[dict[str, Any]]:
     """Return column metadata for ``table_name``: name, type, nullability, default, PK flag."""
     rows = _db().fetch_all(
@@ -66,7 +66,7 @@ def schema_definitions(table_name: str) -> list[dict[str, Any]]:
     ]
 
 
-@mcp.tool  # type: ignore[misc]
+@mcp.tool
 def execute_query(sql: str) -> dict[str, Any]:
     """Execute a read-only SQL statement and return rows, truncated if large."""
     config = _config or Config.from_env()
