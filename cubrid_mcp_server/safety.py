@@ -57,7 +57,7 @@ def _leading_keyword(statement: Statement) -> str | None:
         if token.is_whitespace:
             continue
         if token.ttype in (DML, Keyword):
-            return token.value
+            return str(token.value)
         if token.ttype is None and hasattr(token, "tokens"):
             inner = _leading_keyword(token)
             if inner is not None:
