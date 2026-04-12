@@ -13,20 +13,6 @@ A [Model Context Protocol](https://modelcontextprotocol.io) server for [CUBRID](
 
 ## Quick Start
 
-### Install
-
-```bash
-pip install cubrid-mcp-server
-```
-
-Or install from source:
-
-```bash
-git clone https://github.com/paikend/cubrid-mcp-server.git
-cd cubrid-mcp-server
-pip install -e .
-```
-
 ### Configure
 
 Set the required environment variables:
@@ -48,8 +34,16 @@ Optional settings:
 
 ### Run
 
+No installation required — use [`uvx`](https://docs.astral.sh/uv/guides/tools/) to run directly from PyPI:
+
 ```bash
-cubrid-mcp-server
+uvx cubrid-mcp-server
+```
+
+Or with `pipx`:
+
+```bash
+pipx run cubrid-mcp-server
 ```
 
 ## MCP Client Integration
@@ -62,7 +56,8 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 {
   "mcpServers": {
     "cubrid": {
-      "command": "cubrid-mcp-server",
+      "command": "uvx",
+      "args": ["cubrid-mcp-server"],
       "env": {
         "CUBRID_HOST": "localhost",
         "CUBRID_USER": "dba",
@@ -82,7 +77,8 @@ Add to `.mcp.json` in your project root:
 {
   "mcpServers": {
     "cubrid": {
-      "command": "cubrid-mcp-server",
+      "command": "uvx",
+      "args": ["cubrid-mcp-server"],
       "env": {
         "CUBRID_HOST": "localhost",
         "CUBRID_USER": "dba",
@@ -102,7 +98,8 @@ Add to `.cursor/mcp.json`:
 {
   "mcpServers": {
     "cubrid": {
-      "command": "cubrid-mcp-server",
+      "command": "uvx",
+      "args": ["cubrid-mcp-server"],
       "env": {
         "CUBRID_HOST": "localhost",
         "CUBRID_USER": "dba",
