@@ -3,14 +3,11 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
-from typing import TYPE_CHECKING, Any, Iterator
+from typing import Any, Iterator
 
 import pycubrid
 
 from cubrid_mcp_server.config import Config
-
-if TYPE_CHECKING:
-    from pycubrid import Connection, Cursor
 
 
 class DatabaseError(RuntimeError):
@@ -22,9 +19,9 @@ class Database:
 
     def __init__(self, config: Config) -> None:
         self._config = config
-        self._connection: "Connection | None" = None
+        self._connection: Any = None
 
-    def connect(self) -> "Connection":
+    def connect(self) -> Any:
         if self._connection is None:
             try:
                 self._connection = pycubrid.connect(
@@ -46,7 +43,7 @@ class Database:
                 self._connection = None
 
     @contextmanager
-    def cursor(self) -> Iterator["Cursor"]:
+    def cursor(self) -> Iterator[Any]:
         connection = self.connect()
         cursor = connection.cursor()
         try:
