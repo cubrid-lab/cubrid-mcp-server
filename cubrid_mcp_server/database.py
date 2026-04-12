@@ -22,17 +22,24 @@ class Database:
         self._connection: Any = None
 
     def connect(self) -> Any:
-        if self._connection is None:
+        if self._connection is not None:
             try:
-                self._connection = pycubrid.connect(
-                    host=self._config.host,
-                    port=self._config.port,
-                    user=self._config.user,
-                    password=self._config.password,
-                    database=self._config.database,
-                )
-            except Exception as exc:  # pragma: no cover - driver-specific
-                raise DatabaseError(f"failed to connect to CUBRID: {exc}") from exc
+                self._connection.get_server_version()
+                return self._connection
+            except Exception:
+                self._connection = None
+
+        try:
+            self._connection = pycubrid.connect(
+                host=self._config.host,
+                port=self._config.port,
+                user=self._config.user,
+                password=self._config.password,
+                database=self._config.database,
+                connect_timeout=10,
+            )
+        except Exception as exc:  # pragma: no cover - driver-specific
+            raise DatabaseError(f"failed to connect to CUBRID: {exc}") from exc
         return self._connection
 
     def close(self) -> None:

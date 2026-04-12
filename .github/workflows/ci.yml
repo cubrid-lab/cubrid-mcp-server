@@ -44,5 +44,70 @@ jobs:
       - name: Bandit (security)
         run: bandit -c pyproject.toml -r cubrid_mcp_server
 
-      - name: Pytest
-        run: pytest
+      - name: Pytest (unit)
+        run: pytest -m "not integration"
+
+  integration:
+    runs-on: ubuntu-latest
+
+    services:
+      cubrid:
+        image: cubrid/cubrid:11.2
+        env:
+          CUBRID_DB: demodb
+        ports:
+          - 33000:33000
+        options: >-
+          --health-cmd "cubrid broker status || true"
+          --health-interval 15s
+          --health-timeout 10s
+          --health-retries 10
+          --health-start-period 60s
+          --shm-size 512m
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install project and dev tools
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Wait for CUBRID broker
+        run: |
+          for i in $(seq 1 30); do
+            if python -c "
+          import socket
+          s = socket.socket()
+          s.settimeout(2)
+          try:
+              s.connect(('127.0.0.1', 33000))
+              s.close()
+              exit(0)
+          except:
+              exit(1)
+          " 2>/dev/null; then
+              echo "CUBRID broker is ready"
+              exit 0
+            fi
+            echo "Waiting for CUBRID... attempt $i"
+            sleep 5
+          done
+          echo "CUBRID broker did not start in time"
+          exit 1
+
+      - name: Pytest (integration)
+        env:
+          CUBRID_HOST: 127.0.0.1
+          CUBRID_PORT: "33000"
+          CUBRID_USER: dba
+          CUBRID_PASSWORD: ""
+          CUBRID_DATABASE: demodb
+        run: pytest -m integration -v
