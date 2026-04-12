@@ -29,7 +29,7 @@ class Database:
                     port=self._config.port,
                     user=self._config.user,
                     password=self._config.password,
-                    db=self._config.database,
+                    database=self._config.database,
                 )
             except Exception as exc:  # pragma: no cover - driver-specific
                 raise DatabaseError(f"failed to connect to CUBRID: {exc}") from exc

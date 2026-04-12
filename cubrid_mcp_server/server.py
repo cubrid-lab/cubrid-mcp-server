@@ -47,20 +47,32 @@ def schema_definitions(table_name: str) -> list[dict[str, Any]]:
     """Return column metadata for ``table_name``: name, type, nullability, default, PK flag."""
     rows = _db().fetch_all(
         """
-        SELECT attr_name, data_type, is_nullable, default_value, key_type
-        FROM db_attribute
-        WHERE class_name = ?
-        ORDER BY def_order
+        SELECT a.attr_name, a.data_type, a.is_nullable, a.default_value
+        FROM db_attribute a
+        WHERE a.class_name = ?
+        ORDER BY a.def_order
         """,
         (table_name,),
     )
+    pk_rows = _db().fetch_all(
+        """
+        SELECT k.key_attr_name
+        FROM db_index i, db_index_key k
+        WHERE i.class_name = ?
+          AND i.is_primary_key = 'YES'
+          AND i.index_name = k.index_name
+          AND i.class_name = k.class_name
+        """,
+        (table_name,),
+    )
+    pk_columns: set[str] = {r[0] for r in pk_rows}
     return [
         {
             "name": row[0],
             "type": row[1],
             "nullable": row[2] == "YES",
             "default": row[3],
-            "primary_key": row[4] == "PRI",
+            "primary_key": row[0] in pk_columns,
         }
         for row in rows
     ]
