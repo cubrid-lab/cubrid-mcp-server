@@ -69,6 +69,11 @@ warn_return_any = true
 warn_unused_configs = true
 
 [[tool.mypy.overrides]]
+module = ["fastmcp", "fastmcp.*"]
+ignore_missing_imports = true
+follow_untyped_imports = true
+
+[[tool.mypy.overrides]]
 module = "tests.*"
 ignore_errors = true
 
