@@ -1,0 +1,89 @@
+[build-system]
+requires = ["setuptools>=65.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cubrid-mcp-server"
+version = "0.0.1"
+description = "Model Context Protocol server for CUBRID database"
+readme = "README.md"
+license = "Apache-2.0"
+requires-python = ">=3.10"
+authors = [
+    {name = "Gyeongjun Paik", email = "paikend@gmail.com"},
+]
+keywords = ["CUBRID", "database", "MCP", "Model Context Protocol", "LLM"]
+classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Database",
+    "Topic :: Database :: Front-Ends",
+]
+dependencies = [
+    "fastmcp>=2.0",
+    "pycubrid>=1.0",
+    "sqlparse>=0.5",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov",
+    "ruff==0.15.8",
+    "mypy==1.19.1",
+    "bandit[toml]==1.9.4",
+    "pre-commit",
+    "tox",
+]
+
+[project.scripts]
+cubrid-mcp-server = "cubrid_mcp_server.__main__:main"
+
+[project.urls]
+Homepage = "https://github.com/paikend/cubrid-mcp-server"
+Repository = "https://github.com/paikend/cubrid-mcp-server"
+Issues = "https://github.com/paikend/cubrid-mcp-server/issues"
+
+[tool.setuptools]
+packages = ["cubrid_mcp_server"]
+include-package-data = true
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint.isort]
+known-first-party = ["cubrid_mcp_server"]
+
+[tool.mypy]
+python_version = "3.10"
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+
+[[tool.mypy.overrides]]
+module = "tests.*"
+ignore_errors = true
+
+[tool.bandit]
+exclude_dirs = ["tests"]
+skips = ["B101"]
+
+[tool.coverage.run]
+source = ["cubrid_mcp_server"]
+
+[tool.coverage.report]
+show_missing = true
+fail_under = 95
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "--tb native -v -r fxX --maxfail=25 -p no:warnings"
+python_files = "tests/*test_*.py"
