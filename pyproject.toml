@@ -47,9 +47,9 @@ dev = [
 cubrid-mcp-server = "cubrid_mcp_server.__main__:main"
 
 [project.urls]
-Homepage = "https://github.com/paikend/cubrid-mcp-server"
-Repository = "https://github.com/paikend/cubrid-mcp-server"
-Issues = "https://github.com/paikend/cubrid-mcp-server/issues"
+Homepage = "https://github.com/cubrid-labs/cubrid-mcp-server"
+Repository = "https://github.com/cubrid-labs/cubrid-mcp-server"
+Issues = "https://github.com/cubrid-labs/cubrid-mcp-server/issues"
 
 [tool.setuptools]
 packages = ["cubrid_mcp_server"]
