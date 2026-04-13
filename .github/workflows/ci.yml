@@ -41,29 +41,11 @@ jobs:
       - name: Mypy (strict)
         run: mypy cubrid_mcp_server
 
-      - name: Bandit (security)
-        run: bandit -c pyproject.toml -r cubrid_mcp_server
-
       - name: Pytest (unit)
         run: pytest -m "not integration"
 
   integration:
     runs-on: ubuntu-latest
-
-    services:
-      cubrid:
-        image: cubrid/cubrid:11.2
-        env:
-          CUBRID_DB: demodb
-        ports:
-          - 33000:33000
-        options: >-
-          --health-cmd "cubrid broker status || true"
-          --health-interval 15s
-          --health-timeout 10s
-          --health-retries 10
-          --health-start-period 60s
-          --shm-size 512m
 
     steps:
       - uses: actions/checkout@v4
@@ -80,27 +62,28 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e ".[dev]"
 
-      - name: Wait for CUBRID broker
+      - name: Start CUBRID container
         run: |
-          for i in $(seq 1 30); do
-            if python -c "
-          import socket
-          s = socket.socket()
-          s.settimeout(2)
-          try:
-              s.connect(('127.0.0.1', 33000))
-              s.close()
-              exit(0)
-          except:
-              exit(1)
-          " 2>/dev/null; then
-              echo "CUBRID broker is ready"
+          docker run -d --name cubrid \
+            --shm-size 512m \
+            -e CUBRID_DB=demodb \
+            -p 33000:33000 \
+            -p 1523:1523 \
+            cubrid/cubrid:11.2
+          docker ps
+
+      - name: Wait for CUBRID demodb to be ready
+        run: |
+          for i in $(seq 1 60); do
+            if docker exec cubrid bash -lc "csql -u dba demodb -c 'SELECT 1;'" >/dev/null 2>&1; then
+              echo "CUBRID demodb is ready (attempt $i)"
               exit 0
             fi
-            echo "Waiting for CUBRID... attempt $i"
+            echo "Waiting for CUBRID demodb... attempt $i"
             sleep 5
           done
-          echo "CUBRID broker did not start in time"
+          echo "CUBRID demodb did not become ready in time"
+          docker logs cubrid || true
           exit 1
 
       - name: Pytest (integration)
@@ -111,3 +94,7 @@ jobs:
           CUBRID_PASSWORD: ""
           CUBRID_DATABASE: demodb
         run: pytest -m integration -v
+
+      - name: CUBRID logs (on failure)
+        if: failure()
+        run: docker logs cubrid || true

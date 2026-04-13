@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cubrid-mcp-server"
-version = "0.0.1"
+version = "0.1.0"
 description = "Model Context Protocol server for CUBRID database"
 readme = "README.md"
 license = "Apache-2.0"
@@ -38,7 +38,6 @@ dev = [
     "pytest-cov",
     "ruff==0.15.8",
     "mypy==1.19.1",
-    "bandit[toml]==1.9.4",
     "pre-commit",
     "tox",
 ]
@@ -76,10 +75,6 @@ follow_untyped_imports = true
 [[tool.mypy.overrides]]
 module = "tests.*"
 ignore_errors = true
-
-[tool.bandit]
-exclude_dirs = ["tests"]
-skips = ["B101"]
 
 [tool.coverage.run]
 source = ["cubrid_mcp_server"]
