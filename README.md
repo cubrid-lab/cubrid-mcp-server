@@ -9,6 +9,12 @@ A [Model Context Protocol](https://modelcontextprotocol.io) server for [CUBRID](
 | `all_table_names` | List every user table in the database |
 | `filter_table_names` | Substring search over table names |
 | `schema_definitions` | Column types, nullability, defaults, and primary key info |
+| `describe_table` | Full metadata: columns, primary key, and indexes in one call |
+| `list_indexes` | Indexes for a table with key columns and flags |
+| `explain_query` | Execution plan/trace for a `SELECT`/`WITH` (via CUBRID `SHOW TRACE`) |
+| `table_row_counts` | `COUNT(*)` for one or many tables |
+| `list_serials` | CUBRID `SERIAL` sequences with current value and bounds |
+| `list_class_hierarchy` | CUBRID `CLASS` inheritance relationships |
 | `execute_query` | Run read-only SQL with automatic output truncation |
 
 ## Quick Start
