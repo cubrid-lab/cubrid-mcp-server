@@ -190,6 +190,7 @@ def test_explain_query_rejects_empty(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_table_row_counts_explicit(fake_db: FakeDatabase) -> None:
+    fake_db.queue([("users",), ("orders",)])
     fake_db.queue([(42,)])
     fake_db.queue([(7,)])
     result = server.table_row_counts(["users", "orders"])
@@ -197,6 +198,12 @@ def test_table_row_counts_explicit(fake_db: FakeDatabase) -> None:
         {"table": "users", "row_count": 42},
         {"table": "orders", "row_count": 7},
     ]
+
+
+def test_table_row_counts_rejects_unknown_table(fake_db: FakeDatabase) -> None:
+    fake_db.queue([("users",)])
+    result = server.table_row_counts(["evil; DROP TABLE x"])
+    assert result == [{"table": "evil; DROP TABLE x", "row_count": None, "error": "unknown table"}]
 
 
 def test_table_row_counts_defaults_to_all(fake_db: FakeDatabase) -> None:

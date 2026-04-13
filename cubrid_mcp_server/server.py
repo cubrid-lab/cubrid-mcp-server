@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from fastmcp import FastMCP
@@ -9,6 +10,8 @@ from fastmcp import FastMCP
 from cubrid_mcp_server.config import Config
 from cubrid_mcp_server.database import Database
 from cubrid_mcp_server.safety import ensure_read_only
+
+logger = logging.getLogger(__name__)
 
 mcp = FastMCP("cubrid-mcp-server")
 
@@ -148,31 +151,48 @@ def explain_query(sql: str) -> dict[str, Any]:
             if trace_rows and trace_rows[0]:
                 plan = str(trace_rows[0][0] or "").strip()
     finally:
-        try:
-            with db.cursor() as cur:
-                cur.execute("SET TRACE OFF", ())
-        except Exception:
-            pass
-        try:
-            db.connect().rollback()
-        except Exception:
-            pass
+        _reset_trace_state(db)
 
     return {"sql": cleaned, "plan": plan}
+
+
+def _reset_trace_state(db: Database) -> None:
+    """Best-effort cleanup of ``SET TRACE`` session state and pending transaction."""
+    cleanup_errors: list[str] = []
+    try:
+        with db.cursor() as cur:
+            cur.execute("SET TRACE OFF", ())
+    except Exception as exc:
+        cleanup_errors.append(f"SET TRACE OFF failed: {exc}")
+    try:
+        db.connect().rollback()
+    except Exception as exc:
+        cleanup_errors.append(f"rollback failed: {exc}")
+    if cleanup_errors:
+        logger.debug("explain_query cleanup: %s", "; ".join(cleanup_errors))
 
 
 @mcp.tool
 def table_row_counts(table_names: list[str] | None = None) -> list[dict[str, Any]]:
     """Return ``COUNT(*)`` for each table (all user tables by default)."""
-    targets = table_names if table_names else all_table_names()
+    known = set(all_table_names())
+    targets = table_names if table_names else sorted(known)
     results: list[dict[str, Any]] = []
     for name in targets:
+        if name not in known:
+            results.append({"table": name, "row_count": None, "error": "unknown table"})
+            continue
         try:
-            rows = _db().fetch_all(f'SELECT COUNT(*) FROM "{name}"')
+            rows = _db().fetch_all("SELECT COUNT(*) FROM " + _quote_ident(name))
             results.append({"table": name, "row_count": int(rows[0][0]) if rows else 0})
         except Exception as exc:
             results.append({"table": name, "row_count": None, "error": str(exc)})
     return results
+
+
+def _quote_ident(name: str) -> str:
+    """Escape and double-quote a SQL identifier (ANSI style)."""
+    return '"' + name.replace('"', '""') + '"'
 
 
 @mcp.tool
