@@ -10,8 +10,13 @@ from cubrid_mcp_server import server
 from cubrid_mcp_server.config import Config
 
 _TEST_CONFIG = Config(
-    host="h", port=33000, user="u", password="", database="d",
-    readonly=True, max_chars=4000,
+    host="h",
+    port=33000,
+    user="u",
+    password="",
+    database="d",
+    readonly=True,
+    max_chars=4000,
 )
 
 
@@ -23,9 +28,7 @@ class FakeDatabase:
     def queue(self, rows: list[tuple[Any, ...]]) -> None:
         self.responses.append(rows)
 
-    def fetch_all(
-        self, sql: str, params: tuple[Any, ...] | None = None
-    ) -> list[tuple[Any, ...]]:
+    def fetch_all(self, sql: str, params: tuple[Any, ...] | None = None) -> list[tuple[Any, ...]]:
         self.calls.append((sql, params or ()))
         if not self.responses:
             return []
@@ -247,8 +250,13 @@ def test_execute_query_renders_and_truncates(
     fake_db: FakeDatabase, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     cfg = Config(
-        host="h", port=33000, user="u", password="", database="d",
-        readonly=True, max_chars=10,
+        host="h",
+        port=33000,
+        user="u",
+        password="",
+        database="d",
+        readonly=True,
+        max_chars=10,
     )
     monkeypatch.setattr(server, "_config", cfg)
     fake_db.queue([("short",), ("a-much-longer-row",)])
