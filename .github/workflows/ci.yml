@@ -69,32 +69,23 @@ jobs:
         run: |
           docker run -d --name cubrid \
             --shm-size 512m \
+            -e CUBRID_DB=demodb \
             -p 33000:33000 \
             -p 1523:1523 \
             cubrid/cubrid:11.2
           docker ps
 
-      - name: Wait for CUBRID broker
+      - name: Wait for CUBRID demodb to be ready
         run: |
           for i in $(seq 1 60); do
-            if python -c "
-          import socket
-          s = socket.socket()
-          s.settimeout(2)
-          try:
-              s.connect(('127.0.0.1', 33000))
-              s.close()
-              exit(0)
-          except Exception:
-              exit(1)
-          " 2>/dev/null; then
-              echo "CUBRID broker is ready (attempt $i)"
+            if docker exec cubrid bash -lc "csql -u dba demodb -c 'SELECT 1;'" >/dev/null 2>&1; then
+              echo "CUBRID demodb is ready (attempt $i)"
               exit 0
             fi
-            echo "Waiting for CUBRID... attempt $i"
+            echo "Waiting for CUBRID demodb... attempt $i"
             sleep 5
           done
-          echo "CUBRID broker did not start in time"
+          echo "CUBRID demodb did not become ready in time"
           docker logs cubrid || true
           exit 1
 
