@@ -8,6 +8,7 @@ import pytest
 
 from cubrid_mcp_server import server
 from cubrid_mcp_server.config import Config
+from cubrid_mcp_server.safety import UnsafeSQLError
 
 _TEST_CONFIG = Config(
     host="h",
@@ -180,6 +181,13 @@ def test_explain_query_rejects_non_select(monkeypatch: pytest.MonkeyPatch) -> No
     monkeypatch.setattr(server, "_config", _TEST_CONFIG)
     with pytest.raises(ValueError):
         server.explain_query("DROP TABLE users")
+
+
+def test_explain_query_rejects_multistatement(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(server, "_db", lambda: FakeConnDatabase())
+    monkeypatch.setattr(server, "_config", _TEST_CONFIG)
+    with pytest.raises((ValueError, UnsafeSQLError)):
+        server.explain_query("SELECT 1; DROP TABLE users")
 
 
 def test_explain_query_rejects_empty(monkeypatch: pytest.MonkeyPatch) -> None:
