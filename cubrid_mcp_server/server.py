@@ -266,7 +266,9 @@ def _render_rows(rows: list[tuple[Any, ...]], max_chars: int) -> dict[str, Any]:
     for row in rows:
         serialized = [_coerce(value) for value in row]
         used += sum(len(str(value)) for value in serialized)
-        if used > max_chars:
+        # Always include at least one row, even when it alone exceeds max_chars,
+        # so callers see *something* instead of an empty truncated result.
+        if used > max_chars and output:
             return {"rows": output, "truncated": True}
         output.append(serialized)
     return {"rows": output, "truncated": False}

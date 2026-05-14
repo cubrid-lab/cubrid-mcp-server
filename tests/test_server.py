@@ -270,3 +270,10 @@ def test_execute_query_renders_and_truncates(
     result = server.execute_query("SELECT 1")
     assert result["row_count"] == 2
     assert result["truncated"] is True
+
+
+def test_render_rows_returns_first_row_when_oversized() -> None:
+    rows = [("a-very-long-first-row",), ("short",)]
+    out = server._render_rows(rows, max_chars=5)
+    assert out["truncated"] is True
+    assert out["rows"] == [["a-very-long-first-row"]]
