@@ -138,6 +138,8 @@ def explain_query(sql: str) -> dict[str, Any]:
     leading = cleaned.split(None, 1)[0].upper()
     if leading not in {"SELECT", "WITH"}:
         raise ValueError("explain_query only accepts SELECT or WITH statements")
+    # Defense in depth: reject embedded second statements (e.g. "SELECT 1; DROP TABLE x").
+    ensure_read_only(cleaned)
 
     db = _db()
     plan = ""
