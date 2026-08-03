@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 class ConfigError(RuntimeError):
@@ -15,10 +15,11 @@ class Config:
     host: str
     port: int
     user: str
-    password: str
+    password: str = field(repr=False)
     database: str
     readonly: bool
     max_chars: int
+    max_rows: int
 
     @classmethod
     def from_env(cls, env: dict[str, str] | None = None) -> "Config":
@@ -49,6 +50,16 @@ class Config:
         if max_chars <= 0:
             raise ConfigError("CUBRID_MCP_MAX_CHARS must be positive")
 
+        max_rows_raw = source.get("CUBRID_MCP_MAX_ROWS", "1000")
+        try:
+            max_rows = int(max_rows_raw)
+        except ValueError as exc:
+            raise ConfigError(
+                f"CUBRID_MCP_MAX_ROWS must be an integer, got {max_rows_raw!r}"
+            ) from exc
+        if max_rows <= 0:
+            raise ConfigError("CUBRID_MCP_MAX_ROWS must be positive")
+
         return cls(
             host=host,
             port=port,
@@ -57,6 +68,7 @@ class Config:
             database=database,
             readonly=readonly,
             max_chars=max_chars,
+            max_rows=max_rows,
         )
 
 

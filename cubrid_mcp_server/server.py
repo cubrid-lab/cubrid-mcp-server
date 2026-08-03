@@ -2,18 +2,27 @@
 
 from __future__ import annotations
 
+import base64
 import logging
+import sys
 from typing import Any
 
 from fastmcp import FastMCP
 
-from cubrid_mcp_server.config import Config
+from cubrid_mcp_server.config import Config, ConfigError
 from cubrid_mcp_server.database import Database
 from cubrid_mcp_server.safety import ensure_read_only
 
 logger = logging.getLogger(__name__)
 
 mcp = FastMCP("cubrid-mcp-server")
+
+# Cap on how many tables ``table_row_counts`` will scan in a single call, to avoid
+# accidentally issuing hundreds of COUNT(*) queries against a large database.
+_MAX_ROW_COUNT_TABLES = 50
+
+# Binary values up to this size are returned base64-encoded; larger blobs are summarized.
+_MAX_INLINE_BINARY_BYTES = 256
 
 _config: Config | None = None
 _database: Database | None = None
@@ -27,13 +36,36 @@ def _db() -> Database:
     return _database
 
 
+def _all_table_names() -> list[str]:
+    """Internal helper: list every user table (excludes system classes and views)."""
+    rows = _db().fetch_all(
+        "SELECT class_name FROM db_class "
+        "WHERE is_system_class='NO' AND class_type='CLASS' "
+        "ORDER BY class_name"
+    )
+    return [row[0] for row in rows]
+
+
+def _resolve_table(table_name: str) -> str:
+    """Resolve ``table_name`` to its canonical stored name (case-insensitive).
+
+    Raises :class:`ValueError` if no matching user table exists. This both prevents
+    lookups against system classes/views and gives callers a clear error instead of
+    silently returning empty metadata.
+    """
+    needle = table_name.strip().lower()
+    if not needle:
+        raise ValueError("table name must not be empty")
+    for name in _all_table_names():
+        if name.lower() == needle:
+            return name
+    raise ValueError(f"unknown table: {table_name!r}")
+
+
 @mcp.tool
 def all_table_names() -> list[str]:
     """Return every user table in the connected CUBRID database."""
-    rows = _db().fetch_all(
-        "SELECT class_name FROM db_class WHERE is_system_class='NO' ORDER BY class_name"
-    )
-    return [row[0] for row in rows]
+    return _all_table_names()
 
 
 @mcp.tool
@@ -42,12 +74,10 @@ def filter_table_names(substring: str) -> list[str]:
     needle = substring.strip().lower()
     if not needle:
         return []
-    return [name for name in all_table_names() if needle in name.lower()]
+    return [name for name in _all_table_names() if needle in name.lower()]
 
 
-@mcp.tool
-def schema_definitions(table_name: str) -> list[dict[str, Any]]:
-    """Return column metadata for ``table_name``: name, type, nullability, default, PK flag."""
+def _schema_definitions(table_name: str) -> list[dict[str, Any]]:
     rows = _db().fetch_all(
         """
         SELECT a.attr_name, a.data_type, a.is_nullable, a.default_value
@@ -82,22 +112,27 @@ def schema_definitions(table_name: str) -> list[dict[str, Any]]:
 
 
 @mcp.tool
+def schema_definitions(table_name: str) -> list[dict[str, Any]]:
+    """Return column metadata for ``table_name``: name, type, nullability, default, PK flag."""
+    return _schema_definitions(_resolve_table(table_name))
+
+
+@mcp.tool
 def describe_table(table_name: str) -> dict[str, Any]:
     """Return full metadata for ``table_name``: columns, primary key, and indexes."""
-    columns = schema_definitions(table_name)
-    indexes = list_indexes(table_name)
+    resolved = _resolve_table(table_name)
+    columns = _schema_definitions(resolved)
+    indexes = _list_indexes(resolved)
     primary_key = [col["name"] for col in columns if col["primary_key"]]
     return {
-        "table": table_name,
+        "table": resolved,
         "columns": columns,
         "primary_key": primary_key,
         "indexes": indexes,
     }
 
 
-@mcp.tool
-def list_indexes(table_name: str) -> list[dict[str, Any]]:
-    """Return indexes for ``table_name`` with their key columns and flags."""
+def _list_indexes(table_name: str) -> list[dict[str, Any]]:
     rows = _db().fetch_all(
         """
         SELECT i.index_name, i.is_unique, i.is_primary_key, i.is_foreign_key,
@@ -130,6 +165,12 @@ def list_indexes(table_name: str) -> list[dict[str, Any]]:
 
 
 @mcp.tool
+def list_indexes(table_name: str) -> list[dict[str, Any]]:
+    """Return indexes for ``table_name`` with their key columns and flags."""
+    return _list_indexes(_resolve_table(table_name))
+
+
+@mcp.tool
 def explain_query(sql: str) -> dict[str, Any]:
     """Return CUBRID's execution plan/trace for a ``SELECT`` or ``WITH`` statement."""
     cleaned = sql.strip().rstrip(";").strip()
@@ -143,31 +184,39 @@ def explain_query(sql: str) -> dict[str, Any]:
 
     db = _db()
     plan = ""
-    try:
-        with db.cursor() as cur:
-            cur.execute("SET TRACE ON", ())
-            cur.execute(cleaned, ())
-            cur.fetchall()
-            cur.execute("SHOW TRACE", ())
-            trace_rows = cur.fetchall()
-            if trace_rows and trace_rows[0]:
-                plan = str(trace_rows[0][0] or "").strip()
-    finally:
-        _reset_trace_state(db)
+    # Hold the connection lock across the whole SET TRACE ... SHOW TRACE sequence so a
+    # concurrent query cannot interleave and clobber the session trace state.
+    with db.exclusive() as connection:
+        try:
+            cursor = connection.cursor()
+            try:
+                cursor.execute("SET TRACE ON", ())
+                cursor.execute(cleaned, ())
+                cursor.execute("SHOW TRACE", ())
+                trace_rows = cursor.fetchall()
+                if trace_rows and trace_rows[0]:
+                    plan = str(trace_rows[0][0] or "").strip()
+            finally:
+                cursor.close()
+        finally:
+            _reset_trace_state(connection)
 
     return {"sql": cleaned, "plan": plan}
 
 
-def _reset_trace_state(db: Database) -> None:
+def _reset_trace_state(connection: Any) -> None:
     """Best-effort cleanup of ``SET TRACE`` session state and pending transaction."""
     cleanup_errors: list[str] = []
     try:
-        with db.cursor() as cur:
-            cur.execute("SET TRACE OFF", ())
+        cursor = connection.cursor()
+        try:
+            cursor.execute("SET TRACE OFF", ())
+        finally:
+            cursor.close()
     except Exception as exc:
         cleanup_errors.append(f"SET TRACE OFF failed: {exc}")
     try:
-        db.connect().rollback()
+        connection.rollback()
     except Exception as exc:
         cleanup_errors.append(f"rollback failed: {exc}")
     if cleanup_errors:
@@ -176,19 +225,25 @@ def _reset_trace_state(db: Database) -> None:
 
 @mcp.tool
 def table_row_counts(table_names: list[str] | None = None) -> list[dict[str, Any]]:
-    """Return ``COUNT(*)`` for each table (all user tables by default)."""
-    known = set(all_table_names())
+    """Return ``COUNT(*)`` for each table (all user tables by default, capped)."""
+    known = _all_table_names()
+    known_lower = {name.lower(): name for name in known}
     targets = table_names if table_names else sorted(known)
+    if len(targets) > _MAX_ROW_COUNT_TABLES:
+        raise ValueError(
+            f"too many tables requested ({len(targets)}); limit is {_MAX_ROW_COUNT_TABLES} per call"
+        )
     results: list[dict[str, Any]] = []
     for name in targets:
-        if name not in known:
+        resolved = known_lower.get(name.strip().lower())
+        if resolved is None:
             results.append({"table": name, "row_count": None, "error": "unknown table"})
             continue
         try:
-            rows = _db().fetch_all("SELECT COUNT(*) FROM " + _quote_ident(name))
-            results.append({"table": name, "row_count": int(rows[0][0]) if rows else 0})
+            rows = _db().fetch_all("SELECT COUNT(*) FROM " + _quote_ident(resolved))
+            results.append({"table": resolved, "row_count": int(rows[0][0]) if rows else 0})
         except Exception as exc:
-            results.append({"table": name, "row_count": None, "error": str(exc)})
+            results.append({"table": resolved, "row_count": None, "error": str(exc)})
     return results
 
 
@@ -249,15 +304,16 @@ def list_class_hierarchy(table_name: str | None = None) -> list[dict[str, Any]]:
 @mcp.tool
 def execute_query(sql: str) -> dict[str, Any]:
     """Execute a read-only SQL statement and return rows, truncated if large."""
+    db = _db()
     config = _config or Config.from_env()
     if config.readonly:
         ensure_read_only(sql)
 
-    rows = _db().fetch_all(sql)
+    rows, row_truncated = db.fetch_many(sql, None, config.max_rows)
     rendered = _render_rows(rows, config.max_chars)
     return {
-        "row_count": len(rows),
-        "truncated": rendered["truncated"],
+        "row_count": len(rendered["rows"]),
+        "truncated": bool(rendered["truncated"] or row_truncated),
         "rows": rendered["rows"],
     }
 
@@ -265,22 +321,50 @@ def execute_query(sql: str) -> dict[str, Any]:
 def _render_rows(rows: list[tuple[Any, ...]], max_chars: int) -> dict[str, Any]:
     output: list[list[Any]] = []
     used = 0
+    truncated = False
     for row in rows:
-        serialized = [_coerce(value) for value in row]
+        serialized = [_truncate_value(_coerce(value), max_chars) for value in row]
         used += sum(len(str(value)) for value in serialized)
         # Always include at least one row, even when it alone exceeds max_chars,
         # so callers see *something* instead of an empty truncated result.
         if used > max_chars and output:
-            return {"rows": output, "truncated": True}
+            truncated = True
+            break
         output.append(serialized)
-    return {"rows": output, "truncated": False}
+    return {"rows": output, "truncated": truncated}
+
+
+def _truncate_value(value: Any, limit: int) -> Any:
+    """Truncate an individual string value that alone exceeds ``limit`` characters."""
+    if isinstance(value, str) and limit > 0 and len(value) > limit:
+        return value[: limit - 1] + "\u2026"
+    return value
 
 
 def _coerce(value: Any) -> Any:
     if value is None or isinstance(value, (bool, int, float, str)):
         return value
+    if isinstance(value, (bytes, bytearray)):
+        data = bytes(value)
+        if len(data) <= _MAX_INLINE_BINARY_BYTES:
+            return base64.b64encode(data).decode("ascii")
+        return f"<binary {len(data)} bytes>"
     return str(value)
 
 
 def main() -> None:
+    # The MCP stdio transport uses stdout as the protocol channel, so ALL logging
+    # must go to stderr — a stray log line on stdout corrupts the JSON-RPC stream.
+    logging.basicConfig(
+        stream=sys.stderr,
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+    )
+    # Fail fast with a clear message if configuration is missing/invalid, rather than
+    # surfacing the error on the first tool call.
+    try:
+        Config.from_env()
+    except ConfigError as exc:
+        print(f"configuration error: {exc}", file=sys.stderr)
+        raise SystemExit(1) from exc
     mcp.run()
