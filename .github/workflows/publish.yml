@@ -22,10 +22,25 @@ jobs:
           python-version: "3.12"
 
       - name: Install build tools
-        run: python -m pip install --upgrade pip build
+        run: python -m pip install --upgrade pip build twine
 
       - name: Build package
         run: python -m build
 
+      - name: Verify tag matches package version
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          PKG=$(python -c "import cubrid_mcp_server; print(cubrid_mcp_server.__version__)")
+          echo "Release tag: $TAG | package version: $PKG"
+          if [ "$TAG" != "$PKG" ]; then
+            echo "::error::Release tag ($TAG) does not match package version ($PKG)"
+            exit 1
+          fi
+
+      - name: Check distribution metadata
+        run: twine check dist/*
+
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          attestations: true

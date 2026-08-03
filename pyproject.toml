@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cubrid-mcp-server"
-version = "0.2.0"
+dynamic = ["version"]
 description = "Model Context Protocol server for CUBRID database"
 readme = "README.md"
 license = "Apache-2.0"
@@ -27,7 +27,7 @@ classifiers = [
     "Topic :: Database :: Front-Ends",
 ]
 dependencies = [
-    "fastmcp>=2.0",
+    "fastmcp>=3.0,<4",
     "pycubrid>=1.4,<2",
     "sqlparse>=0.5",
 ]
@@ -46,13 +46,19 @@ dev = [
 cubrid-mcp-server = "cubrid_mcp_server.__main__:main"
 
 [project.urls]
-Homepage = "https://github.com/cubrid-labs/cubrid-mcp-server"
-Repository = "https://github.com/cubrid-labs/cubrid-mcp-server"
-Issues = "https://github.com/cubrid-labs/cubrid-mcp-server/issues"
+Homepage = "https://github.com/cubrid-lab/cubrid-mcp-server"
+Repository = "https://github.com/cubrid-lab/cubrid-mcp-server"
+Issues = "https://github.com/cubrid-lab/cubrid-mcp-server/issues"
 
 [tool.setuptools]
 packages = ["cubrid_mcp_server"]
 include-package-data = true
+
+[tool.setuptools.dynamic]
+version = {attr = "cubrid_mcp_server.__version__"}
+
+[tool.setuptools.package-data]
+cubrid_mcp_server = ["py.typed"]
 
 [tool.ruff]
 line-length = 100
@@ -85,7 +91,7 @@ fail_under = 95
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "--tb native -v -r fxX --maxfail=25 -p no:warnings"
+addopts = "--tb native -v -r fxX -p no:warnings"
 python_files = "tests/*test_*.py"
 markers = [
     "integration: tests that require a running CUBRID instance",
