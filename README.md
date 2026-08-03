@@ -126,7 +126,7 @@ For production use, also configure a read-only database user. See [`SECURITY.md`
 ## Development
 
 ```bash
-git clone https://github.com/cubrid-labs/cubrid-mcp-server.git
+git clone https://github.com/cubrid-lab/cubrid-mcp-server.git
 cd cubrid-mcp-server
 python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
