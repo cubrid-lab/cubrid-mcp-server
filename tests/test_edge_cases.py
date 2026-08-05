@@ -235,6 +235,26 @@ def test_explain_query_rejects_writes(sql: str, monkeypatch: pytest.MonkeyPatch)
         server.explain_query(sql)
 
 
+def test_explain_query_always_read_only_even_when_readonly_disabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """explain_query rejects non-SELECT/WITH input regardless of CUBRID_MCP_READONLY (#59)."""
+    write_mode = Config(
+        host="h",
+        port=33000,
+        user="u",
+        password="",
+        database="d",
+        readonly=False,
+        max_chars=4000,
+        max_rows=1000,
+    )
+    monkeypatch.setattr(server, "_db", lambda: _FakeConnDB())
+    monkeypatch.setattr(server, "_config", write_mode)
+    with pytest.raises(ValueError):
+        server.explain_query("DELETE FROM users")
+
+
 # ---------------------------------------------------------------------------
 # E. _quote_ident escaping for table_row_counts identifier interpolation
 # ---------------------------------------------------------------------------

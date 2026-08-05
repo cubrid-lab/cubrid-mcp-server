@@ -40,7 +40,21 @@ Optional settings:
 
 ### Run
 
-No installation required — use [`uvx`](https://docs.astral.sh/uv/guides/tools/) to run directly from PyPI:
+> **Note:** The package is not yet published to PyPI. Until the first release lands, install and run it from source (see [Development](#development)); the `uvx`/`pipx` commands below will work once the package is available on PyPI.
+
+### Run from source (available now)
+
+```bash
+git clone https://github.com/cubrid-lab/cubrid-mcp-server.git
+cd cubrid-mcp-server
+python -m venv .venv && source .venv/bin/activate
+pip install -e .
+cubrid-mcp-server
+```
+
+### Run from PyPI (once published)
+
+Use [`uvx`](https://docs.astral.sh/uv/guides/tools/) to run directly from PyPI:
 
 ```bash
 uvx cubrid-mcp-server

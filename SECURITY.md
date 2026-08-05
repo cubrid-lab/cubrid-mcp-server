@@ -37,6 +37,9 @@ You can disable this layer by setting `CUBRID_MCP_READONLY=0`, but only do so wh
 - the underlying DB user is already read-only (Layer 1 is in place), **and**
 - you genuinely need statements outside the whitelist (for example, CUBRID administrative `SHOW` variants that confuse the parser).
 
+**`explain_query` is always read-only**, independent of `CUBRID_MCP_READONLY`. It only ever produces a plan for a `SELECT`/`WITH` query, so it always applies the whitelist even when the server is nominally in write-allowed mode. Only `execute_query` honors `CUBRID_MCP_READONLY=0`.
+- you genuinely need statements outside the whitelist (for example, CUBRID administrative `SHOW` variants that confuse the parser).
+
 ## Layer 3 — output limits
 
 `execute_query` caps the number of rows returned at `CUBRID_MCP_MAX_ROWS` (default 1000) and truncates rendered output once the cumulative character count exceeds `CUBRID_MCP_MAX_CHARS` (default 4000). Together these protect the model's context window and limit how much data a single probing query can exfiltrate in one shot. Binary values are base64-encoded when small and summarized (`<binary N bytes>`) when large, so raw blobs never flood the output.
