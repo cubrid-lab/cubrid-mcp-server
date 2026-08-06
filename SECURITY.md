@@ -44,6 +44,40 @@ You can disable this layer by setting `CUBRID_MCP_READONLY=0`, but only do so wh
 
 `execute_query` caps the number of rows returned at `CUBRID_MCP_MAX_ROWS` (default 1000) and truncates rendered output once the cumulative character count exceeds `CUBRID_MCP_MAX_CHARS` (default 4000). Together these protect the model's context window and limit how much data a single probing query can exfiltrate in one shot. Binary values are base64-encoded when small and summarized (`<binary N bytes>`) when large, so raw blobs never flood the output.
 
+
+
+## LLM threat model
+
+Because this server exposes database access to an LLM via MCP, the threat surface differs from a conventional database client. Operators must understand what the safety checker prevents and what it does not.
+
+### What read-only enforcement **prevents**
+
+- Data mutation — `INSERT`, `UPDATE`, `DELETE`, `REPLACE`, `MERGE`
+- Schema changes — `CREATE`, `DROP`, `ALTER`, `TRUNCATE`, `RENAME`
+- Privilege escalation — `GRANT`, `REVOKE`
+- Transaction control — `COMMIT`, `ROLLBACK`
+- Server-side procedures — `CALL`, `EXECUTE`
+- Row-level locking — `SELECT ... FOR UPDATE`, `LOCK`
+- Multi-statement injection — `;` separated batches are rejected outright
+- Comment-based obfuscation — SQL comments are stripped before the keyword scan
+
+### What read-only enforcement **does not prevent**
+
+- **Data exfiltration** — `SELECT password_hash FROM users` is allowed. The checker only blocks mutation; it cannot know which columns are sensitive.
+- **Information disclosure** — Schema metadata, table names, row counts, and index definitions are all readable.
+- **Resource exhaustion** — An LLM can be instructed to run expensive full-table scans repeatedly. There is no per-query cost limit.
+
+### Operator responsibilities
+
+1. **Dedicated read-only DB user** — Create a CUBRID user with `SELECT`-only grants at the table level (see Layer 2 above).
+2. **Restrict sensitive tables** — Exclude tables containing credentials, PII, or other secrets from the user's grants.
+3. **Network isolation** — Run the MCP server in a network segment where the LLM cannot reach the database directly.
+4. **Audit logging** — Enable CUBRID query logging and monitor for unusual `SELECT` patterns.
+
+### Future: `CUBRID_MCP_ALLOWED_TABLES`
+
+A planned enhancement will allow operators to restrict which tables the LLM can query via an allow-list environment variable. This will provide defense-in-depth against data exfiltration at the application layer, complementing (not replacing) database-level grants.
+
 ## Reporting a vulnerability
 
 Please do **not** open a public GitHub issue for security-sensitive reports. Instead, email [paikend@gmail.com](mailto:paikend@gmail.com) with:
