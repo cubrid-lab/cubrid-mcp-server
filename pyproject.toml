@@ -29,7 +29,7 @@ classifiers = [
 dependencies = [
     "fastmcp>=3.0,<4",
     "pycubrid>=1.4,<2",
-    "sqlparse>=0.5",
+    "sqlparse>=0.5,<1",
 ]
 
 [project.optional-dependencies]

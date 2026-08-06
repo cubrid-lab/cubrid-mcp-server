@@ -50,6 +50,16 @@ FORBIDDEN_KEYWORDS: frozenset[str] = frozenset(
 )
 
 
+def _strip_comments(sql: str) -> str:
+    """Remove SQL comments before safety check.
+
+    ``sqlparse`` can be confused by keywords inside comments (e.g.
+    ``/* DROP TABLE */`` or ``-- DELETE FROM users``). Stripping
+    comments ensures the safety checker only scans real SQL tokens.
+    """
+    return sqlparse.format(sql, strip_comments=True)
+
+
 class UnsafeSQLError(ValueError):
     """Raised when a statement is rejected by the read-only checker."""
 
@@ -58,6 +68,10 @@ def ensure_read_only(sql: str) -> None:
     """Raise :class:`UnsafeSQLError` if ``sql`` is not a single read-only statement."""
     if not sql or not sql.strip():
         raise UnsafeSQLError("empty SQL statement")
+
+    # Strip comments before parsing — keywords inside comments could
+    # confuse the safety checker (defence-in-depth).
+    sql = _strip_comments(sql)
 
     statements = [stmt for stmt in sqlparse.parse(sql) if _is_non_empty(stmt)]
     if len(statements) == 0:
