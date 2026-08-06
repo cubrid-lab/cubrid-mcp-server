@@ -20,6 +20,8 @@ class Config:
     readonly: bool
     max_chars: int
     max_rows: int
+    max_sql_length: int = 65536
+    query_timeout: float = 30.0
 
     @classmethod
     def from_env(cls, env: dict[str, str] | None = None) -> "Config":
@@ -60,6 +62,26 @@ class Config:
         if max_rows <= 0:
             raise ConfigError("CUBRID_MCP_MAX_ROWS must be positive")
 
+        max_sql_length_raw = source.get("CUBRID_MCP_MAX_SQL_LENGTH", "65536")
+        try:
+            max_sql_length = int(max_sql_length_raw)
+        except ValueError as exc:
+            raise ConfigError(
+                f"CUBRID_MCP_MAX_SQL_LENGTH must be an integer, got {max_sql_length_raw!r}"
+            ) from exc
+        if max_sql_length <= 0:
+            raise ConfigError("CUBRID_MCP_MAX_SQL_LENGTH must be positive")
+
+        query_timeout_raw = source.get("CUBRID_MCP_QUERY_TIMEOUT", "30")
+        try:
+            query_timeout = float(query_timeout_raw)
+        except ValueError as exc:
+            raise ConfigError(
+                f"CUBRID_MCP_QUERY_TIMEOUT must be a number, got {query_timeout_raw!r}"
+            ) from exc
+        if query_timeout <= 0:
+            raise ConfigError("CUBRID_MCP_QUERY_TIMEOUT must be positive")
+
         return cls(
             host=host,
             port=port,
@@ -69,6 +91,8 @@ class Config:
             readonly=readonly,
             max_chars=max_chars,
             max_rows=max_rows,
+            max_sql_length=max_sql_length,
+            query_timeout=query_timeout,
         )
 
 
