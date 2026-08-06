@@ -79,6 +79,23 @@ def test_safety_rejects_only_block_comment() -> None:
         ensure_read_only("/* nothing here */")
 
 
+def test_safety_strips_line_comment_before_check() -> None:
+    """Keywords inside line comments must not trigger false rejections."""
+    # SELECT is the real statement; DROP in the comment must be ignored
+    ensure_read_only("SELECT 1 -- DROP TABLE users")
+
+
+def test_safety_strips_block_comment_before_check() -> None:
+    """Keywords inside block comments must not trigger false rejections."""
+    ensure_read_only("SELECT 1 /* DELETE FROM users */")
+
+
+def test_safety_comment_does_not_bypass_forbidden_keyword() -> None:
+    """A real forbidden keyword after the comment is still caught."""
+    with pytest.raises(UnsafeSQLError):
+        ensure_read_only("SELECT 1 /* comment */ ; DROP TABLE users")
+
+
 # ---------------------------------------------------------------------------
 # B. _render_rows truncation behavior
 # ---------------------------------------------------------------------------
