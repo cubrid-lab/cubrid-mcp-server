@@ -176,6 +176,14 @@ def explain_query(sql: str) -> dict[str, Any]:
     cleaned = sql.strip().rstrip(";").strip()
     if not cleaned:
         raise ValueError("empty SQL statement")
+    config = _config or Config.from_env()
+    if len(cleaned) > config.max_sql_length:
+        raise ValueError(
+            f"SQL exceeds maximum length of {config.max_sql_length} characters "
+            f"(CUBRID_MCP_MAX_SQL_LENGTH)"
+        )
+    if not cleaned:
+        raise ValueError("empty SQL statement")
     leading = cleaned.split(None, 1)[0].upper()
     if leading not in {"SELECT", "WITH"}:
         raise ValueError("explain_query only accepts SELECT or WITH statements")
@@ -310,6 +318,11 @@ def execute_query(sql: str) -> dict[str, Any]:
     """Execute a read-only SQL statement and return rows, truncated if large."""
     db = _db()
     config = _config or Config.from_env()
+    if len(sql) > config.max_sql_length:
+        raise ValueError(
+            f"SQL exceeds maximum length of {config.max_sql_length} characters "
+            f"(CUBRID_MCP_MAX_SQL_LENGTH)"
+        )
     if config.readonly:
         ensure_read_only(sql)
 
@@ -357,6 +370,30 @@ def _coerce(value: Any) -> Any:
 
 
 def main() -> None:
+    # The MCP stdio transport uses stdout as the protocol channel, so ALL logging
+    # must go to stderr — a stray log line on stdout corrupts the JSON-RPC stream.
+    logging.basicConfig(
+        stream=sys.stderr,
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+    )
+    # Fail fast with a clear message if configuration is missing/invalid, rather than
+    # surfacing the error on the first tool call.
+    try:
+        global _config
+        _config = Config.from_env()
+    except ConfigError as exc:
+        print(f"configuration error: {exc}", file=sys.stderr)
+        raise SystemExit(1) from exc
+
+    import atexit
+
+    def _cleanup() -> None:
+        if _database is not None:
+            _database.close()
+
+    atexit.register(_cleanup)
+    mcp.run()
     # The MCP stdio transport uses stdout as the protocol channel, so ALL logging
     # must go to stderr — a stray log line on stdout corrupts the JSON-RPC stream.
     logging.basicConfig(

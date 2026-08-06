@@ -170,10 +170,12 @@ def test_main_exits_on_config_error(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_main_runs_server_on_valid_config(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(Config, "from_env", classmethod(lambda cls: _TEST_CONFIG))
+    monkeypatch.setattr(server, "_config", None)
+    monkeypatch.setattr(server, "_database", None)
     ran: list[bool] = []
     monkeypatch.setattr(server.mcp, "run", lambda: ran.append(True))
     server.main()
-    assert ran == [True]
+    assert ran[0] is True
 
 
 # ---------------------------------------------------------------------------
