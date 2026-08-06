@@ -7,7 +7,7 @@ name = "cubrid-mcp-server"
 dynamic = ["version"]
 description = "Model Context Protocol server for CUBRID database"
 readme = "README.md"
-license = "Apache-2.0"
+license = "MIT"
 requires-python = ">=3.10"
 authors = [
     {name = "Gyeongjun Paik", email = "paikend@gmail.com"},
