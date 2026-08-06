@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-08-06
+
 ### Security
 - Read-only checker now scans the full token stream and rejects statements that begin with an allowed keyword but embed a forbidden one, e.g. a CTE `WITH ... DELETE` or a `SELECT ... FOR UPDATE`. (#40)
 - `main()` fails fast with a clear stderr message when configuration is missing or invalid, instead of surfacing the error on the first tool call. (#46)
@@ -21,6 +23,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `Config.password` is excluded from `repr()`, and connection errors no longer echo the password or raw driver message. (#34, #41)
 - The database wrapper closes stale connections before discarding them and serializes cursor access behind a re-entrant lock. (#33, #39)
 - All logging is directed to stderr so it cannot corrupt the stdio MCP protocol stream on stdout. (#57)
+- `--maxfail=25` removed from pytest defaults so the full failure surface is visible in CI. (#60)
+- `explain_query` is documented as intentionally always read-only regardless of `CUBRID_MCP_READONLY`, since it only ever plans SELECT/WITH queries. (#59)
+- `SECURITY.md` updated with correct per-table CUBRID GRANT syntax. (#49)
 
 ### Added
 - `py.typed` marker so downstream users get type information; package version is now derived dynamically from `cubrid_mcp_server.__version__`. (#54, #55)
@@ -28,8 +33,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - Corrected the repository org in project URLs and docs (`cubrid-labs` → `cubrid-lab`). (#53)
+- README documents install-from-source path alongside `uvx`/`pipx` for PyPI. (#36)
 
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [0.2.0] - 2026-05-15
 
