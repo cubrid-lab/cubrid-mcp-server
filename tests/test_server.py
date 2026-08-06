@@ -18,6 +18,7 @@ _TEST_CONFIG = Config(
     database="d",
     readonly=True,
     max_chars=4000,
+    max_rows=1000,
 )
 
 
@@ -34,6 +35,17 @@ class FakeDatabase:
         if not self.responses:
             return []
         return self.responses.pop(0)
+
+    def fetch_many(
+        self,
+        sql: str,
+        params: tuple[Any, ...] | None = None,
+        max_rows: int | None = None,
+    ) -> tuple[list[tuple[Any, ...]], bool]:
+        rows = self.fetch_all(sql, params)
+        if max_rows is not None and len(rows) > max_rows:
+            return rows[:max_rows], True
+        return rows, False
 
 
 @pytest.fixture
@@ -59,6 +71,7 @@ def test_filter_table_names_empty(fake_db: FakeDatabase) -> None:
 
 
 def test_schema_definitions(fake_db: FakeDatabase) -> None:
+    fake_db.queue([("users",)])  # _resolve_table lookup
     fake_db.queue(
         [
             ("id", "INTEGER", "NO", None),
@@ -86,6 +99,7 @@ def test_schema_definitions(fake_db: FakeDatabase) -> None:
 
 
 def test_list_indexes_groups_columns(fake_db: FakeDatabase) -> None:
+    fake_db.queue([("users",)])  # _resolve_table lookup
     fake_db.queue(
         [
             ("pk_users", "YES", "YES", "NO", "NO", 1, "id", 0, "ASC"),
@@ -102,6 +116,7 @@ def test_list_indexes_groups_columns(fake_db: FakeDatabase) -> None:
 
 
 def test_describe_table(fake_db: FakeDatabase) -> None:
+    fake_db.queue([("users",)])  # _resolve_table lookup
     fake_db.queue([("id", "INTEGER", "NO", None)])
     fake_db.queue([("id",)])
     fake_db.queue([("pk_users", "YES", "YES", "NO", "NO", 1, "id", 0, "ASC")])
@@ -131,6 +146,9 @@ class FakeCursor:
     def fetchall(self) -> list[tuple[Any, ...]]:
         return self._fetch
 
+    def close(self) -> None:
+        pass
+
 
 class FakeConnDatabase(FakeDatabase):
     def __init__(self) -> None:
@@ -138,28 +156,31 @@ class FakeConnDatabase(FakeDatabase):
         self.cursors: list[FakeCursor] = []
         self.rolled_back = False
 
-    def cursor(self) -> Any:
-        from contextlib import contextmanager
-
-        @contextmanager
-        def _cm() -> Any:
-            cur = FakeCursor(self)
-            self.cursors.append(cur)
-            try:
-                yield cur
-            finally:
-                pass
-
-        return _cm()
-
-    def connect(self) -> Any:
+    def _make_conn(self) -> Any:
         outer = self
 
         class _Conn:
+            def cursor(self_inner) -> FakeCursor:
+                cur = FakeCursor(outer)
+                outer.cursors.append(cur)
+                return cur
+
             def rollback(self_inner) -> None:
                 outer.rolled_back = True
 
         return _Conn()
+
+    def exclusive(self) -> Any:
+        from contextlib import contextmanager
+
+        @contextmanager
+        def _cm() -> Any:
+            yield self._make_conn()
+
+        return _cm()
+
+    def connect(self) -> Any:
+        return self._make_conn()
 
 
 def test_explain_query_uses_trace(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -272,11 +293,12 @@ def test_execute_query_renders_and_truncates(
         database="d",
         readonly=True,
         max_chars=10,
+        max_rows=1000,
     )
     monkeypatch.setattr(server, "_config", cfg)
     fake_db.queue([("short",), ("a-much-longer-row",)])
     result = server.execute_query("SELECT 1")
-    assert result["row_count"] == 2
+    assert result["row_count"] == 1
     assert result["truncated"] is True
 
 
@@ -284,4 +306,5 @@ def test_render_rows_returns_first_row_when_oversized() -> None:
     rows = [("a-very-long-first-row",), ("short",)]
     out = server._render_rows(rows, max_chars=5)
     assert out["truncated"] is True
-    assert out["rows"] == [["a-very-long-first-row"]]
+    # The single oversized value is itself truncated to the char budget.
+    assert out["rows"] == [["a-ve\u2026"]]

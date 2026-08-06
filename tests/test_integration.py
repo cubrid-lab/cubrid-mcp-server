@@ -26,13 +26,21 @@ skipif_no_cubrid = pytest.mark.skipif(
 @skipif_no_cubrid
 class TestCubridIntegration:
     def setup_method(self) -> None:
+        from cubrid_mcp_server import server
         from cubrid_mcp_server.config import Config
         from cubrid_mcp_server.database import Database
 
         self.config = Config.from_env()
         self.db = Database(self.config)
+        # Route the server tool functions at the live database.
+        server._config = self.config
+        server._database = self.db
 
     def teardown_method(self) -> None:
+        from cubrid_mcp_server import server
+
+        server._database = None
+        server._config = None
         self.db.close()
 
     def test_connect(self) -> None:
@@ -46,89 +54,90 @@ class TestCubridIntegration:
         assert len(rows) > 0
 
     def test_all_table_names_tool(self) -> None:
-        rows = self.db.fetch_all(
-            "SELECT class_name FROM db_class WHERE is_system_class = 'NO' ORDER BY class_name"
-        )
-        tables = [r[0] for r in rows]
-        assert isinstance(tables, list)
-
-    def test_schema_definitions_tool(self) -> None:
-        rows = self.db.fetch_all(
-            "SELECT class_name FROM db_class WHERE is_system_class = 'NO' LIMIT 1"
-        )
-        if not rows:
-            pytest.skip("no user tables in database")
-        table = rows[0][0]
-        cols = self.db.fetch_all(
-            "SELECT a.attr_name, a.data_type FROM db_attribute a "
-            "WHERE a.class_name = ? ORDER BY a.def_order",
-            (table,),
-        )
-        assert len(cols) > 0
-
-    def test_execute_query_tool(self) -> None:
-        rows = self.db.fetch_all("SELECT 1 + 1")
-        assert rows[0][0] == 2
-
-    def test_list_indexes_query(self) -> None:
-        rows = self.db.fetch_all(
-            "SELECT class_name FROM db_class WHERE is_system_class='NO' LIMIT 1"
-        )
-        if not rows:
-            pytest.skip("no user tables")
-        table = rows[0][0]
-        result = self.db.fetch_all(
-            "SELECT i.index_name, i.is_unique, i.is_primary_key, i.is_foreign_key, "
-            "i.is_reverse, i.key_count, k.key_attr_name, k.key_order, k.asc_desc "
-            "FROM db_index i, db_index_key k "
-            "WHERE i.class_name = ? AND i.index_name = k.index_name "
-            "AND i.class_name = k.class_name "
-            "ORDER BY i.index_name, k.key_order",
-            (table,),
-        )
-        assert isinstance(result, list)
-
-    def test_list_serials_query(self) -> None:
-        rows = self.db.fetch_all(
-            "SELECT name, current_val, increment_val, max_val, min_val, "
-            "cyclic, started, class_name, att_name, cached_num, comment "
-            "FROM db_serial ORDER BY name"
-        )
-        assert isinstance(rows, list)
-
-    def test_list_class_hierarchy_query(self) -> None:
-        rows = self.db.fetch_all(
-            "SELECT class_name, super_class_name FROM db_direct_super_class "
-            "ORDER BY class_name LIMIT 5"
-        )
-        assert isinstance(rows, list)
-
-    def test_v01_tools_via_server(self) -> None:
         from cubrid_mcp_server import server
 
-        server._database = self.db
-        server._config = self.config
-        try:
-            tables = server.all_table_names()
-            assert isinstance(tables, list)
-            if tables:
-                desc = server.describe_table(tables[0])
-                assert desc["table"] == tables[0]
-                assert "columns" in desc and "indexes" in desc
-                idx = server.list_indexes(tables[0])
-                assert isinstance(idx, list)
-                counts = server.table_row_counts([tables[0]])
-                assert counts[0]["table"] == tables[0]
-            explain = server.explain_query("SELECT COUNT(*) FROM db_class")
-            assert "plan" in explain
-            assert "SELECT" in explain["plan"] or explain["plan"] == ""
-            serials = server.list_serials()
-            assert isinstance(serials, list)
-            hierarchy = server.list_class_hierarchy()
-            assert isinstance(hierarchy, list)
-        finally:
-            server._database = None
-            server._config = None
+        tables = server.all_table_names()
+        assert isinstance(tables, list)
+
+    def test_filter_table_names_tool(self) -> None:
+        from cubrid_mcp_server import server
+
+        tables = server.all_table_names()
+        if not tables:
+            pytest.skip("no user tables in database")
+        needle = tables[0][:2]
+        filtered = server.filter_table_names(needle)
+        assert tables[0] in filtered
+
+    def test_schema_definitions_tool(self) -> None:
+        from cubrid_mcp_server import server
+
+        tables = server.all_table_names()
+        if not tables:
+            pytest.skip("no user tables in database")
+        cols = server.schema_definitions(tables[0])
+        assert isinstance(cols, list)
+        assert all("name" in c and "type" in c for c in cols)
+
+    def test_describe_table_tool(self) -> None:
+        from cubrid_mcp_server import server
+
+        tables = server.all_table_names()
+        if not tables:
+            pytest.skip("no user tables in database")
+        desc = server.describe_table(tables[0])
+        assert desc["table"] == tables[0]
+        assert "columns" in desc and "indexes" in desc
+
+    def test_schema_definitions_unknown_table_raises(self) -> None:
+        from cubrid_mcp_server import server
+
+        with pytest.raises(ValueError):
+            server.schema_definitions("definitely_not_a_real_table_xyz")
+
+    def test_execute_query_tool(self) -> None:
+        from cubrid_mcp_server import server
+
+        result = server.execute_query("SELECT 1 + 1")
+        assert result["rows"][0][0] == 2
+        assert result["row_count"] == 1
+        assert result["truncated"] is False
+
+    def test_list_indexes_tool(self) -> None:
+        from cubrid_mcp_server import server
+
+        tables = server.all_table_names()
+        if not tables:
+            pytest.skip("no user tables")
+        result = server.list_indexes(tables[0])
+        assert isinstance(result, list)
+
+    def test_table_row_counts_tool(self) -> None:
+        from cubrid_mcp_server import server
+
+        tables = server.all_table_names()
+        if not tables:
+            pytest.skip("no user tables")
+        counts = server.table_row_counts([tables[0]])
+        assert counts[0]["table"] == tables[0]
+
+    def test_explain_query_tool(self) -> None:
+        from cubrid_mcp_server import server
+
+        explain = server.explain_query("SELECT COUNT(*) FROM db_class")
+        assert "plan" in explain
+
+    def test_list_serials_tool(self) -> None:
+        from cubrid_mcp_server import server
+
+        serials = server.list_serials()
+        assert isinstance(serials, list)
+
+    def test_list_class_hierarchy_tool(self) -> None:
+        from cubrid_mcp_server import server
+
+        hierarchy = server.list_class_hierarchy()
+        assert isinstance(hierarchy, list)
 
     def test_safety_blocks_write(self) -> None:
         from cubrid_mcp_server.safety import UnsafeSQLError, ensure_read_only

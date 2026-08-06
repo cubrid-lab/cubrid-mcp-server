@@ -25,6 +25,7 @@ _TEST_CONFIG = Config(
     database="d",
     readonly=True,
     max_chars=4000,
+    max_rows=1000,
 )
 
 
@@ -58,6 +59,9 @@ def test_safety_accepts_legitimate_read_variants(sql: str) -> None:
         "RENAME TABLE users TO ex_users",
         "MERGE INTO target USING src ON (1=1) WHEN MATCHED THEN UPDATE SET x=1",
         "CALL my_proc()",
+        "WITH x AS (SELECT 1) DELETE FROM users",
+        "WITH x AS (SELECT 1) INSERT INTO t SELECT * FROM x",
+        "SELECT * FROM users FOR UPDATE",
     ],
 )
 def test_safety_rejects_bypass_attempts(sql: str) -> None:
@@ -161,31 +165,40 @@ class _FakeCursor:
     def fetchall(self) -> list[tuple[Any, ...]]:
         return self._fetch
 
+    def close(self) -> None:
+        pass
+
 
 class _FakeConnDB:
     def __init__(self) -> None:
         self.cursors: list[_FakeCursor] = []
         self.rolled_back = False
 
-    def cursor(self) -> Any:
-        from contextlib import contextmanager
-
-        @contextmanager
-        def _cm() -> Any:
-            cur = _FakeCursor()
-            self.cursors.append(cur)
-            yield cur
-
-        return _cm()
-
-    def connect(self) -> Any:
+    def _make_conn(self) -> Any:
         outer = self
 
         class _Conn:
+            def cursor(self_inner) -> _FakeCursor:
+                cur = _FakeCursor()
+                outer.cursors.append(cur)
+                return cur
+
             def rollback(self_inner) -> None:
                 outer.rolled_back = True
 
         return _Conn()
+
+    def exclusive(self) -> Any:
+        from contextlib import contextmanager
+
+        @contextmanager
+        def _cm() -> Any:
+            yield self._make_conn()
+
+        return _cm()
+
+    def connect(self) -> Any:
+        return self._make_conn()
 
 
 @pytest.mark.parametrize(
@@ -220,6 +233,26 @@ def test_explain_query_rejects_writes(sql: str, monkeypatch: pytest.MonkeyPatch)
     monkeypatch.setattr(server, "_config", _TEST_CONFIG)
     with pytest.raises(ValueError):
         server.explain_query(sql)
+
+
+def test_explain_query_always_read_only_even_when_readonly_disabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """explain_query rejects non-SELECT/WITH input regardless of CUBRID_MCP_READONLY (#59)."""
+    write_mode = Config(
+        host="h",
+        port=33000,
+        user="u",
+        password="",
+        database="d",
+        readonly=False,
+        max_chars=4000,
+        max_rows=1000,
+    )
+    monkeypatch.setattr(server, "_db", lambda: _FakeConnDB())
+    monkeypatch.setattr(server, "_config", write_mode)
+    with pytest.raises(ValueError):
+        server.explain_query("DELETE FROM users")
 
 
 # ---------------------------------------------------------------------------

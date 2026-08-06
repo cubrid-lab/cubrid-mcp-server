@@ -40,7 +40,21 @@ Optional settings:
 
 ### Run
 
-No installation required — use [`uvx`](https://docs.astral.sh/uv/guides/tools/) to run directly from PyPI:
+> **Note:** The package is not yet published to PyPI. Until the first release lands, install and run it from source (see [Development](#development)); the `uvx`/`pipx` commands below will work once the package is available on PyPI.
+
+### Run from source (available now)
+
+```bash
+git clone https://github.com/cubrid-lab/cubrid-mcp-server.git
+cd cubrid-mcp-server
+python -m venv .venv && source .venv/bin/activate
+pip install -e .
+cubrid-mcp-server
+```
+
+### Run from PyPI (once published)
+
+Use [`uvx`](https://docs.astral.sh/uv/guides/tools/) to run directly from PyPI:
 
 ```bash
 uvx cubrid-mcp-server
@@ -123,10 +137,15 @@ The server is **read-only by default**. A code-level SQL whitelist allows only `
 
 For production use, also configure a read-only database user. See [`SECURITY.md`](./SECURITY.md) for the recommended setup.
 
+## Logging
+
+The server speaks the MCP **stdio transport**, where `stdout` carries the JSON-RPC protocol stream. Anything written to `stdout` by the server or its dependencies will corrupt that stream and break the client connection. For this reason **all logging is routed to `stderr`**, and you should keep it that way: when adding custom logging or diagnostics, never `print()` to `stdout` — use the standard `logging` module (which is configured to emit on `stderr`) or write to `stderr` explicitly. The log level defaults to `INFO`.
+
+
 ## Development
 
 ```bash
-git clone https://github.com/cubrid-labs/cubrid-mcp-server.git
+git clone https://github.com/cubrid-lab/cubrid-mcp-server.git
 cd cubrid-mcp-server
 python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"

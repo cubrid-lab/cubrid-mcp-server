@@ -19,6 +19,7 @@ def test_from_env_defaults() -> None:
     assert cfg.database == "demodb"
     assert cfg.readonly is True
     assert cfg.max_chars == 4000
+    assert cfg.max_rows == 1000
 
 
 def test_from_env_overrides() -> None:
@@ -57,3 +58,20 @@ def test_from_env_invalid_max_chars() -> None:
 def test_from_env_invalid_readonly() -> None:
     with pytest.raises(ConfigError, match="boolean"):
         Config.from_env(BASE_ENV | {"CUBRID_MCP_READONLY": "maybe"})
+
+
+def test_from_env_max_rows_override() -> None:
+    cfg = Config.from_env(BASE_ENV | {"CUBRID_MCP_MAX_ROWS": "250"})
+    assert cfg.max_rows == 250
+
+
+def test_from_env_invalid_max_rows() -> None:
+    with pytest.raises(ConfigError, match="CUBRID_MCP_MAX_ROWS"):
+        Config.from_env(BASE_ENV | {"CUBRID_MCP_MAX_ROWS": "lots"})
+    with pytest.raises(ConfigError, match="positive"):
+        Config.from_env(BASE_ENV | {"CUBRID_MCP_MAX_ROWS": "0"})
+
+
+def test_password_not_in_repr() -> None:
+    cfg = Config.from_env(BASE_ENV)
+    assert "secret" not in repr(cfg)

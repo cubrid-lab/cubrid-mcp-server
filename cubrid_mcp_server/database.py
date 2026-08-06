@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+import logging
+import threading
 from contextlib import contextmanager
 from typing import Any, Iterator
 
 import pycubrid
 
 from cubrid_mcp_server.config import Config
+
+logger = logging.getLogger(__name__)
 
 
 class DatabaseError(RuntimeError):
@@ -20,6 +24,7 @@ class Database:
     def __init__(self, config: Config) -> None:
         self._config = config
         self._connection: Any = None
+        self._lock = threading.RLock()
 
     def connect(self) -> Any:
         if self._connection is not None:
@@ -27,7 +32,7 @@ class Database:
                 self._connection.get_server_version()
                 return self._connection
             except Exception:
-                self._connection = None
+                self._discard_connection()
 
         try:
             self._connection = pycubrid.connect(
@@ -39,8 +44,21 @@ class Database:
                 connect_timeout=10,
             )
         except Exception as exc:  # pragma: no cover - driver-specific
-            raise DatabaseError(f"failed to connect to CUBRID: {exc}") from exc
+            raise DatabaseError(
+                f"failed to connect to CUBRID host={self._config.host} "
+                f"database={self._config.database}"
+            ) from exc
         return self._connection
+
+    def _discard_connection(self) -> None:
+        """Drop the cached connection, closing it first on a best-effort basis."""
+        connection = self._connection
+        self._connection = None
+        if connection is not None:
+            try:
+                connection.close()
+            except Exception as exc:
+                logger.debug("failed to close stale connection: %s", exc)
 
     def close(self) -> None:
         if self._connection is not None:
@@ -51,16 +69,50 @@ class Database:
 
     @contextmanager
     def cursor(self) -> Iterator[Any]:
-        connection = self.connect()
-        cursor = connection.cursor()
-        try:
-            yield cursor
-        except Exception as exc:
-            raise DatabaseError(f"query failed: {exc}") from exc
-        finally:
-            cursor.close()
+        with self._lock:
+            connection = self.connect()
+            cursor = connection.cursor()
+            try:
+                yield cursor
+            except Exception as exc:
+                raise DatabaseError(f"query failed: {exc}") from exc
+            finally:
+                cursor.close()
+
+    @contextmanager
+    def exclusive(self) -> Iterator[Any]:
+        """Hold the connection lock across multiple statements (e.g. SET TRACE ... SHOW TRACE)."""
+        with self._lock:
+            yield self.connect()
 
     def fetch_all(self, sql: str, params: tuple[Any, ...] | None = None) -> list[tuple[Any, ...]]:
         with self.cursor() as cursor:
             cursor.execute(sql, params or ())
             return list(cursor.fetchall())
+
+    def fetch_many(
+        self,
+        sql: str,
+        params: tuple[Any, ...] | None = None,
+        max_rows: int | None = None,
+    ) -> tuple[list[tuple[Any, ...]], bool]:
+        """Stream rows, returning ``(rows, truncated)``.
+
+        At most ``max_rows`` rows are returned; ``truncated`` is ``True`` when the
+        result set contained more rows than that. When ``max_rows`` is ``None`` all
+        rows are returned and ``truncated`` is always ``False``.
+        """
+        with self.cursor() as cursor:
+            cursor.execute(sql, params or ())
+            rows: list[tuple[Any, ...]] = []
+            truncated = False
+            while True:
+                batch = cursor.fetchmany(100)
+                if not batch:
+                    break
+                for row in batch:
+                    if max_rows is not None and len(rows) >= max_rows:
+                        truncated = True
+                        return rows, truncated
+                    rows.append(row)
+            return rows, truncated
