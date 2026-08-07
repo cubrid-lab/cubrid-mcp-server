@@ -89,9 +89,6 @@ class Database:
         with self.cursor() as cursor:
             cursor.execute(sql, params or ())
             return list(cursor.fetchall())
-        with self.cursor() as cursor:
-            cursor.execute(sql, params or ())
-            return list(cursor.fetchall())
 
     def fetch_many(
         self,

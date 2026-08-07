@@ -182,8 +182,6 @@ def explain_query(sql: str) -> dict[str, Any]:
             f"SQL exceeds maximum length of {config.max_sql_length} characters "
             f"(CUBRID_MCP_MAX_SQL_LENGTH)"
         )
-    if not cleaned:
-        raise ValueError("empty SQL statement")
     leading = cleaned.split(None, 1)[0].upper()
     if leading not in {"SELECT", "WITH"}:
         raise ValueError("explain_query only accepts SELECT or WITH statements")
@@ -393,19 +391,4 @@ def main() -> None:
             _database.close()
 
     atexit.register(_cleanup)
-    mcp.run()
-    # The MCP stdio transport uses stdout as the protocol channel, so ALL logging
-    # must go to stderr — a stray log line on stdout corrupts the JSON-RPC stream.
-    logging.basicConfig(
-        stream=sys.stderr,
-        level=logging.INFO,
-        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-    )
-    # Fail fast with a clear message if configuration is missing/invalid, rather than
-    # surfacing the error on the first tool call.
-    try:
-        Config.from_env()
-    except ConfigError as exc:
-        print(f"configuration error: {exc}", file=sys.stderr)
-        raise SystemExit(1) from exc
     mcp.run()
