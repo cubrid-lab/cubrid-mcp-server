@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- `main()` no longer starts a second MCP server after the first one shuts down; the duplicated tail of the function (logging setup, config parse, and a second `mcp.run()`) has been removed. (#87)
+- Removed the duplicated, unreachable copies of the `fetch_all` body in `Database` and of the empty-SQL guard in `explain_query`. (#87)
+
+### Added
+- Tests for `CUBRID_MCP_MAX_SQL_LENGTH` and `CUBRID_MCP_QUERY_TIMEOUT` parsing/validation, and for oversized-SQL rejection in `execute_query` and `explain_query`. (#87)
+
 ## [0.2.1] - 2026-08-06
 
 ### Security

@@ -72,6 +72,32 @@ def test_from_env_invalid_max_rows() -> None:
         Config.from_env(BASE_ENV | {"CUBRID_MCP_MAX_ROWS": "0"})
 
 
+def test_from_env_max_sql_length_default_and_override() -> None:
+    assert Config.from_env(BASE_ENV).max_sql_length == 65536
+    cfg = Config.from_env(BASE_ENV | {"CUBRID_MCP_MAX_SQL_LENGTH": "1024"})
+    assert cfg.max_sql_length == 1024
+
+
+def test_from_env_invalid_max_sql_length() -> None:
+    with pytest.raises(ConfigError, match="CUBRID_MCP_MAX_SQL_LENGTH"):
+        Config.from_env(BASE_ENV | {"CUBRID_MCP_MAX_SQL_LENGTH": "big"})
+    with pytest.raises(ConfigError, match="positive"):
+        Config.from_env(BASE_ENV | {"CUBRID_MCP_MAX_SQL_LENGTH": "0"})
+
+
+def test_from_env_query_timeout_default_and_override() -> None:
+    assert Config.from_env(BASE_ENV).query_timeout == 30.0
+    cfg = Config.from_env(BASE_ENV | {"CUBRID_MCP_QUERY_TIMEOUT": "2.5"})
+    assert cfg.query_timeout == 2.5
+
+
+def test_from_env_invalid_query_timeout() -> None:
+    with pytest.raises(ConfigError, match="CUBRID_MCP_QUERY_TIMEOUT"):
+        Config.from_env(BASE_ENV | {"CUBRID_MCP_QUERY_TIMEOUT": "soon"})
+    with pytest.raises(ConfigError, match="positive"):
+        Config.from_env(BASE_ENV | {"CUBRID_MCP_QUERY_TIMEOUT": "0"})
+
+
 def test_password_not_in_repr() -> None:
     cfg = Config.from_env(BASE_ENV)
     assert "secret" not in repr(cfg)
