@@ -199,21 +199,21 @@ def test_explain_query_uses_trace(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_explain_query_rejects_non_select(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(server, "_db", lambda: FakeConnDatabase())
+    monkeypatch.setattr(server, "_db", FakeConnDatabase)
     monkeypatch.setattr(server, "_config", _TEST_CONFIG)
     with pytest.raises(ValueError):
         server.explain_query("DROP TABLE users")
 
 
 def test_explain_query_rejects_multistatement(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(server, "_db", lambda: FakeConnDatabase())
+    monkeypatch.setattr(server, "_db", FakeConnDatabase)
     monkeypatch.setattr(server, "_config", _TEST_CONFIG)
     with pytest.raises((ValueError, UnsafeSQLError)):
         server.explain_query("SELECT 1; DROP TABLE users")
 
 
 def test_explain_query_rejects_empty(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(server, "_db", lambda: FakeConnDatabase())
+    monkeypatch.setattr(server, "_db", FakeConnDatabase)
     monkeypatch.setattr(server, "_config", _TEST_CONFIG)
     with pytest.raises(ValueError):
         server.explain_query("   ")
@@ -223,7 +223,7 @@ _SHORT_SQL_CONFIG = replace(_TEST_CONFIG, max_sql_length=32)
 
 
 def test_explain_query_rejects_oversized_sql(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(server, "_db", lambda: FakeConnDatabase())
+    monkeypatch.setattr(server, "_db", FakeConnDatabase)
     monkeypatch.setattr(server, "_config", _SHORT_SQL_CONFIG)
     with pytest.raises(ValueError, match="CUBRID_MCP_MAX_SQL_LENGTH"):
         server.explain_query("SELECT " + "a" * 100)
