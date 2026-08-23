@@ -120,6 +120,7 @@ class Database:
 
     @staticmethod
     def _safe_close_cursor(cursor: Any) -> None:
+        """Close a cursor on a best-effort basis, logging (not raising) failures."""
         try:
             cursor.close()
         except Exception as exc:
@@ -165,14 +166,6 @@ class Database:
                 if _is_timeout_error(exc):
                     raise self._timeout_error(exc) from exc
                 raise
-
-    @staticmethod
-    def _safe_close_cursor(cursor: Any) -> None:
-        """Close a cursor on a best-effort basis, logging (not raising) failures."""
-        try:
-            cursor.close()
-        except Exception as exc:
-            logger.debug("failed to close cursor: %s", exc)
 
     @contextmanager
     def trace_enabled(self) -> Iterator[Any]:
