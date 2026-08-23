@@ -135,6 +135,8 @@ Add to `.cursor/mcp.json`:
 
 The server is **read-only by default**. A code-level SQL whitelist allows only `SELECT`, `SHOW`, `DESC`, `DESCRIBE`, `EXPLAIN`, and `WITH` statements. Multi-statement queries are rejected.
 
+> **The SQL whitelist is defense-in-depth, not a security boundary.** It is a non-validating parser-based guardrail against obvious mistakes. The real enforcement layer is the database itself: **always run the server as a CUBRID user that has only `SELECT` grants** on the tables the model may read. See [`SECURITY.md`](./SECURITY.md).
+
 For production use, also configure a read-only database user. See [`SECURITY.md`](./SECURITY.md) for the recommended setup.
 
 ## Logging
