@@ -18,6 +18,7 @@ from cubrid_mcp_server.database import (
     DatabaseError,
     QueryTimeoutError,
     _is_timeout_error,
+    sanitize_error,
 )
 
 _TEST_CONFIG = Config(
@@ -162,11 +163,19 @@ def test_cursor_closes_and_wraps_errors(monkeypatch: pytest.MonkeyPatch) -> None
     conn = FakeConnection()
     monkeypatch.setattr(pycubrid, "connect", lambda **_k: conn)
     db = Database(_TEST_CONFIG)
-    with pytest.raises(DatabaseError, match="query failed"):
+    with pytest.raises(DatabaseError) as excinfo:
         with db.cursor():
-            _raise(ValueError("boom"))
+            _raise(ValueError("secret schema detail public.users.ssn"))
+    # The raw message is never surfaced; only the error category is.
+    message = str(excinfo.value)
+    assert message == "query failed: ValueError"
+    assert "secret schema detail" not in message
     # Cursor is always closed, even on error.
     assert conn.cursors[0].closed is True
+
+
+def test_sanitize_error_returns_class_name_only() -> None:
+    assert sanitize_error(ValueError("host=db.internal password=hunter2")) == "ValueError"
 
 
 def test_exclusive_yields_connection(monkeypatch: pytest.MonkeyPatch) -> None:

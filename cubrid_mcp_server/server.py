@@ -12,7 +12,7 @@ from fastmcp import FastMCP
 
 from cubrid_mcp_server.config import Config, ConfigError
 from cubrid_mcp_server.context import AppContext
-from cubrid_mcp_server.database import Database
+from cubrid_mcp_server.database import Database, sanitize_error
 from cubrid_mcp_server.safety import ensure_read_only
 
 logger = logging.getLogger(__name__)
@@ -240,7 +240,8 @@ def table_row_counts(table_names: list[str] | None = None) -> list[dict[str, Any
             rows = _db().fetch_all("SELECT COUNT(*) FROM " + _quote_ident(resolved))
             results.append({"table": resolved, "row_count": int(rows[0][0]) if rows else 0})
         except Exception as exc:
-            results.append({"table": resolved, "row_count": None, "error": str(exc)})
+            logger.error("row count failed for table %s", resolved, exc_info=exc)
+            results.append({"table": resolved, "row_count": None, "error": sanitize_error(exc)})
     return results
 
 
