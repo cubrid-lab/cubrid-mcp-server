@@ -197,12 +197,17 @@ class Database:
         cleanup_errors: list[str] = []
         try:
             cursor = connection.cursor()
-            try:
-                cursor.execute("SET TRACE OFF", ())
-            finally:
-                cursor.close()
         except Exception as exc:
             cleanup_errors.append(f"SET TRACE OFF failed: {exc}")
+        else:
+            try:
+                cursor.execute("SET TRACE OFF", ())
+            except Exception as exc:
+                cleanup_errors.append(f"SET TRACE OFF failed: {exc}")
+            finally:
+                # Best-effort close: a failing close() must not be misreported
+                # as a "SET TRACE OFF failed" error when the execute succeeded.
+                self._safe_close_cursor(cursor)
         try:
             connection.rollback()
         except Exception as exc:

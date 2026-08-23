@@ -9,6 +9,7 @@ import pytest
 
 from cubrid_mcp_server import server
 from cubrid_mcp_server.config import Config
+from cubrid_mcp_server.database import Database
 from cubrid_mcp_server.safety import UnsafeSQLError
 
 _TEST_CONFIG = Config(
@@ -180,24 +181,11 @@ class FakeConnDatabase(FakeDatabase):
 
         return _cm()
 
-    def trace_enabled(self) -> Any:
-        from contextlib import contextmanager
-
-        @contextmanager
-        def _cm() -> Any:
-            connection = self._make_conn()
-            cursor = connection.cursor()
-            try:
-                cursor.execute("SET TRACE ON", ())
-                yield cursor
-            finally:
-                cursor.close()
-                cleanup = connection.cursor()
-                cleanup.execute("SET TRACE OFF", ())
-                cleanup.close()
-                connection.rollback()
-
-        return _cm()
+    # Reuse the production trace lifecycle so this fake exercises the real
+    # SET TRACE ON/OFF + rollback cleanup path (driven by our exclusive()).
+    _safe_close_cursor = staticmethod(Database._safe_close_cursor)
+    _reset_trace_state = Database._reset_trace_state
+    trace_enabled = Database.trace_enabled
 
     def connect(self) -> Any:
         return self._make_conn()
