@@ -37,6 +37,9 @@ Optional settings:
 |----------|---------|-------------|
 | `CUBRID_MCP_READONLY` | `1` | Enforce read-only SQL whitelist |
 | `CUBRID_MCP_MAX_CHARS` | `4000` | Max characters in query output |
+| `CUBRID_MCP_MAX_ROWS` | `1000` | Max rows returned by `execute_query` before truncation |
+| `CUBRID_MCP_MAX_SQL_LENGTH` | `65536` | Max length (characters) of a submitted SQL statement |
+| `CUBRID_MCP_QUERY_TIMEOUT` | `30` | Per-statement socket read timeout in seconds. If the server sends no data within this window the query is aborted and the connection is reset. This is a socket read timeout, not a true server-side statement timeout. |
 
 ### Run
 

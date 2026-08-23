@@ -6,13 +6,19 @@ fetch logic without a live CUBRID server by monkeypatching ``pycubrid.connect``.
 
 from __future__ import annotations
 
+import socket
 from typing import Any
 
 import pytest
 
 import pycubrid
 from cubrid_mcp_server.config import Config
-from cubrid_mcp_server.database import Database, DatabaseError
+from cubrid_mcp_server.database import (
+    Database,
+    DatabaseError,
+    QueryTimeoutError,
+    _is_timeout_error,
+)
 
 _TEST_CONFIG = Config(
     host="h",
@@ -179,3 +185,143 @@ def test_fetch_many_no_truncation_when_max_rows_none(monkeypatch: pytest.MonkeyP
     result, truncated = db.fetch_many("SELECT x", None, max_rows=None)
     assert truncated is False
     assert result == rows
+
+
+# --- query_timeout enforcement (issue #101) ---
+
+
+class TimeoutCursor(FakeCursor):
+    """Cursor whose ``execute`` raises a socket timeout, simulating a slow query."""
+
+    def __init__(self, error: BaseException) -> None:
+        super().__init__()
+        self._error = error
+
+    def execute(self, sql: str, params: tuple[Any, ...] = ()) -> None:
+        raise self._error
+
+
+class TimeoutConnection(FakeConnection):
+    def __init__(self, error: BaseException) -> None:
+        super().__init__()
+        self._error = error
+
+    def cursor(self) -> FakeCursor:
+        cursor = TimeoutCursor(self._error)
+        self.cursors.append(cursor)
+        return cursor
+
+
+def test_connect_passes_query_timeout_as_read_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: dict[str, Any] = {}
+
+    def _connect(**kwargs: Any) -> FakeConnection:
+        captured.update(kwargs)
+        return FakeConnection()
+
+    monkeypatch.setattr(pycubrid, "connect", _connect)
+    config = Config(
+        host="h",
+        port=33000,
+        user="u",
+        password="",
+        database="d",
+        readonly=True,
+        max_chars=4000,
+        max_rows=1000,
+        query_timeout=12.5,
+    )
+    Database(config).connect()
+    assert captured["read_timeout"] == 12.5
+
+
+def test_is_timeout_error_detects_raw_and_wrapped() -> None:
+    assert _is_timeout_error(TimeoutError("slow")) is True
+    assert _is_timeout_error(socket.timeout("slow")) is True
+    # pycubrid wraps the socket timeout as another error with __cause__ set.
+    wrapped = RuntimeError("socket communication failed")
+    wrapped.__cause__ = TimeoutError("timed out")
+    assert _is_timeout_error(wrapped) is True
+    assert _is_timeout_error(RuntimeError("syntax error")) is False
+    assert _is_timeout_error(None) is False
+
+
+def test_cursor_timeout_raises_and_discards_connection(monkeypatch: pytest.MonkeyPatch) -> None:
+    conn = TimeoutConnection(TimeoutError("read timed out"))
+    monkeypatch.setattr(pycubrid, "connect", lambda **_k: conn)
+    db = Database(_TEST_CONFIG)
+    with pytest.raises(QueryTimeoutError, match="query exceeded timeout"):
+        db.fetch_all("SELECT SLEEP(999)")
+    # The corrupt connection must be dropped so the next call reconnects.
+    assert conn.closed is True
+    assert db._connection is None
+
+
+def test_cursor_timeout_detects_wrapped_operational_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    wrapped = RuntimeError("socket communication failed")
+    wrapped.__cause__ = TimeoutError("timed out")
+    conn = TimeoutConnection(wrapped)
+    monkeypatch.setattr(pycubrid, "connect", lambda **_k: conn)
+    db = Database(_TEST_CONFIG)
+    with pytest.raises(QueryTimeoutError):
+        db.fetch_all("SELECT SLEEP(999)")
+    assert db._connection is None
+
+
+def test_non_timeout_error_still_wrapped_as_database_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    conn = TimeoutConnection(ValueError("bad syntax"))
+    monkeypatch.setattr(pycubrid, "connect", lambda **_k: conn)
+    db = Database(_TEST_CONFIG)
+    with pytest.raises(DatabaseError, match="query failed") as excinfo:
+        db.fetch_all("SELECT bogus")
+    assert not isinstance(excinfo.value, QueryTimeoutError)
+    # A plain query error does not invalidate the connection.
+    assert db._connection is conn
+
+
+def test_exclusive_timeout_raises_and_discards_connection(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    conn = FakeConnection()
+    monkeypatch.setattr(pycubrid, "connect", lambda **_k: conn)
+    db = Database(_TEST_CONFIG)
+    with pytest.raises(QueryTimeoutError):
+        with db.exclusive():
+            raise TimeoutError("read timed out")
+    assert conn.closed is True
+    assert db._connection is None
+
+
+def test_exclusive_reraises_non_timeout_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    conn = FakeConnection()
+    monkeypatch.setattr(pycubrid, "connect", lambda **_k: conn)
+    db = Database(_TEST_CONFIG)
+    with pytest.raises(ValueError, match="boom"):
+        with db.exclusive():
+            raise ValueError("boom")
+    # A non-timeout error leaves the connection intact for reuse.
+    assert db._connection is conn
+
+
+def test_cursor_close_error_is_swallowed(monkeypatch: pytest.MonkeyPatch) -> None:
+    conn = FakeConnection(rows=[(1,)])
+    monkeypatch.setattr(pycubrid, "connect", lambda **_k: conn)
+    db = Database(_TEST_CONFIG)
+
+    def _boom() -> None:
+        raise RuntimeError("close failed")
+
+    # fetch_all succeeds even if cursor.close() raises during cleanup.
+    original_cursor = conn.cursor
+
+    def _cursor() -> FakeCursor:
+        cur = original_cursor()
+        cur.close = _boom  # type: ignore[method-assign]
+        return cur
+
+    monkeypatch.setattr(conn, "cursor", _cursor)
+    assert db.fetch_all("SELECT 1") == [(1,)]
