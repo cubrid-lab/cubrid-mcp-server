@@ -41,6 +41,16 @@ def _is_timeout_error(exc: BaseException | None) -> bool:
     return False
 
 
+def sanitize_error(exc: BaseException) -> str:
+    """Return a concise, non-sensitive description of an exception for clients.
+
+    Only the exception's class name is surfaced — never the raw message, which may
+    embed schema details, hostnames, SQL fragments, or configuration values. Full
+    detail is logged to stderr (see callers) for operator diagnostics.
+    """
+    return type(exc).__name__
+
+
 class Database:
     """Lazily opens and reuses a single pycubrid connection.
 
@@ -151,7 +161,10 @@ class Database:
                 # Lazy recovery (#106): drop the possibly-dead connection so the
                 # next request reconnects instead of pre-pinging on acquisition.
                 self._discard_connection()
-                raise DatabaseError(f"query failed: {exc}") from exc
+                # Full detail to stderr for operators; only the error category is
+                # surfaced to the client to avoid leaking schema/host/SQL/config.
+                logger.error("query failed", exc_info=exc)
+                raise DatabaseError(f"query failed: {sanitize_error(exc)}") from exc
             finally:
                 # After a timeout the connection is already discarded and the
                 # socket is dead; closing the cursor would only block again.

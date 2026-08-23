@@ -149,7 +149,8 @@ def test_table_row_counts_rejects_too_many_tables(monkeypatch: pytest.MonkeyPatc
 def test_table_row_counts_reports_per_table_error(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(server, "_db", lambda: _RowCountErrorDB())
     result = server.table_row_counts(["users"])
-    assert result == [{"table": "users", "row_count": None, "error": "count failed"}]
+    # The raw driver message is sanitized to the exception category only.
+    assert result == [{"table": "users", "row_count": None, "error": "RuntimeError"}]
 
 
 # ---------------------------------------------------------------------------
