@@ -19,7 +19,27 @@ class DatabaseError(RuntimeError):
 
 
 class Database:
-    """Lazily opens and reuses a single pycubrid connection."""
+    """Lazily opens and reuses a single pycubrid connection.
+
+    Concurrency model
+    -----------------
+    The server intentionally holds **one** pycubrid connection for the whole
+    process, guarded by a single ``threading.RLock``. Every ``cursor()`` /
+    ``exclusive()`` / ``fetch_*`` call acquires that lock, so **all database
+    work is fully serialized** — only one statement runs at a time, regardless
+    of how many tool calls arrive.
+
+    This is a deliberate fit for the MCP **stdio** transport, which serves a
+    single client whose requests are already effectively sequential. A single
+    serialized connection keeps CUBRID session state (e.g. ``SET TRACE`` used
+    by ``explain_query``, transaction/rollback state) coherent and makes the
+    lifecycle trivial to reason about and test.
+
+    A connection **pool is intentionally not used**. It would add session-state
+    isolation, cleanup, and test complexity with no benefit at this scope. Only
+    introduce concurrency (e.g. per-query disposable connections) if stdio
+    serialization is ever shown, by measurement, to be a real bottleneck.
+    """
 
     def __init__(self, config: Config) -> None:
         self._config = config
