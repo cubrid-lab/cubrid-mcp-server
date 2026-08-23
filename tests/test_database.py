@@ -123,7 +123,7 @@ def test_query_failure_triggers_lazy_reconnect(patch_connect: list[FakeConnectio
     # A failed query discards the connection so the next request reconnects.
     with pytest.raises(DatabaseError, match="query failed"):
         with db.cursor():
-            raise ValueError("boom")
+            _raise(ValueError("boom"))
     assert first.closed is True
     second = db.connect()
     assert second is not first
@@ -136,7 +136,7 @@ def test_lazy_reconnect_swallows_close_error(patch_connect: list[FakeConnection]
     first.close_error = True  # close raises during discard; must be swallowed
     with pytest.raises(DatabaseError, match="query failed"):
         with db.cursor():
-            raise ValueError("boom")
+            _raise(ValueError("boom"))
     second = db.connect()
     assert second is not first
     assert len(patch_connect) == 2
