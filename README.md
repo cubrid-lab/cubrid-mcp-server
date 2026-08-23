@@ -26,7 +26,7 @@ Set the required environment variables:
 ```bash
 export CUBRID_HOST=localhost
 export CUBRID_PORT=33000        # optional, default: 33000
-export CUBRID_USER=dba
+export CUBRID_USER=readonly_user   # a CUBRID user with SELECT-only grants (see Security)
 export CUBRID_PASSWORD=secret
 export CUBRID_DATABASE=mydb
 ```
@@ -83,7 +83,7 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
       "args": ["cubrid-mcp-server"],
       "env": {
         "CUBRID_HOST": "localhost",
-        "CUBRID_USER": "dba",
+        "CUBRID_USER": "readonly_user",
         "CUBRID_PASSWORD": "secret",
         "CUBRID_DATABASE": "mydb"
       }
@@ -104,7 +104,7 @@ Add to `.mcp.json` in your project root:
       "args": ["cubrid-mcp-server"],
       "env": {
         "CUBRID_HOST": "localhost",
-        "CUBRID_USER": "dba",
+        "CUBRID_USER": "readonly_user",
         "CUBRID_PASSWORD": "secret",
         "CUBRID_DATABASE": "mydb"
       }
@@ -125,7 +125,7 @@ Add to `.cursor/mcp.json`:
       "args": ["cubrid-mcp-server"],
       "env": {
         "CUBRID_HOST": "localhost",
-        "CUBRID_USER": "dba",
+        "CUBRID_USER": "readonly_user",
         "CUBRID_PASSWORD": "secret",
         "CUBRID_DATABASE": "mydb"
       }
@@ -137,6 +137,8 @@ Add to `.cursor/mcp.json`:
 ## Security
 
 The server is **read-only by default**. A code-level SQL whitelist allows only `SELECT`, `SHOW`, `DESC`, `DESCRIBE`, `EXPLAIN`, and `WITH` statements. Multi-statement queries are rejected.
+
+> **The SQL whitelist is defense-in-depth, not a security boundary.** It is a non-validating parser-based guardrail against obvious mistakes. The real enforcement layer is the database itself: **always run the server as a CUBRID user that has only `SELECT` grants** on the tables the model may read. See [`SECURITY.md`](./SECURITY.md).
 
 For production use, also configure a read-only database user. See [`SECURITY.md`](./SECURITY.md) for the recommended setup.
 
