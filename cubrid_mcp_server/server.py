@@ -320,6 +320,12 @@ def execute_query(sql: str) -> dict[str, Any]:
     }
 
 
+@mcp.tool
+def health_check() -> dict[str, Any]:
+    """Check database connectivity on demand and report server status."""
+    return _db().health_check()
+
+
 def _render_rows(rows: list[tuple[Any, ...]], max_chars: int) -> dict[str, Any]:
     output: list[list[Any]] = []
     used = 0

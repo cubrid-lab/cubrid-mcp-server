@@ -16,6 +16,7 @@ A [Model Context Protocol](https://modelcontextprotocol.io) server for [CUBRID](
 | `list_serials` | CUBRID `SERIAL` sequences with current value and bounds |
 | `list_class_hierarchy` | CUBRID `CLASS` inheritance relationships |
 | `execute_query` | Run read-only SQL with automatic output truncation |
+| `health_check` | Verify database connectivity on demand |
 
 ## Quick Start
 

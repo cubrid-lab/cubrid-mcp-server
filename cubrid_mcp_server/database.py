@@ -72,12 +72,12 @@ class Database:
         self._lock = threading.RLock()
 
     def connect(self) -> Any:
+        # Return the cached connection without a liveness ping: pinging on every
+        # cursor acquisition adds an avoidable server round-trip to each operation.
+        # Staleness is handled lazily instead — a failed query discards the
+        # connection so the next request transparently reconnects (see ``cursor``).
         if self._connection is not None:
-            try:
-                self._connection.get_server_version()
-                return self._connection
-            except Exception:
-                self._discard_connection()
+            return self._connection
 
         try:
             self._connection = pycubrid.connect(
@@ -148,6 +148,9 @@ class Database:
                 if _is_timeout_error(exc):
                     timed_out = True
                     raise self._timeout_error(exc) from exc
+                # Lazy recovery (#106): drop the possibly-dead connection so the
+                # next request reconnects instead of pre-pinging on acquisition.
+                self._discard_connection()
                 raise DatabaseError(f"query failed: {exc}") from exc
             finally:
                 # After a timeout the connection is already discarded and the
@@ -165,6 +168,8 @@ class Database:
             except Exception as exc:
                 if _is_timeout_error(exc):
                     raise self._timeout_error(exc) from exc
+                # Lazy recovery on non-timeout failure, mirroring ``cursor``.
+                self._discard_connection()
                 raise
 
     @contextmanager
@@ -207,6 +212,23 @@ class Database:
             cleanup_errors.append(f"rollback failed: {exc}")
         if cleanup_errors:
             logger.debug("trace cleanup: %s", "; ".join(cleanup_errors))
+
+    def health_check(self) -> dict[str, Any]:
+        """Verify connectivity on demand, reconnecting lazily on failure.
+
+        Returns ``{"ok": True, "server_version": ...}`` when the connection
+        answers a liveness ping, or ``{"ok": False, "error": ...}`` otherwise.
+        This is the explicit counterpart to the per-call ping that ``connect``
+        no longer performs.
+        """
+        with self._lock:
+            try:
+                connection = self.connect()
+                version = connection.get_server_version()
+            except Exception as exc:
+                self._discard_connection()
+                return {"ok": False, "error": str(exc)}
+            return {"ok": True, "server_version": str(version)}
 
     def fetch_all(self, sql: str, params: tuple[Any, ...] | None = None) -> list[tuple[Any, ...]]:
         with self.cursor() as cursor:
