@@ -203,7 +203,6 @@ def explain_query(sql: str) -> dict[str, Any]:
     return {"sql": cleaned, "plan": plan}
 
 
-
 @mcp.tool
 def table_row_counts(table_names: list[str] | None = None) -> list[dict[str, Any]]:
     """Return ``COUNT(*)`` for each table (all user tables by default, capped)."""
