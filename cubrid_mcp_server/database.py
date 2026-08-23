@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import logging
+import socket
 import threading
 from contextlib import contextmanager
 from typing import Any, Iterator
+
 
 import pycubrid
 
@@ -16,6 +18,27 @@ logger = logging.getLogger(__name__)
 
 class DatabaseError(RuntimeError):
     """Raised when a database operation fails."""
+
+
+class QueryTimeoutError(DatabaseError):
+    """Raised when a statement exceeds the configured read timeout."""
+
+
+def _is_timeout_error(exc: BaseException | None) -> bool:
+    """Return ``True`` if ``exc`` (or any error in its chain) is a socket timeout.
+
+    ``read_timeout`` is enforced as a socket ``settimeout``; a slow statement
+    surfaces as :class:`socket.timeout`/:class:`TimeoutError`, which pycubrid
+    re-wraps as an ``OperationalError`` with the timeout preserved as its
+    ``__cause__``. Walking the chain catches both the raw and wrapped forms.
+    """
+    seen: set[int] = set()
+    while exc is not None and id(exc) not in seen:
+        seen.add(id(exc))
+        if isinstance(exc, (socket.timeout, TimeoutError)):
+            return True
+        exc = exc.__cause__ or exc.__context__
+    return False
 
 
 class Database:
@@ -42,6 +65,12 @@ class Database:
                 password=self._config.password,
                 database=self._config.database,
                 connect_timeout=10,
+                # Bound how long a single statement may block the shared
+                # connection. This is a socket read timeout (not a true
+                # server-side statement timeout): if the broker sends no bytes
+                # for this many seconds the read aborts and we discard the
+                # now-unusable connection. See CUBRID_MCP_QUERY_TIMEOUT.
+                read_timeout=self._config.query_timeout,
             )
         except Exception as exc:  # pragma: no cover - driver-specific
             raise DatabaseError(
@@ -67,23 +96,53 @@ class Database:
             finally:
                 self._connection = None
 
+    @staticmethod
+    def _safe_close_cursor(cursor: Any) -> None:
+        try:
+            cursor.close()
+        except Exception as exc:
+            logger.debug("failed to close cursor: %s", exc)
+
+    def _timeout_error(self, exc: BaseException) -> QueryTimeoutError:
+        """Discard the corrupt connection and build a clear timeout error."""
+        # The socket timed out mid-statement, so the connection buffer is now
+        # in an unknown state; drop it so the next call reconnects instead of
+        # reusing a corrupt session.
+        self._discard_connection()
+        return QueryTimeoutError(
+            f"query exceeded timeout of {self._config.query_timeout:g}s (CUBRID_MCP_QUERY_TIMEOUT)"
+        )
+
     @contextmanager
     def cursor(self) -> Iterator[Any]:
         with self._lock:
             connection = self.connect()
             cursor = connection.cursor()
+            timed_out = False
             try:
                 yield cursor
             except Exception as exc:
+                if _is_timeout_error(exc):
+                    timed_out = True
+                    raise self._timeout_error(exc) from exc
                 raise DatabaseError(f"query failed: {exc}") from exc
             finally:
-                cursor.close()
+                # After a timeout the connection is already discarded and the
+                # socket is dead; closing the cursor would only block again.
+                if not timed_out:
+                    self._safe_close_cursor(cursor)
 
     @contextmanager
     def exclusive(self) -> Iterator[Any]:
         """Hold the connection lock across multiple statements (e.g. SET TRACE ... SHOW TRACE)."""
         with self._lock:
-            yield self.connect()
+            connection = self.connect()
+            try:
+                yield connection
+            except Exception as exc:
+                if _is_timeout_error(exc):
+                    raise self._timeout_error(exc) from exc
+                raise
 
     def fetch_all(self, sql: str, params: tuple[Any, ...] | None = None) -> list[tuple[Any, ...]]:
         with self.cursor() as cursor:
