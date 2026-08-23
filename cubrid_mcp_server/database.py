@@ -110,8 +110,7 @@ class Database:
         # reusing a corrupt session.
         self._discard_connection()
         return QueryTimeoutError(
-            f"query exceeded timeout of {self._config.query_timeout:g}s "
-            f"(CUBRID_MCP_QUERY_TIMEOUT)"
+            f"query exceeded timeout of {self._config.query_timeout:g}s (CUBRID_MCP_QUERY_TIMEOUT)"
         )
 
     @contextmanager
