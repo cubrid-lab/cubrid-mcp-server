@@ -105,4 +105,3 @@ def test_ensure_read_only_allows_safe_edge_cases(sql: str) -> None:
 def test_ensure_read_only_rejects_hidden_writes(sql: str) -> None:
     with pytest.raises(UnsafeSQLError):
         ensure_read_only(sql)
-        ensure_read_only(sql)

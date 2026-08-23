@@ -26,7 +26,7 @@ Set the required environment variables:
 ```bash
 export CUBRID_HOST=localhost
 export CUBRID_PORT=33000        # optional, default: 33000
-export CUBRID_USER=dba
+export CUBRID_USER=readonly_user   # a CUBRID user with SELECT-only grants (see Security)
 export CUBRID_PASSWORD=secret
 export CUBRID_DATABASE=mydb
 ```
@@ -80,7 +80,7 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
       "args": ["cubrid-mcp-server"],
       "env": {
         "CUBRID_HOST": "localhost",
-        "CUBRID_USER": "dba",
+        "CUBRID_USER": "readonly_user",
         "CUBRID_PASSWORD": "secret",
         "CUBRID_DATABASE": "mydb"
       }
@@ -101,7 +101,7 @@ Add to `.mcp.json` in your project root:
       "args": ["cubrid-mcp-server"],
       "env": {
         "CUBRID_HOST": "localhost",
-        "CUBRID_USER": "dba",
+        "CUBRID_USER": "readonly_user",
         "CUBRID_PASSWORD": "secret",
         "CUBRID_DATABASE": "mydb"
       }
@@ -122,7 +122,7 @@ Add to `.cursor/mcp.json`:
       "args": ["cubrid-mcp-server"],
       "env": {
         "CUBRID_HOST": "localhost",
-        "CUBRID_USER": "dba",
+        "CUBRID_USER": "readonly_user",
         "CUBRID_PASSWORD": "secret",
         "CUBRID_DATABASE": "mydb"
       }
