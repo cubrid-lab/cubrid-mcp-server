@@ -24,10 +24,12 @@ class Database:
     Concurrency model
     -----------------
     The server intentionally holds **one** pycubrid connection for the whole
-    process, guarded by a single ``threading.RLock``. Every ``cursor()`` /
-    ``exclusive()`` / ``fetch_*`` call acquires that lock, so **all database
-    work is fully serialized** — only one statement runs at a time, regardless
-    of how many tool calls arrive.
+    process, guarded by a single ``threading.RLock``. Every statement-executing
+    path — ``cursor()`` / ``exclusive()`` / ``fetch_*`` — acquires that lock, so
+    **query execution is fully serialized**: only one statement runs at a time,
+    regardless of how many tool calls arrive. (The ``connect()`` / ``close()``
+    lifecycle helpers are not themselves lock-guarded; they are expected to run
+    outside concurrent query load, e.g. at startup and shutdown.)
 
     This is a deliberate fit for the MCP **stdio** transport, which serves a
     single client whose requests are already effectively sequential. A single
