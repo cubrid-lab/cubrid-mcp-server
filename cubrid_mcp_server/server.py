@@ -10,6 +10,7 @@ from typing import Any
 from fastmcp import FastMCP
 
 from cubrid_mcp_server.config import Config, ConfigError
+from cubrid_mcp_server.context import AppContext
 from cubrid_mcp_server.database import Database
 from cubrid_mcp_server.safety import ensure_read_only
 
@@ -24,16 +25,23 @@ _MAX_ROW_COUNT_TABLES = 50
 # Binary values up to this size are returned base64-encoded; larger blobs are summarized.
 _MAX_INLINE_BINARY_BYTES = 256
 
-_config: Config | None = None
-_database: Database | None = None
+_context: AppContext | None = None
+
+
+def _get_context() -> AppContext:
+    """Return the process-wide :class:`AppContext`, building it lazily from env."""
+    global _context
+    if _context is None:
+        _context = AppContext.from_env()
+    return _context
 
 
 def _db() -> Database:
-    global _config, _database
-    if _database is None:
-        _config = Config.from_env()
-        _database = Database(_config)
-    return _database
+    return _get_context().database
+
+
+def _cfg() -> Config:
+    return _get_context().config
 
 
 def _all_table_names() -> list[str]:
@@ -176,7 +184,7 @@ def explain_query(sql: str) -> dict[str, Any]:
     cleaned = sql.strip().rstrip(";").strip()
     if not cleaned:
         raise ValueError("empty SQL statement")
-    config = _config or Config.from_env()
+    config = _cfg()
     if len(cleaned) > config.max_sql_length:
         raise ValueError(
             f"SQL exceeds maximum length of {config.max_sql_length} characters "
@@ -285,7 +293,7 @@ def list_class_hierarchy(table_name: str | None = None) -> list[dict[str, Any]]:
 def execute_query(sql: str) -> dict[str, Any]:
     """Execute a read-only SQL statement and return rows, truncated if large."""
     db = _db()
-    config = _config or Config.from_env()
+    config = _cfg()
     if len(sql) > config.max_sql_length:
         raise ValueError(
             f"SQL exceeds maximum length of {config.max_sql_length} characters "
@@ -348,8 +356,8 @@ def main() -> None:
     # Fail fast with a clear message if configuration is missing/invalid, rather than
     # surfacing the error on the first tool call.
     try:
-        global _config
-        _config = Config.from_env()
+        global _context
+        _context = AppContext.from_env()
     except ConfigError as exc:
         print(f"configuration error: {exc}", file=sys.stderr)
         raise SystemExit(1) from exc
@@ -357,8 +365,8 @@ def main() -> None:
     import atexit
 
     def _cleanup() -> None:
-        if _database is not None:
-            _database.close()
+        if _context is not None:
+            _context.close()
 
     atexit.register(_cleanup)
     mcp.run()
