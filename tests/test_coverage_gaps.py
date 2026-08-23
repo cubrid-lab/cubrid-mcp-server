@@ -13,6 +13,7 @@ import pytest
 
 import cubrid_mcp_server.server as server
 from cubrid_mcp_server.config import Config, ConfigError
+from cubrid_mcp_server.database import Database
 from cubrid_mcp_server.safety import ensure_read_only
 
 _TEST_CONFIG = Config(
@@ -107,6 +108,11 @@ class _CleanupFailingDB:
     @contextmanager
     def exclusive(self) -> Any:
         yield _CleanupFailingConn()
+
+    # Reuse the real cleanup logic so this test exercises production code.
+    _safe_close_cursor = staticmethod(Database._safe_close_cursor)
+    _reset_trace_state = Database._reset_trace_state
+    trace_enabled = Database.trace_enabled
 
 
 def test_explain_query_swallows_cleanup_errors(monkeypatch: pytest.MonkeyPatch) -> None:

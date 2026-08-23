@@ -192,45 +192,16 @@ def explain_query(sql: str) -> dict[str, Any]:
     # embedded second statements (e.g. "SELECT 1; DROP TABLE x") as defense in depth.
     ensure_read_only(cleaned)
 
-    db = _db()
     plan = ""
-    # Hold the connection lock across the whole SET TRACE ... SHOW TRACE sequence so a
-    # concurrent query cannot interleave and clobber the session trace state.
-    with db.exclusive() as connection:
-        try:
-            cursor = connection.cursor()
-            try:
-                cursor.execute("SET TRACE ON", ())
-                cursor.execute(cleaned, ())
-                cursor.execute("SHOW TRACE", ())
-                trace_rows = cursor.fetchall()
-                if trace_rows and trace_rows[0]:
-                    plan = str(trace_rows[0][0] or "").strip()
-            finally:
-                cursor.close()
-        finally:
-            _reset_trace_state(connection)
+    with _db().trace_enabled() as cursor:
+        cursor.execute(cleaned, ())
+        cursor.execute("SHOW TRACE", ())
+        trace_rows = cursor.fetchall()
+        if trace_rows and trace_rows[0]:
+            plan = str(trace_rows[0][0] or "").strip()
 
     return {"sql": cleaned, "plan": plan}
 
-
-def _reset_trace_state(connection: Any) -> None:
-    """Best-effort cleanup of ``SET TRACE`` session state and pending transaction."""
-    cleanup_errors: list[str] = []
-    try:
-        cursor = connection.cursor()
-        try:
-            cursor.execute("SET TRACE OFF", ())
-        finally:
-            cursor.close()
-    except Exception as exc:
-        cleanup_errors.append(f"SET TRACE OFF failed: {exc}")
-    try:
-        connection.rollback()
-    except Exception as exc:
-        cleanup_errors.append(f"rollback failed: {exc}")
-    if cleanup_errors:
-        logger.debug("explain_query cleanup: %s", "; ".join(cleanup_errors))
 
 
 @mcp.tool

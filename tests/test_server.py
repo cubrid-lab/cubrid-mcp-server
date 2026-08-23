@@ -180,6 +180,25 @@ class FakeConnDatabase(FakeDatabase):
 
         return _cm()
 
+    def trace_enabled(self) -> Any:
+        from contextlib import contextmanager
+
+        @contextmanager
+        def _cm() -> Any:
+            connection = self._make_conn()
+            cursor = connection.cursor()
+            try:
+                cursor.execute("SET TRACE ON", ())
+                yield cursor
+            finally:
+                cursor.close()
+                cleanup = connection.cursor()
+                cleanup.execute("SET TRACE OFF", ())
+                cleanup.close()
+                connection.rollback()
+
+        return _cm()
+
     def connect(self) -> Any:
         return self._make_conn()
 
