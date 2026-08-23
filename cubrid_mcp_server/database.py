@@ -42,7 +42,29 @@ def _is_timeout_error(exc: BaseException | None) -> bool:
 
 
 class Database:
-    """Lazily opens and reuses a single pycubrid connection."""
+    """Lazily opens and reuses a single pycubrid connection.
+
+    Concurrency model
+    -----------------
+    The server intentionally holds **one** pycubrid connection for the whole
+    process, guarded by a single ``threading.RLock``. Every statement-executing
+    path — ``cursor()`` / ``exclusive()`` / ``fetch_*`` — acquires that lock, so
+    **query execution is fully serialized**: only one statement runs at a time,
+    regardless of how many tool calls arrive. (The ``connect()`` / ``close()``
+    lifecycle helpers are not themselves lock-guarded; they are expected to run
+    outside concurrent query load, e.g. at startup and shutdown.)
+
+    This is a deliberate fit for the MCP **stdio** transport, which serves a
+    single client whose requests are already effectively sequential. A single
+    serialized connection keeps CUBRID session state (e.g. ``SET TRACE`` used
+    by ``explain_query``, transaction/rollback state) coherent and makes the
+    lifecycle trivial to reason about and test.
+
+    A connection **pool is intentionally not used**. It would add session-state
+    isolation, cleanup, and test complexity with no benefit at this scope. Only
+    introduce concurrency (e.g. per-query disposable connections) if stdio
+    serialization is ever shown, by measurement, to be a real bottleneck.
+    """
 
     def __init__(self, config: Config) -> None:
         self._config = config
