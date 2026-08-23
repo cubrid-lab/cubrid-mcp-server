@@ -120,6 +120,7 @@ class Database:
 
     @staticmethod
     def _safe_close_cursor(cursor: Any) -> None:
+        """Close a cursor on a best-effort basis, logging (not raising) failures."""
         try:
             cursor.close()
         except Exception as exc:
@@ -165,6 +166,47 @@ class Database:
                 if _is_timeout_error(exc):
                     raise self._timeout_error(exc) from exc
                 raise
+
+    @contextmanager
+    def trace_enabled(self) -> Iterator[Any]:
+        """Run statements with CUBRID ``SET TRACE ON``, guaranteeing cleanup.
+
+        Holds the connection lock across the whole ``SET TRACE ... SHOW TRACE``
+        sequence so a concurrent query cannot interleave and clobber the session
+        trace state. On exit the trace flag is turned off and any pending
+        transaction is rolled back on a best-effort basis.
+        """
+        with self.exclusive() as connection:
+            cursor = connection.cursor()
+            try:
+                cursor.execute("SET TRACE ON", ())
+                yield cursor
+            finally:
+                self._safe_close_cursor(cursor)
+                self._reset_trace_state(connection)
+
+    def _reset_trace_state(self, connection: Any) -> None:
+        """Best-effort cleanup of ``SET TRACE`` session state and pending transaction."""
+        cleanup_errors: list[str] = []
+        try:
+            cursor = connection.cursor()
+        except Exception as exc:
+            cleanup_errors.append(f"SET TRACE OFF failed: {exc}")
+        else:
+            try:
+                cursor.execute("SET TRACE OFF", ())
+            except Exception as exc:
+                cleanup_errors.append(f"SET TRACE OFF failed: {exc}")
+            finally:
+                # Best-effort close: a failing close() must not be misreported
+                # as a "SET TRACE OFF failed" error when the execute succeeded.
+                self._safe_close_cursor(cursor)
+        try:
+            connection.rollback()
+        except Exception as exc:
+            cleanup_errors.append(f"rollback failed: {exc}")
+        if cleanup_errors:
+            logger.debug("trace cleanup: %s", "; ".join(cleanup_errors))
 
     def fetch_all(self, sql: str, params: tuple[Any, ...] | None = None) -> list[tuple[Any, ...]]:
         with self.cursor() as cursor:

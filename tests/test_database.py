@@ -71,6 +71,7 @@ class FakeConnection:
         self.version_error = False
         self.close_error = False
         self.cursors: list[FakeCursor] = []
+        self.rolled_back = False
 
     def get_server_version(self) -> str:
         self.server_version_calls += 1
@@ -82,6 +83,9 @@ class FakeConnection:
         cursor = FakeCursor(self._rows)
         self.cursors.append(cursor)
         return cursor
+
+    def rollback(self) -> None:
+        self.rolled_back = True
 
     def close(self) -> None:
         if self.close_error:
@@ -174,6 +178,35 @@ def test_fetch_all_returns_rows(monkeypatch: pytest.MonkeyPatch) -> None:
     db = Database(_TEST_CONFIG)
     assert db.fetch_all("SELECT 1", None) == [(1,), (2,)]
     assert conn.cursors[0].executed == [("SELECT 1", ())]
+
+
+def test_trace_enabled_runs_and_cleans_up(monkeypatch: pytest.MonkeyPatch) -> None:
+    conn = FakeConnection(rows=[("Trace Statistics: stub",)])
+    monkeypatch.setattr(pycubrid, "connect", lambda **_k: conn)
+    db = Database(_TEST_CONFIG)
+    with db.trace_enabled() as cursor:
+        cursor.execute("SELECT 1", ())
+        cursor.execute("SHOW TRACE", ())
+        assert cursor.fetchall() == [("Trace Statistics: stub",)]
+    executed = [sql for cur in conn.cursors for sql, _ in cur.executed]
+    assert "SET TRACE ON" in executed
+    assert "SET TRACE OFF" in executed
+    assert conn.rolled_back is True
+    # Every cursor opened during the trace lifecycle is closed.
+    assert all(cur.closed for cur in conn.cursors)
+
+
+def test_trace_enabled_swallows_cleanup_errors(monkeypatch: pytest.MonkeyPatch) -> None:
+    class _BoomConn(FakeConnection):
+        def rollback(self) -> None:
+            raise RuntimeError("rollback boom")
+
+    conn = _BoomConn()
+    monkeypatch.setattr(pycubrid, "connect", lambda **_k: conn)
+    db = Database(_TEST_CONFIG)
+    # Cleanup failures during __exit__ are logged, not raised.
+    with db.trace_enabled() as cursor:
+        cursor.execute("SELECT 1", ())
 
 
 def test_fetch_many_truncates_across_batches(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -334,3 +367,12 @@ def test_cursor_close_error_is_swallowed(monkeypatch: pytest.MonkeyPatch) -> Non
 
     monkeypatch.setattr(conn, "cursor", _cursor)
     assert db.fetch_all("SELECT 1") == [(1,)]
+
+
+def test_safe_close_cursor_swallows_close_error() -> None:
+    class _BadCursor:
+        def close(self) -> None:
+            raise RuntimeError("close boom")
+
+    # Logged, not raised.
+    Database._safe_close_cursor(_BadCursor())
