@@ -32,6 +32,15 @@ _TEST_CONFIG = Config(
 )
 
 
+def _raise(exc: BaseException) -> None:
+    """Raise ``exc`` from inside a block.
+
+    Routing the raise through a helper keeps static analyzers from treating the
+    statements after a ``with pytest.raises(...)`` guard as unreachable.
+    """
+    raise exc
+
+
 class FakeCursor:
     def __init__(self, rows: list[tuple[Any, ...]] | None = None) -> None:
         self._rows = list(rows or [])
@@ -146,7 +155,7 @@ def test_cursor_closes_and_wraps_errors(monkeypatch: pytest.MonkeyPatch) -> None
     db = Database(_TEST_CONFIG)
     with pytest.raises(DatabaseError, match="query failed"):
         with db.cursor():
-            raise ValueError("boom")
+            _raise(ValueError("boom"))
     # Cursor is always closed, even on error.
     assert conn.cursors[0].closed is True
 
@@ -291,7 +300,7 @@ def test_exclusive_timeout_raises_and_discards_connection(
     db = Database(_TEST_CONFIG)
     with pytest.raises(QueryTimeoutError):
         with db.exclusive():
-            raise TimeoutError("read timed out")
+            _raise(TimeoutError("read timed out"))
     assert conn.closed is True
     assert db._connection is None
 
@@ -302,7 +311,7 @@ def test_exclusive_reraises_non_timeout_error(monkeypatch: pytest.MonkeyPatch) -
     db = Database(_TEST_CONFIG)
     with pytest.raises(ValueError, match="boom"):
         with db.exclusive():
-            raise ValueError("boom")
+            _raise(ValueError("boom"))
     # A non-timeout error leaves the connection intact for reuse.
     assert db._connection is conn
 
