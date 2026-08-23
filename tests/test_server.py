@@ -50,6 +50,9 @@ class FakeDatabase:
             return rows[:max_rows], True
         return rows, False
 
+    def health_check(self) -> dict[str, Any]:
+        return {"ok": True, "server_version": "11.0"}
+
 
 @pytest.fixture
 def fake_db(monkeypatch: pytest.MonkeyPatch) -> FakeDatabase:
@@ -70,6 +73,10 @@ def test_filter_table_names(fake_db: FakeDatabase) -> None:
 
 def test_filter_table_names_empty(fake_db: FakeDatabase) -> None:
     assert server.filter_table_names("   ") == []
+
+
+def test_health_check_tool(fake_db: FakeDatabase) -> None:
+    assert server.health_check() == {"ok": True, "server_version": "11.0"}
 
 
 def test_schema_definitions(fake_db: FakeDatabase) -> None:

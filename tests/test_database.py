@@ -113,25 +113,30 @@ def test_connect_creates_and_caches_connection(patch_connect: list[FakeConnectio
     second = db.connect()
     assert first is second
     assert len(patch_connect) == 1
-    # Reuse path validates the cached connection via get_server_version.
-    assert first.server_version_calls == 1
+    # connect() no longer issues a per-call liveness ping.
+    assert first.server_version_calls == 0
 
 
-def test_connect_discards_stale_connection(patch_connect: list[FakeConnection]) -> None:
+def test_query_failure_triggers_lazy_reconnect(patch_connect: list[FakeConnection]) -> None:
     db = Database(_TEST_CONFIG)
     first = db.connect()
-    first.version_error = True  # next reuse attempt fails -> discard + reconnect
+    # A failed query discards the connection so the next request reconnects.
+    with pytest.raises(DatabaseError, match="query failed"):
+        with db.cursor():
+            raise ValueError("boom")
+    assert first.closed is True
     second = db.connect()
     assert second is not first
-    assert first.closed is True
     assert len(patch_connect) == 2
 
 
-def test_discard_connection_swallows_close_error(patch_connect: list[FakeConnection]) -> None:
+def test_lazy_reconnect_swallows_close_error(patch_connect: list[FakeConnection]) -> None:
     db = Database(_TEST_CONFIG)
     first = db.connect()
-    first.version_error = True
     first.close_error = True  # close raises during discard; must be swallowed
+    with pytest.raises(DatabaseError, match="query failed"):
+        with db.cursor():
+            raise ValueError("boom")
     second = db.connect()
     assert second is not first
     assert len(patch_connect) == 2
@@ -321,8 +326,8 @@ def test_non_timeout_error_still_wrapped_as_database_error(
     with pytest.raises(DatabaseError, match="query failed") as excinfo:
         db.fetch_all("SELECT bogus")
     assert not isinstance(excinfo.value, QueryTimeoutError)
-    # A plain query error does not invalidate the connection.
-    assert db._connection is conn
+    # Lazy recovery (#106): a query error now discards the connection too.
+    assert db._connection is None
 
 
 def test_exclusive_timeout_raises_and_discards_connection(
@@ -338,15 +343,39 @@ def test_exclusive_timeout_raises_and_discards_connection(
     assert db._connection is None
 
 
-def test_exclusive_reraises_non_timeout_error(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_health_check_reports_ok(monkeypatch: pytest.MonkeyPatch) -> None:
+    conn = FakeConnection()
+    monkeypatch.setattr(pycubrid, "connect", lambda **_k: conn)
+    db = Database(_TEST_CONFIG)
+    status = db.health_check()
+    assert status == {"ok": True, "server_version": "11.0"}
+    # health_check performs the explicit liveness ping.
+    assert conn.server_version_calls == 1
+
+
+def test_health_check_reports_failure_and_discards(monkeypatch: pytest.MonkeyPatch) -> None:
+    conn = FakeConnection()
+    conn.version_error = True
+    monkeypatch.setattr(pycubrid, "connect", lambda **_k: conn)
+    db = Database(_TEST_CONFIG)
+    status = db.health_check()
+    assert status["ok"] is False
+    assert "stale connection" in status["error"]
+    # A failed ping discards the connection for lazy recovery.
+    assert conn.closed is True
+    assert db._connection is None
+
+
+def test_exclusive_discards_connection_on_error(monkeypatch: pytest.MonkeyPatch) -> None:
     conn = FakeConnection()
     monkeypatch.setattr(pycubrid, "connect", lambda **_k: conn)
     db = Database(_TEST_CONFIG)
     with pytest.raises(ValueError, match="boom"):
         with db.exclusive():
             _raise(ValueError("boom"))
-    # A non-timeout error leaves the connection intact for reuse.
-    assert db._connection is conn
+    # Lazy recovery (#106): a non-timeout error drops the connection too.
+    assert conn.closed is True
+    assert db._connection is None
 
 
 def test_cursor_close_error_is_swallowed(monkeypatch: pytest.MonkeyPatch) -> None:
