@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import logging
 import sys
+import threading
 from typing import Any
 
 from fastmcp import FastMCP
@@ -26,13 +27,21 @@ _MAX_ROW_COUNT_TABLES = 50
 _MAX_INLINE_BINARY_BYTES = 256
 
 _context: AppContext | None = None
+_context_lock = threading.Lock()
 
 
 def _get_context() -> AppContext:
-    """Return the process-wide :class:`AppContext`, building it lazily from env."""
+    """Return the process-wide :class:`AppContext`, building it lazily from env.
+
+    Guarded by a lock with a double-checked pattern so that two concurrent
+    first tool calls cannot each build a separate context (and leak a
+    ``Database`` connection); exactly one context is published.
+    """
     global _context
     if _context is None:
-        _context = AppContext.from_env()
+        with _context_lock:
+            if _context is None:
+                _context = AppContext.from_env()
     return _context
 
 
@@ -354,10 +363,14 @@ def main() -> None:
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
     # Fail fast with a clear message if configuration is missing/invalid, rather than
-    # surfacing the error on the first tool call.
+    # surfacing the error on the first tool call. Reuse a context already built by the
+    # lazy path instead of replacing (and leaking) it.
     try:
         global _context
-        _context = AppContext.from_env()
+        with _context_lock:
+            if _context is None:
+                _context = AppContext.from_env()
+            context = _context
     except ConfigError as exc:
         print(f"configuration error: {exc}", file=sys.stderr)
         raise SystemExit(1) from exc
@@ -365,8 +378,9 @@ def main() -> None:
     import atexit
 
     def _cleanup() -> None:
-        if _context is not None:
-            _context.close()
+        # Close the context we actually initialized here, not whatever the
+        # mutable global happens to hold at shutdown.
+        context.close()
 
     atexit.register(_cleanup)
     mcp.run()

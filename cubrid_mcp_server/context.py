@@ -15,7 +15,7 @@ from cubrid_mcp_server.config import Config
 from cubrid_mcp_server.database import Database
 
 
-@dataclass
+@dataclass(frozen=True)
 class AppContext:
     """Bundle of the resolved :class:`Config` and its :class:`Database`."""
 
