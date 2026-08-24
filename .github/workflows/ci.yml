@@ -131,3 +131,19 @@ jobs:
         run: pip install packaging
       - name: Lint CHANGELOG.md
         run: python scripts/lint_changelog.py
+
+  ci-gate:
+    # Single required status check that aggregates every CI job so branch
+    # protection can gate merges (including Dependabot auto-merge) on one
+    # stable context instead of brittle matrix-specific job names.
+    if: always()
+    needs: [lint-and-test, lowest-direct, integration, changelog-lint]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify all required jobs succeeded
+        run: |
+          if [ "${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}" = "true" ]; then
+            echo "One or more required CI jobs failed."
+            exit 1
+          fi
+          echo "All required CI jobs passed."
