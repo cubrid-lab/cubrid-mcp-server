@@ -15,6 +15,8 @@ import pytest
 
 from cubrid_mcp_server import server
 from cubrid_mcp_server.config import Config
+from cubrid_mcp_server.context import AppContext
+from cubrid_mcp_server.database import Database
 from cubrid_mcp_server.safety import UnsafeSQLError, ensure_read_only
 
 _TEST_CONFIG = Config(
@@ -217,6 +219,11 @@ class _FakeConnDB:
     def connect(self) -> Any:
         return self._make_conn()
 
+    # Reuse the real trace lifecycle so refactors stay pinned to production code.
+    _safe_close_cursor = staticmethod(Database._safe_close_cursor)
+    _reset_trace_state = Database._reset_trace_state
+    trace_enabled = Database.trace_enabled
+
 
 @pytest.mark.parametrize(
     "sql",
@@ -230,8 +237,7 @@ class _FakeConnDB:
     ],
 )
 def test_explain_query_accepts_select_and_with(sql: str, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(server, "_db", lambda: _FakeConnDB())
-    monkeypatch.setattr(server, "_config", _TEST_CONFIG)
+    monkeypatch.setattr(server, "_context", AppContext(config=_TEST_CONFIG, database=_FakeConnDB()))
     result = server.explain_query(sql)
     assert "plan" in result and "sql" in result
 
@@ -246,8 +252,7 @@ def test_explain_query_accepts_select_and_with(sql: str, monkeypatch: pytest.Mon
     ],
 )
 def test_explain_query_rejects_writes(sql: str, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(server, "_db", lambda: _FakeConnDB())
-    monkeypatch.setattr(server, "_config", _TEST_CONFIG)
+    monkeypatch.setattr(server, "_context", AppContext(config=_TEST_CONFIG, database=_FakeConnDB()))
     with pytest.raises(ValueError):
         server.explain_query(sql)
 
@@ -266,8 +271,7 @@ def test_explain_query_always_read_only_even_when_readonly_disabled(
         max_chars=4000,
         max_rows=1000,
     )
-    monkeypatch.setattr(server, "_db", lambda: _FakeConnDB())
-    monkeypatch.setattr(server, "_config", write_mode)
+    monkeypatch.setattr(server, "_context", AppContext(config=write_mode, database=_FakeConnDB()))
     with pytest.raises(ValueError):
         server.explain_query("DELETE FROM users")
 
