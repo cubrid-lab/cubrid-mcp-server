@@ -16,6 +16,7 @@ A [Model Context Protocol](https://modelcontextprotocol.io) server for [CUBRID](
 | `list_serials` | CUBRID `SERIAL` sequences with current value and bounds |
 | `list_class_hierarchy` | CUBRID `CLASS` inheritance relationships |
 | `execute_query` | Run read-only SQL with automatic output truncation |
+| `health_check` | Verify database connectivity on demand |
 
 ## Quick Start
 
@@ -26,7 +27,7 @@ Set the required environment variables:
 ```bash
 export CUBRID_HOST=localhost
 export CUBRID_PORT=33000        # optional, default: 33000
-export CUBRID_USER=dba
+export CUBRID_USER=readonly_user   # a CUBRID user with SELECT-only grants (see Security)
 export CUBRID_PASSWORD=secret
 export CUBRID_DATABASE=mydb
 ```
@@ -37,6 +38,9 @@ Optional settings:
 |----------|---------|-------------|
 | `CUBRID_MCP_READONLY` | `1` | Enforce read-only SQL whitelist |
 | `CUBRID_MCP_MAX_CHARS` | `4000` | Max characters in query output |
+| `CUBRID_MCP_MAX_ROWS` | `1000` | Max rows returned by `execute_query` before truncation |
+| `CUBRID_MCP_MAX_SQL_LENGTH` | `65536` | Max length (characters) of a submitted SQL statement |
+| `CUBRID_MCP_QUERY_TIMEOUT` | `30` | Per-statement socket read timeout in seconds. If the server sends no data within this window the query is aborted and the connection is reset. This is a socket read timeout, not a true server-side statement timeout. |
 
 ### Run
 
@@ -80,7 +84,7 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
       "args": ["cubrid-mcp-server"],
       "env": {
         "CUBRID_HOST": "localhost",
-        "CUBRID_USER": "dba",
+        "CUBRID_USER": "readonly_user",
         "CUBRID_PASSWORD": "secret",
         "CUBRID_DATABASE": "mydb"
       }
@@ -101,7 +105,7 @@ Add to `.mcp.json` in your project root:
       "args": ["cubrid-mcp-server"],
       "env": {
         "CUBRID_HOST": "localhost",
-        "CUBRID_USER": "dba",
+        "CUBRID_USER": "readonly_user",
         "CUBRID_PASSWORD": "secret",
         "CUBRID_DATABASE": "mydb"
       }
@@ -122,7 +126,7 @@ Add to `.cursor/mcp.json`:
       "args": ["cubrid-mcp-server"],
       "env": {
         "CUBRID_HOST": "localhost",
-        "CUBRID_USER": "dba",
+        "CUBRID_USER": "readonly_user",
         "CUBRID_PASSWORD": "secret",
         "CUBRID_DATABASE": "mydb"
       }
@@ -135,11 +139,15 @@ Add to `.cursor/mcp.json`:
 
 The server is **read-only by default**. A code-level SQL whitelist allows only `SELECT`, `SHOW`, `DESC`, `DESCRIBE`, `EXPLAIN`, and `WITH` statements. Multi-statement queries are rejected.
 
+> **The SQL whitelist is defense-in-depth, not a security boundary.** It is a non-validating parser-based guardrail against obvious mistakes. The real enforcement layer is the database itself: **always run the server as a CUBRID user that has only `SELECT` grants** on the tables the model may read. See [`SECURITY.md`](./SECURITY.md).
+
 For production use, also configure a read-only database user. See [`SECURITY.md`](./SECURITY.md) for the recommended setup.
 
 ## Logging
 
 The server speaks the MCP **stdio transport**, where `stdout` carries the JSON-RPC protocol stream. Anything written to `stdout` by the server or its dependencies will corrupt that stream and break the client connection. For this reason **all logging is routed to `stderr`**, and you should keep it that way: when adding custom logging or diagnostics, never `print()` to `stdout` — use the standard `logging` module (which is configured to emit on `stderr`) or write to `stderr` explicitly. The log level defaults to `INFO`.
+
+Errors surfaced back to the LLM client are **sanitized**: only the exception category (e.g. `query failed: OperationalError`) is returned, while the full exception detail is logged to `stderr` for operators. This keeps schema details, hostnames, SQL fragments, and configuration values out of client-visible messages.
 
 
 ## Development

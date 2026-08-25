@@ -12,7 +12,10 @@ from typing import Any
 import pytest
 
 import cubrid_mcp_server.server as server
+from cubrid_mcp_server import context as context_module
 from cubrid_mcp_server.config import Config, ConfigError
+from cubrid_mcp_server.context import AppContext
+from cubrid_mcp_server.database import Database
 from cubrid_mcp_server.safety import ensure_read_only
 
 _TEST_CONFIG = Config(
@@ -32,9 +35,8 @@ _TEST_CONFIG = Config(
 # ---------------------------------------------------------------------------
 
 
-def test_db_lazily_initializes_once(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(server, "_config", None)
-    monkeypatch.setattr(server, "_database", None)
+def test_context_lazily_initializes_once(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(server, "_context", None)
     monkeypatch.setattr(Config, "from_env", classmethod(lambda cls: _TEST_CONFIG))
 
     created: list[Any] = []
@@ -43,7 +45,8 @@ def test_db_lazily_initializes_once(monkeypatch: pytest.MonkeyPatch) -> None:
         def __init__(self, config: Config) -> None:
             created.append(config)
 
-    monkeypatch.setattr(server, "Database", _FakeDatabase)
+    # from_env() builds the Database via the context module's import.
+    monkeypatch.setattr(context_module, "Database", _FakeDatabase)
 
     first = server._db()
     second = server._db()
@@ -108,11 +111,17 @@ class _CleanupFailingDB:
     def exclusive(self) -> Any:
         yield _CleanupFailingConn()
 
+    # Reuse the real cleanup logic so this test exercises production code.
+    _safe_close_cursor = staticmethod(Database._safe_close_cursor)
+    _reset_trace_state = Database._reset_trace_state
+    trace_enabled = Database.trace_enabled
+
 
 def test_explain_query_swallows_cleanup_errors(monkeypatch: pytest.MonkeyPatch) -> None:
     """SET TRACE OFF and rollback failures during cleanup are logged, not raised."""
-    monkeypatch.setattr(server, "_db", lambda: _CleanupFailingDB())
-    monkeypatch.setattr(server, "_config", _TEST_CONFIG)
+    monkeypatch.setattr(
+        server, "_context", AppContext(config=_TEST_CONFIG, database=_CleanupFailingDB())
+    )
     result = server.explain_query("SELECT 1")
     assert result["plan"] == "plan text"
     assert result["sql"] == "SELECT 1"
@@ -140,7 +149,8 @@ def test_table_row_counts_rejects_too_many_tables(monkeypatch: pytest.MonkeyPatc
 def test_table_row_counts_reports_per_table_error(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(server, "_db", lambda: _RowCountErrorDB())
     result = server.table_row_counts(["users"])
-    assert result == [{"table": "users", "row_count": None, "error": "count failed"}]
+    # The raw driver message is sanitized to the exception category only.
+    assert result == [{"table": "users", "row_count": None, "error": "RuntimeError"}]
 
 
 # ---------------------------------------------------------------------------
@@ -170,8 +180,7 @@ def test_main_exits_on_config_error(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_main_runs_server_on_valid_config(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(Config, "from_env", classmethod(lambda cls: _TEST_CONFIG))
-    monkeypatch.setattr(server, "_config", None)
-    monkeypatch.setattr(server, "_database", None)
+    monkeypatch.setattr(server, "_context", None)
     ran: list[bool] = []
     monkeypatch.setattr(server.mcp, "run", lambda: ran.append(True))
     server.main()
