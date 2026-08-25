@@ -1,0 +1,26 @@
+# cubrid-mcp-server
+
+> A Model Context Protocol server that lets LLM clients inspect CUBRID schemas and run read-only queries through pycubrid.
+
+## Key facts
+
+- Requires Python 3.10 or newer and uses the MCP stdio transport.
+- Connects to CUBRID through `pycubrid`; connection settings come from `CUBRID_HOST`, `CUBRID_PORT`, `CUBRID_USER`, `CUBRID_PASSWORD`, and `CUBRID_DATABASE`.
+- Exposes schema inspection, index and serial discovery, class hierarchy, query planning, row counts, and bounded SQL query execution.
+- Supports Claude Desktop, Claude Code, Cursor, and other MCP clients that can launch a local stdio server.
+- Enforces a read-only SQL whitelist by default with `CUBRID_MCP_READONLY=1`.
+- Bounds work with `CUBRID_MCP_MAX_ROWS`, `CUBRID_MCP_MAX_CHARS`, `CUBRID_MCP_MAX_SQL_LENGTH`, and `CUBRID_MCP_QUERY_TIMEOUT`.
+
+## Tools
+
+- `all_table_names`, `filter_table_names`, `schema_definitions`, and `describe_table` inspect database structure.
+- `list_indexes`, `list_serials`, and `list_class_hierarchy` expose CUBRID metadata.
+- `explain_query` returns the execution plan for a `SELECT` or `WITH` query.
+- `table_row_counts` returns bounded table counts.
+- `execute_query` runs SQL subject to the configured read-only and output limits.
+
+## Docs
+
+- [README](README.md): features, configuration, installation, and MCP client setup.
+- [Security policy](SECURITY.md): read-only enforcement, output limits, deployment guidance, and vulnerability reporting.
+- [Changelog](CHANGELOG.md): released fixes, security hardening, and tool additions.
