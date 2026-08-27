@@ -170,6 +170,11 @@ export CUBRID_HOST=localhost CUBRID_USER=dba CUBRID_PASSWORD="" CUBRID_DATABASE=
 pytest -m integration
 ```
 
+## Disclaimer
+
+> This project is part of [CUBRID Lab](https://github.com/cubrid-lab), an independent open-source initiative for CUBRID developer tooling, and is not affiliated with, sponsored by, or endorsed by CUBRID Corporation or the official CUBRID project.
+
+
 ## License
 
 MIT (see [`LICENSE`](./LICENSE)).
