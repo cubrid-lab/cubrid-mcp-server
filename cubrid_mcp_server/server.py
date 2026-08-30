@@ -10,6 +10,7 @@ from typing import Any
 
 from fastmcp import FastMCP
 
+from cubrid_mcp_server.audit import AuditLogger
 from cubrid_mcp_server.config import Config, ConfigError
 from cubrid_mcp_server.context import AppContext
 from cubrid_mcp_server.database import Database, sanitize_error
@@ -51,6 +52,12 @@ def _db() -> Database:
 
 def _cfg() -> Config:
     return _get_context().config
+
+
+def _audit() -> AuditLogger:
+    audit = _get_context().audit
+    assert audit is not None  # AppContext.__post_init__ always populates this
+    return audit
 
 
 def _all_table_names() -> list[str]:
@@ -190,34 +197,35 @@ def list_indexes(table_name: str) -> list[dict[str, Any]]:
 @mcp.tool
 def explain_query(sql: str) -> dict[str, Any]:
     """Return CUBRID's execution plan/trace for a ``SELECT`` or ``WITH`` statement."""
-    cleaned = sql.strip().rstrip(";").strip()
-    if not cleaned:
-        raise ValueError("empty SQL statement")
-    config = _cfg()
-    if len(cleaned) > config.max_sql_length:
-        raise ValueError(
-            f"SQL exceeds maximum length of {config.max_sql_length} characters "
-            f"(CUBRID_MCP_MAX_SQL_LENGTH)"
-        )
-    leading = cleaned.split(None, 1)[0].upper()
-    if leading not in {"SELECT", "WITH"}:
-        raise ValueError("explain_query only accepts SELECT or WITH statements")
-    # explain_query is *intentionally* always read-only, regardless of
-    # ``config.readonly``: it can only ever produce a plan for a SELECT/WITH query,
-    # so there is no meaningful write-mode behavior to gate. This differs from
-    # execute_query, which honors CUBRID_MCP_READONLY. ensure_read_only also rejects
-    # embedded second statements (e.g. "SELECT 1; DROP TABLE x") as defense in depth.
-    ensure_read_only(cleaned)
+    with _audit().track("explain_query", sql):
+        cleaned = sql.strip().rstrip(";").strip()
+        if not cleaned:
+            raise ValueError("empty SQL statement")
+        config = _cfg()
+        if len(cleaned) > config.max_sql_length:
+            raise ValueError(
+                f"SQL exceeds maximum length of {config.max_sql_length} characters "
+                f"(CUBRID_MCP_MAX_SQL_LENGTH)"
+            )
+        leading = cleaned.split(None, 1)[0].upper()
+        if leading not in {"SELECT", "WITH"}:
+            raise ValueError("explain_query only accepts SELECT or WITH statements")
+        # explain_query is *intentionally* always read-only, regardless of
+        # ``config.readonly``: it can only ever produce a plan for a SELECT/WITH query,
+        # so there is no meaningful write-mode behavior to gate. This differs from
+        # execute_query, which honors CUBRID_MCP_READONLY. ensure_read_only also rejects
+        # embedded second statements (e.g. "SELECT 1; DROP TABLE x") as defense in depth.
+        ensure_read_only(cleaned)
 
-    plan = ""
-    with _db().trace_enabled() as cursor:
-        cursor.execute(cleaned, ())
-        cursor.execute("SHOW TRACE", ())
-        trace_rows = cursor.fetchall()
-        if trace_rows and trace_rows[0]:
-            plan = str(trace_rows[0][0] or "").strip()
+        plan = ""
+        with _db().trace_enabled() as cursor:
+            cursor.execute(cleaned, ())
+            cursor.execute("SHOW TRACE", ())
+            trace_rows = cursor.fetchall()
+            if trace_rows and trace_rows[0]:
+                plan = str(trace_rows[0][0] or "").strip()
 
-    return {"sql": cleaned, "plan": plan}
+        return {"sql": cleaned, "plan": plan}
 
 
 @mcp.tool
@@ -304,21 +312,24 @@ def execute_query(sql: str) -> dict[str, Any]:
     """Execute a read-only SQL statement and return rows, truncated if large."""
     db = _db()
     config = _cfg()
-    if len(sql) > config.max_sql_length:
-        raise ValueError(
-            f"SQL exceeds maximum length of {config.max_sql_length} characters "
-            f"(CUBRID_MCP_MAX_SQL_LENGTH)"
-        )
-    if config.readonly:
-        ensure_read_only(sql)
+    with _audit().track("execute_query", sql) as outcome:
+        if len(sql) > config.max_sql_length:
+            raise ValueError(
+                f"SQL exceeds maximum length of {config.max_sql_length} characters "
+                f"(CUBRID_MCP_MAX_SQL_LENGTH)"
+            )
+        if config.readonly:
+            ensure_read_only(sql)
 
-    rows, row_truncated = db.fetch_many(sql, None, config.max_rows)
-    rendered = _render_rows(rows, config.max_chars)
-    return {
-        "row_count": len(rendered["rows"]),
-        "truncated": bool(rendered["truncated"] or row_truncated),
-        "rows": rendered["rows"],
-    }
+        rows, row_truncated = db.fetch_many(sql, None, config.max_rows)
+        rendered = _render_rows(rows, config.max_chars)
+        outcome.row_count = len(rendered["rows"])
+        outcome.truncated = bool(rendered["truncated"] or row_truncated)
+        return {
+            "row_count": outcome.row_count,
+            "truncated": outcome.truncated,
+            "rows": rendered["rows"],
+        }
 
 
 @mcp.tool

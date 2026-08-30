@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from cubrid_mcp_server.audit import AuditLogger
 from cubrid_mcp_server.config import Config
 from cubrid_mcp_server.database import Database
 
@@ -21,12 +22,23 @@ class AppContext:
 
     config: Config
     database: Database
+    audit: AuditLogger | None = None
+
+    def __post_init__(self) -> None:
+        # Derive a disabled/enabled audit logger from config when one is not
+        # explicitly injected, so every context always has a usable ``audit``.
+        if self.audit is None:
+            object.__setattr__(self, "audit", AuditLogger(self.config.audit_log))
 
     @classmethod
     def from_env(cls) -> "AppContext":
         """Build a context from environment configuration."""
         config = Config.from_env()
-        return cls(config=config, database=Database(config))
+        return cls(
+            config=config,
+            database=Database(config),
+            audit=AuditLogger(config.audit_log),
+        )
 
     def close(self) -> None:
         """Release the underlying database connection."""

@@ -22,6 +22,7 @@ class Config:
     max_rows: int
     max_sql_length: int = 65536
     query_timeout: float = 30.0
+    audit_log: bool = False
 
     @classmethod
     def from_env(cls, env: dict[str, str] | None = None) -> "Config":
@@ -82,6 +83,8 @@ class Config:
         if query_timeout <= 0:
             raise ConfigError("CUBRID_MCP_QUERY_TIMEOUT must be positive")
 
+        audit_log = _parse_bool(source.get("CUBRID_MCP_AUDIT_LOG", "0"))
+
         return cls(
             host=host,
             port=port,
@@ -93,6 +96,7 @@ class Config:
             max_rows=max_rows,
             max_sql_length=max_sql_length,
             query_timeout=query_timeout,
+            audit_log=audit_log,
         )
 
 

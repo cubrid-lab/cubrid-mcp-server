@@ -42,6 +42,19 @@ You can disable this layer by setting `CUBRID_MCP_READONLY=0`, but only do so wh
 
 `execute_query` caps the number of rows returned at `CUBRID_MCP_MAX_ROWS` (default 1000) and truncates rendered output once the cumulative character count exceeds `CUBRID_MCP_MAX_CHARS` (default 4000). Together these protect the model's context window and limit how much data a single probing query can exfiltrate in one shot. Binary values are base64-encoded when small and summarized (`<binary N bytes>`) when large, so raw blobs never flood the output.
 
+## Layer 4 — audit logging (opt-in)
+
+Set `CUBRID_MCP_AUDIT_LOG=1` to emit a structured JSON record on **stderr** for every executed statement (`execute_query`, `explain_query`), for observability and after-the-fact security review. It is **off by default**.
+
+Audit records are deliberately redaction-safe and share the same sanitization guarantees as client-facing errors:
+
+- Only the statement **category** (leading keyword) and **table identifiers** (extracted via a strict identifier regex) are recorded — never the raw SQL text.
+- **Bound parameters and literal values are never logged**, so a secret embedded in a query (`WHERE token = '…'`) does not appear in the audit stream.
+- Failures record the exception **class name only** (via `sanitize_error`), never the raw driver message.
+- Records go to `stderr` only; `stdout` remains reserved for the MCP protocol stream.
+
+This complements — but does not replace — CUBRID's own server-side query logging.
+
 
 
 ## LLM threat model
