@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import json
 import logging
 import sys
 import threading
@@ -345,25 +346,27 @@ _SCHEMA_INDEX_URI = "cubrid://schema"
 
 
 @mcp.resource(_SCHEMA_INDEX_URI, name="cubrid-schema-index", mime_type="application/json")
-def schema_index() -> list[dict[str, str]]:
+def schema_index() -> str:
     """Whole-schema index: every user table with its per-table resource URI."""
-    return [
-        {"name": name, "uri": f"{_SCHEMA_INDEX_URI}/{quote(name, safe='')}"}
-        for name in _all_table_names()
-    ]
+    return json.dumps(
+        [
+            {"name": name, "uri": f"{_SCHEMA_INDEX_URI}/{quote(name, safe='')}"}
+            for name in _all_table_names()
+        ]
+    )
 
 
 @mcp.resource(
     _SCHEMA_INDEX_URI + "/{table}", name="cubrid-schema-table", mime_type="application/json"
 )
-def schema_resource(table: str) -> dict[str, Any]:
+def schema_resource(table: str) -> str:
     """Per-table schema: columns, primary key, and indexes (mirrors ``describe_table``).
 
     ``table`` arrives already percent-decoded by FastMCP's URI-template matching.
     An unknown or system table raises ``ValueError`` (surfaced as a resource read
     error), matching the ``describe_table`` tool's behavior.
     """
-    return _describe_table(_resolve_table(table))
+    return json.dumps(_describe_table(_resolve_table(table)))
 
 
 def _render_rows(rows: list[tuple[Any, ...]], max_chars: int) -> dict[str, Any]:

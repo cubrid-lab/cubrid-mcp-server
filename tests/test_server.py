@@ -355,7 +355,7 @@ def test_render_rows_returns_first_row_when_oversized() -> None:
 
 def test_schema_index_direct(fake_db: FakeDatabase) -> None:
     fake_db.queue([("users",), ("orders",)])
-    assert server.schema_index() == [
+    assert json.loads(server.schema_index()) == [
         {"name": "users", "uri": "cubrid://schema/users"},
         {"name": "orders", "uri": "cubrid://schema/orders"},
     ]
@@ -363,7 +363,7 @@ def test_schema_index_direct(fake_db: FakeDatabase) -> None:
 
 def test_schema_index_percent_encodes_uris(fake_db: FakeDatabase) -> None:
     fake_db.queue([("my table",), ("a/b",)])
-    result = server.schema_index()
+    result = json.loads(server.schema_index())
     assert result[0]["uri"] == "cubrid://schema/my%20table"
     assert result[1]["uri"] == "cubrid://schema/a%2Fb"
 
@@ -374,7 +374,7 @@ def test_schema_resource_direct_matches_describe_table(fake_db: FakeDatabase) ->
     fake_db.queue([("id", "INTEGER", "NO", None)])
     fake_db.queue([("id",)])
     fake_db.queue([("pk_users", "YES", "YES", "NO", "NO", 1, "id", 0, "ASC")])
-    result = server.schema_resource("users")
+    result = json.loads(server.schema_resource("users"))
     assert result["table"] == "users"
     assert result["primary_key"] == ["id"]
     assert len(result["columns"]) == 1
