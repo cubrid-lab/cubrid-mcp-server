@@ -25,6 +25,8 @@ starting points for common inspection tasks. Prompts are **guidance-only**: each
 returns text that tells the client which of the existing read-only tools to call and
 in what order. They never touch the database, execute SQL, or add any new data-access
 surface, and any argument you pass is fenced and treated strictly as untrusted data.
+The prompts are advisory templates only — the actual read-only enforcement remains in
+the underlying tools (`execute_query`/`explain_query` via `safety.py`).
 
 | Prompt | Arguments | Description |
 |--------|-----------|-------------|
