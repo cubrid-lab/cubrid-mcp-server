@@ -35,7 +35,7 @@ class TestCubridIntegration:
         self.config = Config.from_env()
         self.db = Database(self.config)
         # Route the server tool functions at the live database.
-        server._context = AppContext(config=self.config, database=self.db)
+        server._context = AppContext.single(config=self.config, database=self.db)
 
     def teardown_method(self) -> None:
         from cubrid_mcp_server import server

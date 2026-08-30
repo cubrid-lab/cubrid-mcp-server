@@ -1,6 +1,6 @@
 import pytest
 
-from cubrid_mcp_server.config import Config, ConfigError
+from cubrid_mcp_server.config import Config, ConfigError, ConnectionRegistry
 
 
 BASE_ENV = {
@@ -101,3 +101,104 @@ def test_from_env_invalid_query_timeout() -> None:
 def test_password_not_in_repr() -> None:
     cfg = Config.from_env(BASE_ENV)
     assert "secret" not in repr(cfg)
+
+
+def test_registry_default_only_when_no_connections() -> None:
+    registry = ConnectionRegistry.from_env(BASE_ENV)
+    assert registry.names == ["default"]
+    assert registry.config_for().database == "demodb"
+    # None/empty selector resolves to the default connection.
+    assert registry.config_for(None) is registry.config_for()
+    assert registry.config_for("   ") is registry.config_for()
+
+
+def test_registry_empty_connections_behaves_like_unset() -> None:
+    registry = ConnectionRegistry.from_env(BASE_ENV | {"CUBRID_CONNECTIONS": "  "})
+    assert registry.names == ["default"]
+
+
+def test_registry_missing_default_vars_still_fails() -> None:
+    env = {k: v for k, v in BASE_ENV.items() if k != "CUBRID_HOST"}
+    with pytest.raises(ConfigError, match="CUBRID_HOST"):
+        ConnectionRegistry.from_env(env)
+
+
+def test_registry_parses_named_connection() -> None:
+    env = BASE_ENV | {
+        "CUBRID_CONNECTIONS": "reporting",
+        "CUBRID_REPORTING_HOST": "reporting-db",
+        "CUBRID_REPORTING_USER": "ru",
+        "CUBRID_REPORTING_PASSWORD": "rp",
+        "CUBRID_REPORTING_DATABASE": "reports",
+        "CUBRID_REPORTING_MCP_MAX_ROWS": "500",
+    }
+    registry = ConnectionRegistry.from_env(env)
+    assert registry.names == ["default", "reporting"]
+    reporting = registry.config_for("reporting")
+    assert reporting.host == "reporting-db"
+    assert reporting.database == "reports"
+    assert reporting.max_rows == 500
+    # The default connection is unaffected by named-connection vars.
+    assert registry.config_for().host == "localhost"
+
+
+def test_registry_named_selection_is_case_insensitive() -> None:
+    env = BASE_ENV | {
+        "CUBRID_CONNECTIONS": "Reporting",
+        "CUBRID_REPORTING_HOST": "reporting-db",
+        "CUBRID_REPORTING_USER": "ru",
+        "CUBRID_REPORTING_PASSWORD": "rp",
+        "CUBRID_REPORTING_DATABASE": "reports",
+    }
+    registry = ConnectionRegistry.from_env(env)
+    assert registry.config_for("reporting").host == "reporting-db"
+    assert registry.config_for("REPORTING").host == "reporting-db"
+
+
+def test_registry_missing_named_vars_fail_with_name() -> None:
+    env = BASE_ENV | {"CUBRID_CONNECTIONS": "reporting"}
+    with pytest.raises(ConfigError, match="CUBRID_REPORTING_HOST"):
+        ConnectionRegistry.from_env(env)
+
+
+def test_registry_reserved_default_name() -> None:
+    with pytest.raises(ConfigError, match="reserved"):
+        ConnectionRegistry.from_env(BASE_ENV | {"CUBRID_CONNECTIONS": "default"})
+
+
+def test_registry_invalid_name() -> None:
+    with pytest.raises(ConfigError, match="invalid connection name"):
+        ConnectionRegistry.from_env(BASE_ENV | {"CUBRID_CONNECTIONS": "bad-name"})
+
+
+def test_registry_duplicate_name_after_normalization() -> None:
+    env = BASE_ENV | {
+        "CUBRID_CONNECTIONS": "reporting,REPORTING",
+        "CUBRID_REPORTING_HOST": "reporting-db",
+        "CUBRID_REPORTING_USER": "ru",
+        "CUBRID_REPORTING_PASSWORD": "rp",
+        "CUBRID_REPORTING_DATABASE": "reports",
+    }
+    with pytest.raises(ConfigError, match="duplicate connection name"):
+        ConnectionRegistry.from_env(env)
+
+
+def test_registry_unknown_selector_lists_available() -> None:
+    registry = ConnectionRegistry.from_env(BASE_ENV)
+    with pytest.raises(ConfigError) as excinfo:
+        registry.config_for("nope")
+    message = str(excinfo.value)
+    assert "unknown connection" in message
+    assert "default" in message
+
+
+def test_registry_blank_names_in_list_are_skipped() -> None:
+    env = BASE_ENV | {
+        "CUBRID_CONNECTIONS": "reporting, ,",
+        "CUBRID_REPORTING_HOST": "reporting-db",
+        "CUBRID_REPORTING_USER": "ru",
+        "CUBRID_REPORTING_PASSWORD": "rp",
+        "CUBRID_REPORTING_DATABASE": "reports",
+    }
+    registry = ConnectionRegistry.from_env(env)
+    assert registry.names == ["default", "reporting"]
