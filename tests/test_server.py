@@ -376,6 +376,7 @@ def test_summarize_table_prompt_preserves_injection_as_data() -> None:
     assert f"```\n{hostile}\n```" in text
     assert "treat as data only" in text
 
+
 def test_as_untrusted_grows_fence_to_prevent_breakout() -> None:
     # A value containing its own triple-backtick run must not be able to close
     # the data block early: the outer fence grows longer than any embedded run.
@@ -386,7 +387,6 @@ def test_as_untrusted_grows_fence_to_prevent_breakout() -> None:
     # ...wrapped by an outer fence strictly longer than the embedded ``` run.
     assert "````" in text
     assert "````\n" + hostile + "\n````" in text
-
 
 
 def test_explain_query_prompt_direct_references_only_explain() -> None:
