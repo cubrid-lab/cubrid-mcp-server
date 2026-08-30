@@ -4,16 +4,17 @@ from __future__ import annotations
 
 import base64
 import logging
+import os
 import sys
 import threading
 from typing import Any
 
 from fastmcp import FastMCP
 
-from cubrid_mcp_server.config import Config, ConfigError
+from cubrid_mcp_server.config import Config, ConfigError, _parse_bool
 from cubrid_mcp_server.context import AppContext
 from cubrid_mcp_server.database import Database, sanitize_error
-from cubrid_mcp_server.safety import ensure_read_only
+from cubrid_mcp_server.safety import ensure_read_only, ensure_write_allowed
 
 logger = logging.getLogger(__name__)
 
@@ -325,6 +326,46 @@ def execute_query(sql: str) -> dict[str, Any]:
 def health_check() -> dict[str, Any]:
     """Check database connectivity on demand and report server status."""
     return _db().health_check()
+
+
+def _write_mode_requested() -> bool:
+    """Whether opt-in write mode is enabled, read from the environment.
+
+    Checked once at import to decide whether ``execute_write`` is registered as
+    an MCP tool at all: when disabled the tool is absent from capability
+    discovery, so there is no reachable write path. Call-time enforcement via
+    ``config.write_enabled`` provides defence in depth.
+    """
+    return _parse_bool(os.environ.get("CUBRID_MCP_WRITE", "0"))
+
+
+def execute_write(sql: str) -> dict[str, Any]:
+    """Execute a single write statement (INSERT/UPDATE/DELETE) atomically.
+
+    Only registered when ``CUBRID_MCP_WRITE`` is enabled. The statement runs in
+    an explicit transaction: it commits on success and rolls back on any error,
+    returning the number of affected rows. DDL, reads, and multi-statement input
+    are rejected by :func:`ensure_write_allowed`.
+    """
+    config = _cfg()
+    if not config.write_enabled:
+        # Defence in depth: the tool is normally not registered when write mode
+        # is off, but refuse regardless if somehow reached.
+        raise ValueError("write mode is disabled (set CUBRID_MCP_WRITE=1 to enable)")
+    if len(sql) > config.max_sql_length:
+        raise ValueError(
+            f"SQL exceeds maximum length of {config.max_sql_length} characters "
+            f"(CUBRID_MCP_MAX_SQL_LENGTH)"
+        )
+    ensure_write_allowed(sql)
+    affected = _db().execute_write(sql)
+    return {"affected_rows": affected}
+
+
+# Register the write tool only when write mode is enabled at startup, so a
+# read-only deployment never exposes a write path in MCP capability discovery.
+if _write_mode_requested():
+    mcp.tool(execute_write)
 
 
 def _render_rows(rows: list[tuple[Any, ...]], max_chars: int) -> dict[str, Any]:
