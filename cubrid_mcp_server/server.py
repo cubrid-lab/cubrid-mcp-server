@@ -7,6 +7,7 @@ import logging
 import sys
 import threading
 from typing import Any
+from urllib.parse import quote
 
 from fastmcp import FastMCP
 
@@ -137,7 +138,15 @@ def schema_definitions(table_name: str) -> list[dict[str, Any]]:
 @mcp.tool
 def describe_table(table_name: str) -> dict[str, Any]:
     """Return full metadata for ``table_name``: columns, primary key, and indexes."""
-    resolved = _resolve_table(table_name)
+    return _describe_table(_resolve_table(table_name))
+
+
+def _describe_table(resolved: str) -> dict[str, Any]:
+    """Build the full-metadata payload for an already-resolved table name.
+
+    Shared by the ``describe_table`` tool and the ``cubrid://schema/{table}``
+    resource so their payload shape can never drift apart.
+    """
     columns = _schema_definitions(resolved)
     indexes = _list_indexes(resolved)
     primary_key = [col["name"] for col in columns if col["primary_key"]]
@@ -325,6 +334,36 @@ def execute_query(sql: str) -> dict[str, Any]:
 def health_check() -> dict[str, Any]:
     """Check database connectivity on demand and report server status."""
     return _db().health_check()
+
+
+# Custom URI scheme for CUBRID schema resources. Registering schema metadata as
+# MCP *resources* (in addition to the existing tools) lets clients discover and
+# read schema context without a tool round-trip. These resources are strictly
+# read-only: they reuse the same catalog helpers as the tools and add no new SQL
+# path or write surface.
+_SCHEMA_INDEX_URI = "cubrid://schema"
+
+
+@mcp.resource(_SCHEMA_INDEX_URI, name="cubrid-schema-index", mime_type="application/json")
+def schema_index() -> list[dict[str, str]]:
+    """Whole-schema index: every user table with its per-table resource URI."""
+    return [
+        {"name": name, "uri": f"{_SCHEMA_INDEX_URI}/{quote(name, safe='')}"}
+        for name in _all_table_names()
+    ]
+
+
+@mcp.resource(
+    _SCHEMA_INDEX_URI + "/{table}", name="cubrid-schema-table", mime_type="application/json"
+)
+def schema_resource(table: str) -> dict[str, Any]:
+    """Per-table schema: columns, primary key, and indexes (mirrors ``describe_table``).
+
+    ``table`` arrives already percent-decoded by FastMCP's URI-template matching.
+    An unknown or system table raises ``ValueError`` (surfaced as a resource read
+    error), matching the ``describe_table`` tool's behavior.
+    """
+    return _describe_table(_resolve_table(table))
 
 
 def _render_rows(rows: list[tuple[Any, ...]], max_chars: int) -> dict[str, Any]:

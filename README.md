@@ -18,6 +18,17 @@ A [Model Context Protocol](https://modelcontextprotocol.io) server for [CUBRID](
 | `execute_query` | Run read-only SQL with automatic output truncation |
 | `health_check` | Verify database connectivity on demand |
 
+### Resources
+
+Schema metadata is also exposed as read-only [MCP Resources](https://modelcontextprotocol.io/docs/concepts/resources), so clients can discover and read schema context without a tool call. Resources reuse the same read-only catalog queries as the tools — no additional data access or write surface.
+
+| Resource URI | Description |
+|--------------|-------------|
+| `cubrid://schema` | Whole-schema index: every user table with its per-table resource URI |
+| `cubrid://schema/{table}` | Per-table metadata (columns, primary key, indexes) — mirrors `describe_table` |
+
+Both return `application/json`. Table names in `{table}` are percent-decoded by URI-template matching; an unknown or system table produces a resource-read error, matching the `describe_table` tool.
+
 ## Quick Start
 
 ### Configure
