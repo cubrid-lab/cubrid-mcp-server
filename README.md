@@ -18,6 +18,21 @@ A [Model Context Protocol](https://modelcontextprotocol.io) server for [CUBRID](
 | `execute_query` | Run read-only SQL with automatic output truncation |
 | `health_check` | Verify database connectivity on demand |
 
+## Prompts
+
+The server also exposes a small set of **MCP Prompt templates** — reusable, guided
+starting points for common inspection tasks. Prompts are **guidance-only**: each one
+returns text that tells the client which of the existing read-only tools to call and
+in what order. They never touch the database, execute SQL, or add any new data-access
+surface, and any argument you pass is fenced and treated strictly as untrusted data.
+
+| Prompt | Arguments | Description |
+|--------|-----------|-------------|
+| `summarize_table` | `table` | Describe a table, then sample it with a bounded read-only query |
+| `explain_query` | `sql` | Obtain and interpret a `SELECT`/`WITH` execution plan via `explain_query` |
+| `inspect_schema` | _(none)_ | Build a high-level overview of the whole schema from the read-only tools |
+| `find_index_candidates` | `table` | Review a table's index coverage for potential review areas |
+
 ## Quick Start
 
 ### Configure
