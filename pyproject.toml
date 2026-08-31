@@ -34,7 +34,8 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
-    "pytest>=7.0",
+    "pytest>=8.2",
+    "pytest-asyncio>=0.24",
     "pytest-cov",
     "ruff==0.16.4",
     "mypy==2.3.1",
@@ -99,6 +100,7 @@ fail_under = 95
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "--tb native -v -r fxX -p no:warnings"
+asyncio_mode = "auto"
 python_files = "tests/*test_*.py"
 markers = [
     "integration: tests that require a running CUBRID instance",
