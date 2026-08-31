@@ -59,6 +59,7 @@ Optional settings:
 | `CUBRID_MCP_MAX_ROWS` | `1000` | Max rows returned by `execute_query` before truncation |
 | `CUBRID_MCP_MAX_SQL_LENGTH` | `65536` | Max length (characters) of a submitted SQL statement |
 | `CUBRID_MCP_QUERY_TIMEOUT` | `30` | Per-statement socket read timeout in seconds. If the server sends no data within this window the query is aborted and the connection is reset. This is a socket read timeout, not a true server-side statement timeout. |
+| `CUBRID_MCP_AUDIT_LOG` | `0` | Opt-in audit logging. When enabled, emits one redaction-safe JSON record per executed statement (`execute_query`/`explain_query`) to **stderr** — see [Logging](#logging). |
 | `CUBRID_MCP_WRITE` | `0` | Opt-in write mode. When enabled (`1`), registers the `execute_write` tool for single-statement DML. Off by default. |
 
 ### Multiple connections
@@ -221,6 +222,23 @@ Constraints and rationale:
 The server speaks the MCP **stdio transport**, where `stdout` carries the JSON-RPC protocol stream. Anything written to `stdout` by the server or its dependencies will corrupt that stream and break the client connection. For this reason **all logging is routed to `stderr`**, and you should keep it that way: when adding custom logging or diagnostics, never `print()` to `stdout` — use the standard `logging` module (which is configured to emit on `stderr`) or write to `stderr` explicitly. The log level defaults to `INFO`.
 
 Errors surfaced back to the LLM client are **sanitized**: only the exception category (e.g. `query failed: OperationalError`) is returned, while the full exception detail is logged to `stderr` for operators. This keeps schema details, hostnames, SQL fragments, and configuration values out of client-visible messages.
+
+### Audit logging (opt-in)
+
+Set `CUBRID_MCP_AUDIT_LOG=1` to record every executed statement (`execute_query` and `explain_query`) as a single structured JSON line on **stderr**. It is **off by default**. Each record is redaction-safe and contains only:
+
+| Field | Description |
+|-------|-------------|
+| `tool` | The MCP tool that ran the statement (`execute_query` / `explain_query`). |
+| `status` | `ok` or `error`. |
+| `category` | The leading SQL keyword only (e.g. `SELECT`, `WITH`) — never the full statement. |
+| `identifiers` | Table names extracted after `FROM`/`JOIN` via a strict identifier regex; anything that is not a bare identifier (values, literals, expressions) is dropped. |
+| `sql_length` | Length of the submitted SQL, in characters. |
+| `row_count`, `truncated` | Result size and whether output was truncated (success only). |
+| `duration_ms` | Wall-clock duration of the call, in integer milliseconds. |
+| `error_type` | On failure, the exception **class name only** (via the same sanitization as client-facing errors). |
+
+The **raw SQL text, bound parameters, and literal values are never logged**, so secrets embedded in a query (e.g. `WHERE token = '...'`) do not reach the audit stream. Records go to `stderr` only and never to `stdout`.
 
 
 ## Development

@@ -30,6 +30,7 @@ class Config:
     max_rows: int
     max_sql_length: int = 65536
     query_timeout: float = 30.0
+    audit_log: bool = False
     write_enabled: bool = False
 
     @classmethod
@@ -78,6 +79,7 @@ def _parse_config(source: Mapping[str, str], prefix: str) -> Config:
         raise ConfigError(f"{mcp_prefix}QUERY_TIMEOUT must be positive")
 
     write_enabled = _parse_bool(source.get(f"{mcp_prefix}WRITE", "0"))
+    audit_log = _parse_bool(source.get(f"{mcp_prefix}AUDIT_LOG", "0"))
 
     return Config(
         host=host,
@@ -91,6 +93,7 @@ def _parse_config(source: Mapping[str, str], prefix: str) -> Config:
         max_sql_length=max_sql_length,
         query_timeout=query_timeout,
         write_enabled=write_enabled,
+        audit_log=audit_log,
     )
 
 

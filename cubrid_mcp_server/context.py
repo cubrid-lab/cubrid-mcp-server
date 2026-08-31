@@ -19,6 +19,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass
 
+from cubrid_mcp_server.audit import AuditLogger
 from cubrid_mcp_server.config import (
     DEFAULT_CONNECTION,
     Config,
@@ -33,13 +34,25 @@ class AppContext:
 
     registry: ConnectionRegistry
     databases: Mapping[str, Database]
+    audit: AuditLogger | None = None
+
+    def __post_init__(self) -> None:
+        # Derive a disabled/enabled audit logger from the default connection's
+        # config when one is not explicitly injected, so every context always
+        # has a usable ``audit``.
+        if self.audit is None:
+            object.__setattr__(self, "audit", AuditLogger(self.registry.config_for().audit_log))
 
     @classmethod
     def from_env(cls) -> "AppContext":
         """Build a context and its databases from environment configuration."""
         registry = ConnectionRegistry.from_env()
         databases = {name: Database(config) for name, config in registry.configs.items()}
-        return cls(registry=registry, databases=databases)
+        return cls(
+            registry=registry,
+            databases=databases,
+            audit=AuditLogger(registry.config_for().audit_log),
+        )
 
     @classmethod
     def single(
@@ -47,10 +60,11 @@ class AppContext:
         config: Config,
         database: Database,
         name: str = DEFAULT_CONNECTION,
+        audit: AuditLogger | None = None,
     ) -> "AppContext":
         """Build a single-connection context (convenience for tests and callers)."""
         registry = ConnectionRegistry(configs={name: config}, default_name=name)
-        return cls(registry=registry, databases={name: database})
+        return cls(registry=registry, databases={name: database}, audit=audit)
 
     def config_for(self, connection: str | None = None) -> Config:
         """Return the :class:`Config` for ``connection`` (default when ``None``)."""
