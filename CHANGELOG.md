@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- MCP Prompt templates (`summarize_table`, `explain_query`, `inspect_schema`, `find_index_candidates`): guidance-only interaction templates that instruct clients which existing read-only tools to call. They never touch the database or execute SQL, add no new data-access surface, and fence user-supplied arguments as untrusted data. (#125)
 - `ROADMAP.md` describing the current baseline, future direction, compatibility, and shipped history, matching the sibling repos in the Python line. (#96)
 - Opt-in write mode (`CUBRID_MCP_WRITE=1`) exposing an `execute_write` tool that runs a single `INSERT`/`UPDATE`/`DELETE` statement in an atomic transaction (commit on success, rollback on failure). Disabled by default; when off the tool is not registered so no write path is exposed. DDL is intentionally unsupported (CUBRID auto-commits DDL) and `execute_query` stays read-only regardless. (#123)
 - Repo-local `CONTRIBUTING.md` documenting the Makefile targets, the CI gates a PR must clear (ruff, mypy strict, 95% coverage floor, lowest-direct, changelog lint), and how to run the integration suite against a live CUBRID. (#94)
