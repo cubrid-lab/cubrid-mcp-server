@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import replace
 from typing import Any
 
@@ -349,6 +350,120 @@ def test_render_rows_returns_first_row_when_oversized() -> None:
     assert out["truncated"] is True
     # The single oversized value is itself truncated to the char budget.
     assert out["rows"] == [["a-ve\u2026"]]
+
+
+# --- MCP schema resources (#124) ---
+
+
+def test_schema_index_direct(fake_db: FakeDatabase) -> None:
+    fake_db.queue([("users",), ("orders",)])
+    assert json.loads(server.schema_index()) == [
+        {"name": "users", "uri": "cubrid://schema/users"},
+        {"name": "orders", "uri": "cubrid://schema/orders"},
+    ]
+
+
+def test_schema_index_percent_encodes_uris(fake_db: FakeDatabase) -> None:
+    fake_db.queue([("my table",), ("a/b",)])
+    result = json.loads(server.schema_index())
+    assert result[0]["uri"] == "cubrid://schema/my%20table"
+    assert result[1]["uri"] == "cubrid://schema/a%2Fb"
+
+
+def test_schema_resource_direct_matches_describe_table(fake_db: FakeDatabase) -> None:
+    # schema_resource must return exactly what describe_table produces.
+    fake_db.queue([("users",)])
+    fake_db.queue([("id", "INTEGER", "NO", None)])
+    fake_db.queue([("id",)])
+    fake_db.queue([("pk_users", "YES", "YES", "NO", "NO", 1, "id", 0, "ASC")])
+    resource_payload = json.loads(server.schema_resource("users"))
+    # Re-queue the identical batches for the describe_table call.
+    fake_db.queue([("users",)])
+    fake_db.queue([("id", "INTEGER", "NO", None)])
+    fake_db.queue([("id",)])
+    fake_db.queue([("pk_users", "YES", "YES", "NO", "NO", 1, "id", 0, "ASC")])
+    tool_payload = server.describe_table("users")
+    assert resource_payload == tool_payload
+
+
+def test_schema_resource_unknown_table_raises(fake_db: FakeDatabase) -> None:
+    fake_db.queue([("users",)])  # _resolve_table lookup: 'nope' not present
+    with pytest.raises(ValueError, match="unknown table"):
+        server.schema_resource("nope")
+
+
+async def test_schema_resources_listed_via_protocol(fake_db: FakeDatabase) -> None:
+    async with Client(server.mcp) as client:
+        resources = await client.list_resources()
+        templates = await client.list_resource_templates()
+    assert "cubrid://schema" in {str(r.uri) for r in resources}
+    assert "cubrid://schema/{table}" in {t.uriTemplate for t in templates}
+
+
+async def test_read_schema_index_resource(fake_db: FakeDatabase) -> None:
+    fake_db.queue([("users",), ("orders",)])
+    async with Client(server.mcp) as client:
+        contents = await client.read_resource("cubrid://schema")
+    assert contents[0].mimeType == "application/json"
+    payload = json.loads(contents[0].text)
+    assert payload == [
+        {"name": "users", "uri": "cubrid://schema/users"},
+        {"name": "orders", "uri": "cubrid://schema/orders"},
+    ]
+
+
+async def test_read_schema_table_resource_matches_describe_table(fake_db: FakeDatabase) -> None:
+    fake_db.queue([("users",)])
+    fake_db.queue([("id", "INTEGER", "NO", None)])
+    fake_db.queue([("id",)])
+    fake_db.queue([("pk_users", "YES", "YES", "NO", "NO", 1, "id", 0, "ASC")])
+    async with Client(server.mcp) as client:
+        contents = await client.read_resource("cubrid://schema/users")
+    payload = json.loads(contents[0].text)
+    assert payload == {
+        "table": "users",
+        "columns": [
+            {
+                "name": "id",
+                "type": "INTEGER",
+                "nullable": False,
+                "default": None,
+                "primary_key": True,
+            }
+        ],
+        "primary_key": ["id"],
+        "indexes": [
+            {
+                "name": "pk_users",
+                "unique": True,
+                "primary_key": True,
+                "foreign_key": False,
+                "reverse": False,
+                "key_count": 1,
+                "columns": [{"name": "id", "order": 0, "asc_desc": "ASC"}],
+            }
+        ],
+    }
+
+
+async def test_read_unknown_table_resource_fails(fake_db: FakeDatabase) -> None:
+    fake_db.queue([("users",)])  # 'nope' not present
+    async with Client(server.mcp) as client:
+        with pytest.raises(Exception, match="unknown table"):
+            await client.read_resource("cubrid://schema/nope")
+
+
+async def test_read_schema_table_resource_percent_decodes_name(fake_db: FakeDatabase) -> None:
+    # An encoded '/' in the URI must round-trip to a literal 'a/b' table name.
+    fake_db.queue([("a/b",)])  # _resolve_table lookup
+    fake_db.queue([("id", "INTEGER", "NO", None)])
+    fake_db.queue([("id",)])
+    fake_db.queue([])  # no indexes
+    async with Client(server.mcp) as client:
+        contents = await client.read_resource("cubrid://schema/a%2Fb")
+    payload = json.loads(contents[0].text)
+    assert payload["table"] == "a/b"
+    assert payload["columns"][0]["name"] == "id"
 
 
 def test_connection_selector_routes_to_named_database(

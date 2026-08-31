@@ -99,8 +99,8 @@ fail_under = 95
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "--tb native -v -r fxX -p no:warnings"
 asyncio_mode = "auto"
+addopts = "--tb native -v -r fxX -p no:warnings"
 python_files = "tests/*test_*.py"
 markers = [
     "integration: tests that require a running CUBRID instance",
