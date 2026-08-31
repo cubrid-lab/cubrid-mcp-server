@@ -59,7 +59,7 @@ class FakeDatabase:
 @pytest.fixture
 def fake_db(monkeypatch: pytest.MonkeyPatch) -> FakeDatabase:
     fake = FakeDatabase()
-    monkeypatch.setattr(server, "_context", AppContext(config=_TEST_CONFIG, database=fake))
+    monkeypatch.setattr(server, "_context", AppContext.single(config=_TEST_CONFIG, database=fake))
     return fake
 
 
@@ -202,7 +202,7 @@ class FakeConnDatabase(FakeDatabase):
 
 def test_explain_query_uses_trace(monkeypatch: pytest.MonkeyPatch) -> None:
     fake = FakeConnDatabase()
-    monkeypatch.setattr(server, "_context", AppContext(config=_TEST_CONFIG, database=fake))
+    monkeypatch.setattr(server, "_context", AppContext.single(config=_TEST_CONFIG, database=fake))
     result = server.explain_query("SELECT 1")
     assert result["sql"] == "SELECT 1"
     assert "Trace Statistics" in result["plan"]
@@ -215,7 +215,7 @@ def test_explain_query_uses_trace(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_explain_query_rejects_non_select(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
-        server, "_context", AppContext(config=_TEST_CONFIG, database=FakeConnDatabase())
+        server, "_context", AppContext.single(config=_TEST_CONFIG, database=FakeConnDatabase())
     )
     with pytest.raises(ValueError):
         server.explain_query("DROP TABLE users")
@@ -223,7 +223,7 @@ def test_explain_query_rejects_non_select(monkeypatch: pytest.MonkeyPatch) -> No
 
 def test_explain_query_rejects_multistatement(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
-        server, "_context", AppContext(config=_TEST_CONFIG, database=FakeConnDatabase())
+        server, "_context", AppContext.single(config=_TEST_CONFIG, database=FakeConnDatabase())
     )
     with pytest.raises((ValueError, UnsafeSQLError)):
         server.explain_query("SELECT 1; DROP TABLE users")
@@ -231,7 +231,7 @@ def test_explain_query_rejects_multistatement(monkeypatch: pytest.MonkeyPatch) -
 
 def test_explain_query_rejects_empty(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
-        server, "_context", AppContext(config=_TEST_CONFIG, database=FakeConnDatabase())
+        server, "_context", AppContext.single(config=_TEST_CONFIG, database=FakeConnDatabase())
     )
     with pytest.raises(ValueError):
         server.explain_query("   ")
@@ -242,7 +242,7 @@ _SHORT_SQL_CONFIG = replace(_TEST_CONFIG, max_sql_length=32)
 
 def test_explain_query_rejects_oversized_sql(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
-        server, "_context", AppContext(config=_SHORT_SQL_CONFIG, database=FakeConnDatabase())
+        server, "_context", AppContext.single(config=_SHORT_SQL_CONFIG, database=FakeConnDatabase())
     )
     with pytest.raises(ValueError, match="CUBRID_MCP_MAX_SQL_LENGTH"):
         server.explain_query("SELECT " + "a" * 100)
@@ -251,7 +251,9 @@ def test_explain_query_rejects_oversized_sql(monkeypatch: pytest.MonkeyPatch) ->
 def test_execute_query_rejects_oversized_sql(
     fake_db: FakeDatabase, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(server, "_context", AppContext(config=_SHORT_SQL_CONFIG, database=fake_db))
+    monkeypatch.setattr(
+        server, "_context", AppContext.single(config=_SHORT_SQL_CONFIG, database=fake_db)
+    )
     with pytest.raises(ValueError, match="CUBRID_MCP_MAX_SQL_LENGTH"):
         server.execute_query("SELECT " + "a" * 100)
     # The oversized statement is rejected before it ever reaches the database.
@@ -335,7 +337,7 @@ def test_execute_query_renders_and_truncates(
         max_chars=10,
         max_rows=1000,
     )
-    monkeypatch.setattr(server, "_context", AppContext(config=cfg, database=fake_db))
+    monkeypatch.setattr(server, "_context", AppContext.single(config=cfg, database=fake_db))
     fake_db.queue([("short",), ("a-much-longer-row",)])
     result = server.execute_query("SELECT 1")
     assert result["row_count"] == 1
@@ -462,6 +464,40 @@ async def test_read_schema_table_resource_percent_decodes_name(fake_db: FakeData
     payload = json.loads(contents[0].text)
     assert payload["table"] == "a/b"
     assert payload["columns"][0]["name"] == "id"
+
+
+def test_connection_selector_routes_to_named_database(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from cubrid_mcp_server.config import ConnectionRegistry
+
+    default_db = FakeDatabase()
+    reporting_db = FakeDatabase()
+    reporting_cfg = replace(_TEST_CONFIG, host="reporting-db", database="reports")
+    registry = ConnectionRegistry(configs={"default": _TEST_CONFIG, "reporting": reporting_cfg})
+    ctx = AppContext(
+        registry=registry,
+        databases={"default": default_db, "reporting": reporting_db},  # type: ignore[dict-item]
+    )
+    monkeypatch.setattr(server, "_context", ctx)
+
+    default_db.queue([("users",)])
+    reporting_db.queue([("events",)])
+
+    assert server.all_table_names() == ["users"]
+    assert server.all_table_names(connection="reporting") == ["events"]
+    # The default database saw only the default call; reporting saw only its own.
+    assert len(default_db.calls) == 1
+    assert len(reporting_db.calls) == 1
+
+
+def test_connection_selector_unknown_raises(monkeypatch: pytest.MonkeyPatch) -> None:
+    from cubrid_mcp_server.config import ConfigError
+
+    fake = FakeDatabase()
+    monkeypatch.setattr(server, "_context", AppContext.single(config=_TEST_CONFIG, database=fake))
+    with pytest.raises(ConfigError, match="unknown connection"):
+        server.all_table_names(connection="nope")
 
 
 # --- MCP Prompt templates -------------------------------------------------

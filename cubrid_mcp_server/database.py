@@ -136,6 +136,50 @@ class Database:
         except Exception as exc:
             logger.debug("failed to close cursor: %s", exc)
 
+    def _rollback_or_discard(self, connection: Any) -> None:
+        """Roll back a failed write; discard the connection if rollback itself fails.
+
+        A rollback failure means the shared connection may retain unknown
+        transaction state, so it is dropped (closed best-effort) to force a
+        clean reconnect on the next call rather than reusing a poisoned session.
+        """
+        try:
+            connection.rollback()
+        except Exception as exc:
+            logger.debug("rollback failed; discarding connection: %s", exc)
+            self._discard_connection()
+
+    def execute_write(self, sql: str, params: tuple[Any, ...] | None = None) -> int:
+        """Execute a single DML statement in an atomic transaction.
+
+        Commits on success and returns the affected-row count. On any failure the
+        transaction is rolled back (and the connection discarded if the rollback
+        itself fails), the full error is logged to stderr, and a sanitized
+        :class:`DatabaseError` is raised. Only reachable via the opt-in write
+        path; callers must have already passed :func:`safety.ensure_write_allowed`.
+        """
+        with self._lock:
+            connection = self.connect()
+            cursor = connection.cursor()
+            timed_out = False
+            try:
+                cursor.execute(sql, params or ())
+                affected = int(cursor.rowcount)
+                connection.commit()
+                return affected
+            except Exception as exc:
+                if _is_timeout_error(exc):
+                    # The socket is dead mid-statement; a rollback would only
+                    # block again. _timeout_error discards the connection.
+                    timed_out = True
+                    raise self._timeout_error(exc) from exc
+                self._rollback_or_discard(connection)
+                logger.error("write failed", exc_info=exc)
+                raise DatabaseError(f"write failed: {sanitize_error(exc)}") from exc
+            finally:
+                if not timed_out:
+                    self._safe_close_cursor(cursor)
+
     def _timeout_error(self, exc: BaseException) -> QueryTimeoutError:
         """Discard the corrupt connection and build a clear timeout error."""
         # The socket timed out mid-statement, so the connection buffer is now

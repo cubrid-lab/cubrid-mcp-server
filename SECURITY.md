@@ -38,9 +38,33 @@ You can disable this layer by setting `CUBRID_MCP_READONLY=0`, but only do so wh
 - you genuinely need statements outside the whitelist (for example, CUBRID administrative `SHOW` variants that confuse the parser).
 
 **`explain_query` is always read-only**, independent of `CUBRID_MCP_READONLY`. It only ever produces a plan for a `SELECT`/`WITH` query, so it always applies the whitelist even when the server is nominally in write-allowed mode. Only `execute_query` honors `CUBRID_MCP_READONLY=0`.
+
+## Layer 2b — opt-in write mode (`CUBRID_MCP_WRITE`)
+
+Write access is **off by default**. Setting `CUBRID_MCP_WRITE=1` registers a separate `execute_write` tool that accepts a **single** `INSERT`/`UPDATE`/`DELETE` statement and runs it in an explicit transaction (commit on success, rollback on any failure). Design constraints that bound the blast radius:
+
+- **DML only.** Standalone reads, DDL, transaction-control, and multi-statement input are rejected by a dedicated whitelist (`ensure_write_allowed`), separate from the read-only path. (A single DML statement may still legally embed subqueries, e.g. `INSERT ... SELECT`.)
+- **DDL is intentionally unsupported.** CUBRID auto-commits DDL, which would defeat the rollback guarantee, so `CREATE`/`ALTER`/`DROP`/`TRUNCATE` are never permitted even in write mode.
+- **Not registered when disabled.** With write mode off, `execute_write` is absent from MCP capability discovery — there is no reachable write path, not merely a guarded one.
+- **`execute_query` stays read-only** regardless of the write flag.
+
+As with the read-only layer, this is defense-in-depth: still run the server as a CUBRID user granted only the privileges the model needs.
 ## Layer 3 — output limits
 
 `execute_query` caps the number of rows returned at `CUBRID_MCP_MAX_ROWS` (default 1000) and truncates rendered output once the cumulative character count exceeds `CUBRID_MCP_MAX_CHARS` (default 4000). Together these protect the model's context window and limit how much data a single probing query can exfiltrate in one shot. Binary values are base64-encoded when small and summarized (`<binary N bytes>`) when large, so raw blobs never flood the output.
+
+## Layer 4 — audit logging (opt-in)
+
+Set `CUBRID_MCP_AUDIT_LOG=1` to emit a structured JSON record on **stderr** for every executed statement (`execute_query`, `explain_query`), for observability and after-the-fact security review. It is **off by default**.
+
+Audit records are deliberately redaction-safe and share the same sanitization guarantees as client-facing errors:
+
+- Only the statement **category** (leading keyword) and **table identifiers** (extracted via a strict identifier regex) are recorded — never the raw SQL text.
+- **Bound parameters and literal values are never logged**, so a secret embedded in a query (`WHERE token = '…'`) does not appear in the audit stream.
+- Failures record the exception **class name only** (via `sanitize_error`), never the raw driver message.
+- Records go to `stderr` only; `stdout` remains reserved for the MCP protocol stream.
+
+This complements — but does not replace — CUBRID's own server-side query logging.
 
 
 

@@ -17,6 +17,7 @@ A [Model Context Protocol](https://modelcontextprotocol.io) server for [CUBRID](
 | `list_class_hierarchy` | CUBRID `CLASS` inheritance relationships |
 | `execute_query` | Run read-only SQL with automatic output truncation |
 | `health_check` | Verify database connectivity on demand |
+| `execute_write` | Run a single `INSERT`/`UPDATE`/`DELETE` in an atomic transaction (**only registered when opt-in write mode is enabled**) |
 
 ### Resources
 
@@ -69,6 +70,51 @@ Optional settings:
 | `CUBRID_MCP_MAX_ROWS` | `1000` | Max rows returned by `execute_query` before truncation |
 | `CUBRID_MCP_MAX_SQL_LENGTH` | `65536` | Max length (characters) of a submitted SQL statement |
 | `CUBRID_MCP_QUERY_TIMEOUT` | `30` | Per-statement socket read timeout in seconds. If the server sends no data within this window the query is aborted and the connection is reset. This is a socket read timeout, not a true server-side statement timeout. |
+| `CUBRID_MCP_AUDIT_LOG` | `0` | Opt-in audit logging. When enabled, emits one redaction-safe JSON record per executed statement (`execute_query`/`explain_query`) to **stderr** — see [Logging](#logging). |
+| `CUBRID_MCP_WRITE` | `0` | Opt-in write mode. When enabled (`1`), registers the `execute_write` tool for single-statement DML. Off by default. |
+
+### Multiple connections
+
+By default the bare `CUBRID_*` variables define a single connection named `default`.
+You can serve additional CUBRID databases from the same process by listing extra
+connection names in `CUBRID_CONNECTIONS` (comma-separated) and providing
+`CUBRID_<NAME>_*` variables for each. Every tool accepts an optional `connection`
+argument selecting which connection to target; omitting it (or passing `default`)
+uses the bare-variable connection, so existing single-database setups are unchanged.
+
+```bash
+# Default connection (unchanged)
+export CUBRID_HOST=localhost
+export CUBRID_USER=readonly_user
+export CUBRID_PASSWORD=secret
+export CUBRID_DATABASE=mydb
+
+# Additional named connections
+export CUBRID_CONNECTIONS=reporting,analytics
+
+export CUBRID_REPORTING_HOST=reporting-db
+export CUBRID_REPORTING_USER=readonly_user
+export CUBRID_REPORTING_PASSWORD=secret
+export CUBRID_REPORTING_DATABASE=reports
+export CUBRID_REPORTING_MCP_MAX_ROWS=500   # optional per-connection tuning
+
+export CUBRID_ANALYTICS_HOST=analytics-db
+export CUBRID_ANALYTICS_USER=readonly_user
+export CUBRID_ANALYTICS_PASSWORD=secret
+export CUBRID_ANALYTICS_DATABASE=analytics
+```
+
+Notes:
+
+- Connection names must match `[A-Za-z0-9_]+` and are matched case-insensitively.
+- `default` is reserved (it always comes from the bare `CUBRID_*` variables) and
+  cannot appear in `CUBRID_CONNECTIONS`.
+- For a named connection `<NAME>`, connection fields live at `CUBRID_<NAME>_HOST`
+  etc. and the optional MCP tuning knobs at `CUBRID_<NAME>_MCP_*` (same suffixes as
+  the global ones). Named connections do **not** inherit values from the bare vars.
+- Selecting an unknown connection returns a clear error listing the available names.
+- Each connection has its own read-only enforcement, so a named connection can set
+  `CUBRID_<NAME>_MCP_READONLY` independently of the default.
 
 ### Run
 
@@ -171,11 +217,39 @@ The server is **read-only by default**. A code-level SQL whitelist allows only `
 
 For production use, also configure a read-only database user. See [`SECURITY.md`](./SECURITY.md) for the recommended setup.
 
+### Write mode (opt-in)
+
+Write access is **disabled by default**. Setting `CUBRID_MCP_WRITE=1` registers an additional `execute_write` tool that accepts a **single** `INSERT`, `UPDATE`, or `DELETE` statement and runs it in an explicit transaction (commit on success, rollback on any error). When write mode is off the tool is not registered at all, so no write path is exposed in MCP capability discovery.
+
+Constraints and rationale:
+
+- **Single-statement DML only.** Standalone reads, DDL (`CREATE`/`ALTER`/`DROP`/`TRUNCATE`), transaction-control, and multi-statement input are rejected. (A single DML statement may still legally contain subqueries, e.g. `INSERT ... SELECT`.)
+- **DDL is intentionally unsupported.** CUBRID auto-commits DDL, which defeats the rollback guarantee, so it is excluded from write mode.
+- `execute_query` remains **read-only regardless** of the write-mode flag.
+- Enforcement is defense-in-depth; still run the server as a CUBRID user granted only the privileges it needs. See [`SECURITY.md`](./SECURITY.md).
+
 ## Logging
 
 The server speaks the MCP **stdio transport**, where `stdout` carries the JSON-RPC protocol stream. Anything written to `stdout` by the server or its dependencies will corrupt that stream and break the client connection. For this reason **all logging is routed to `stderr`**, and you should keep it that way: when adding custom logging or diagnostics, never `print()` to `stdout` — use the standard `logging` module (which is configured to emit on `stderr`) or write to `stderr` explicitly. The log level defaults to `INFO`.
 
 Errors surfaced back to the LLM client are **sanitized**: only the exception category (e.g. `query failed: OperationalError`) is returned, while the full exception detail is logged to `stderr` for operators. This keeps schema details, hostnames, SQL fragments, and configuration values out of client-visible messages.
+
+### Audit logging (opt-in)
+
+Set `CUBRID_MCP_AUDIT_LOG=1` to record every executed statement (`execute_query` and `explain_query`) as a single structured JSON line on **stderr**. It is **off by default**. Each record is redaction-safe and contains only:
+
+| Field | Description |
+|-------|-------------|
+| `tool` | The MCP tool that ran the statement (`execute_query` / `explain_query`). |
+| `status` | `ok` or `error`. |
+| `category` | The leading SQL keyword only (e.g. `SELECT`, `WITH`) — never the full statement. |
+| `identifiers` | Table names extracted after `FROM`/`JOIN` via a strict identifier regex; anything that is not a bare identifier (values, literals, expressions) is dropped. |
+| `sql_length` | Length of the submitted SQL, in characters. |
+| `row_count`, `truncated` | Result size and whether output was truncated (success only). |
+| `duration_ms` | Wall-clock duration of the call, in integer milliseconds. |
+| `error_type` | On failure, the exception **class name only** (via the same sanitization as client-facing errors). |
+
+The **raw SQL text, bound parameters, and literal values are never logged**, so secrets embedded in a query (e.g. `WHERE token = '...'`) do not reach the audit stream. Records go to `stderr` only and never to `stdout`.
 
 
 ## Development

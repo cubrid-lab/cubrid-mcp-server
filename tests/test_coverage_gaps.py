@@ -13,7 +13,7 @@ import pytest
 
 import cubrid_mcp_server.server as server
 from cubrid_mcp_server import context as context_module
-from cubrid_mcp_server.config import Config, ConfigError
+from cubrid_mcp_server.config import Config, ConfigError, ConnectionRegistry
 from cubrid_mcp_server.context import AppContext
 from cubrid_mcp_server.database import Database
 from cubrid_mcp_server.safety import ensure_read_only
@@ -37,7 +37,8 @@ _TEST_CONFIG = Config(
 
 def test_context_lazily_initializes_once(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(server, "_context", None)
-    monkeypatch.setattr(Config, "from_env", classmethod(lambda cls: _TEST_CONFIG))
+    registry = ConnectionRegistry(configs={"default": _TEST_CONFIG})
+    monkeypatch.setattr(ConnectionRegistry, "from_env", classmethod(lambda cls, env=None: registry))
 
     created: list[Any] = []
 
@@ -70,13 +71,13 @@ class _NameOnlyDB:
 
 
 def test_resolve_table_rejects_empty(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(server, "_db", lambda: _NameOnlyDB(["users"]))
+    monkeypatch.setattr(server, "_db", lambda connection=None: _NameOnlyDB(["users"]))
     with pytest.raises(ValueError, match="must not be empty"):
         server._resolve_table("   ")
 
 
 def test_resolve_table_rejects_unknown(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(server, "_db", lambda: _NameOnlyDB(["users"]))
+    monkeypatch.setattr(server, "_db", lambda connection=None: _NameOnlyDB(["users"]))
     with pytest.raises(ValueError, match="unknown table"):
         server._resolve_table("ghost")
 
@@ -120,7 +121,7 @@ class _CleanupFailingDB:
 def test_explain_query_swallows_cleanup_errors(monkeypatch: pytest.MonkeyPatch) -> None:
     """SET TRACE OFF and rollback failures during cleanup are logged, not raised."""
     monkeypatch.setattr(
-        server, "_context", AppContext(config=_TEST_CONFIG, database=_CleanupFailingDB())
+        server, "_context", AppContext.single(config=_TEST_CONFIG, database=_CleanupFailingDB())
     )
     result = server.explain_query("SELECT 1")
     assert result["plan"] == "plan text"
@@ -140,14 +141,14 @@ class _RowCountErrorDB:
 
 
 def test_table_row_counts_rejects_too_many_tables(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(server, "_db", lambda: _NameOnlyDB(["users"]))
+    monkeypatch.setattr(server, "_db", lambda connection=None: _NameOnlyDB(["users"]))
     too_many = [f"t{i}" for i in range(server._MAX_ROW_COUNT_TABLES + 1)]
     with pytest.raises(ValueError, match="too many tables"):
         server.table_row_counts(too_many)
 
 
 def test_table_row_counts_reports_per_table_error(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(server, "_db", lambda: _RowCountErrorDB())
+    monkeypatch.setattr(server, "_db", lambda connection=None: _RowCountErrorDB())
     result = server.table_row_counts(["users"])
     # The raw driver message is sanitized to the exception category only.
     assert result == [{"table": "users", "row_count": None, "error": "RuntimeError"}]
@@ -169,17 +170,18 @@ def test_coerce_oversized_binary_returns_size_summary() -> None:
 
 
 def test_main_exits_on_config_error(monkeypatch: pytest.MonkeyPatch) -> None:
-    def _raise(cls: type[Config]) -> Config:
+    def _raise(cls: type[ConnectionRegistry], env: Any = None) -> ConnectionRegistry:
         raise ConfigError("missing CUBRID_HOST")
 
-    monkeypatch.setattr(Config, "from_env", classmethod(_raise))
+    monkeypatch.setattr(ConnectionRegistry, "from_env", classmethod(_raise))
     with pytest.raises(SystemExit) as excinfo:
         server.main()
     assert excinfo.value.code == 1
 
 
 def test_main_runs_server_on_valid_config(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(Config, "from_env", classmethod(lambda cls: _TEST_CONFIG))
+    registry = ConnectionRegistry(configs={"default": _TEST_CONFIG})
+    monkeypatch.setattr(ConnectionRegistry, "from_env", classmethod(lambda cls, env=None: registry))
     monkeypatch.setattr(server, "_context", None)
     ran: list[bool] = []
     monkeypatch.setattr(server.mcp, "run", lambda: ran.append(True))

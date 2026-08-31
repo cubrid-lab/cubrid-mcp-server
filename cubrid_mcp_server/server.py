@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import json
 import logging
+import os
 import sys
 import threading
 from typing import Any
@@ -12,10 +13,11 @@ from urllib.parse import quote
 
 from fastmcp import FastMCP
 
-from cubrid_mcp_server.config import Config, ConfigError
+from cubrid_mcp_server.audit import AuditLogger
+from cubrid_mcp_server.config import Config, ConfigError, _parse_bool
 from cubrid_mcp_server.context import AppContext
 from cubrid_mcp_server.database import Database, sanitize_error
-from cubrid_mcp_server.safety import ensure_read_only
+from cubrid_mcp_server.safety import ensure_read_only, ensure_write_allowed
 
 logger = logging.getLogger(__name__)
 
@@ -47,17 +49,23 @@ def _get_context() -> AppContext:
     return _context
 
 
-def _db() -> Database:
-    return _get_context().database
+def _db(connection: str | None = None) -> Database:
+    return _get_context().database_for(connection)
 
 
-def _cfg() -> Config:
-    return _get_context().config
+def _cfg(connection: str | None = None) -> Config:
+    return _get_context().config_for(connection)
 
 
-def _all_table_names() -> list[str]:
+def _audit() -> AuditLogger:
+    audit = _get_context().audit
+    assert audit is not None  # AppContext.__post_init__ always populates this
+    return audit
+
+
+def _all_table_names(connection: str | None = None) -> list[str]:
     """Internal helper: list every user table (excludes system classes and views)."""
-    rows = _db().fetch_all(
+    rows = _db(connection).fetch_all(
         "SELECT class_name FROM db_class "
         "WHERE is_system_class='NO' AND class_type='CLASS' "
         "ORDER BY class_name"
@@ -65,7 +73,7 @@ def _all_table_names() -> list[str]:
     return [row[0] for row in rows]
 
 
-def _resolve_table(table_name: str) -> str:
+def _resolve_table(table_name: str, connection: str | None = None) -> str:
     """Resolve ``table_name`` to its canonical stored name (case-insensitive).
 
     Raises :class:`ValueError` if no matching user table exists. This both prevents
@@ -75,29 +83,29 @@ def _resolve_table(table_name: str) -> str:
     needle = table_name.strip().lower()
     if not needle:
         raise ValueError("table name must not be empty")
-    for name in _all_table_names():
+    for name in _all_table_names(connection):
         if name.lower() == needle:
             return name
     raise ValueError(f"unknown table: {table_name!r}")
 
 
 @mcp.tool
-def all_table_names() -> list[str]:
+def all_table_names(connection: str | None = None) -> list[str]:
     """Return every user table in the connected CUBRID database."""
-    return _all_table_names()
+    return _all_table_names(connection)
 
 
 @mcp.tool
-def filter_table_names(substring: str) -> list[str]:
+def filter_table_names(substring: str, connection: str | None = None) -> list[str]:
     """Return user tables whose name contains ``substring`` (case-insensitive)."""
     needle = substring.strip().lower()
     if not needle:
         return []
-    return [name for name in _all_table_names() if needle in name.lower()]
+    return [name for name in _all_table_names(connection) if needle in name.lower()]
 
 
-def _schema_definitions(table_name: str) -> list[dict[str, Any]]:
-    rows = _db().fetch_all(
+def _schema_definitions(table_name: str, connection: str | None = None) -> list[dict[str, Any]]:
+    rows = _db(connection).fetch_all(
         """
         SELECT a.attr_name, a.data_type, a.is_nullable, a.default_value
         FROM db_attribute a
@@ -106,7 +114,7 @@ def _schema_definitions(table_name: str) -> list[dict[str, Any]]:
         """,
         (table_name,),
     )
-    pk_rows = _db().fetch_all(
+    pk_rows = _db(connection).fetch_all(
         """
         SELECT k.key_attr_name
         FROM db_index i, db_index_key k
@@ -131,25 +139,25 @@ def _schema_definitions(table_name: str) -> list[dict[str, Any]]:
 
 
 @mcp.tool
-def schema_definitions(table_name: str) -> list[dict[str, Any]]:
+def schema_definitions(table_name: str, connection: str | None = None) -> list[dict[str, Any]]:
     """Return column metadata for ``table_name``: name, type, nullability, default, PK flag."""
-    return _schema_definitions(_resolve_table(table_name))
+    return _schema_definitions(_resolve_table(table_name, connection), connection)
 
 
 @mcp.tool
-def describe_table(table_name: str) -> dict[str, Any]:
+def describe_table(table_name: str, connection: str | None = None) -> dict[str, Any]:
     """Return full metadata for ``table_name``: columns, primary key, and indexes."""
-    return _describe_table(_resolve_table(table_name))
+    return _describe_table(_resolve_table(table_name, connection), connection)
 
 
-def _describe_table(resolved: str) -> dict[str, Any]:
+def _describe_table(resolved: str, connection: str | None = None) -> dict[str, Any]:
     """Build the full-metadata payload for an already-resolved table name.
 
     Shared by the ``describe_table`` tool and the ``cubrid://schema/{table}``
     resource so their payload shape can never drift apart.
     """
-    columns = _schema_definitions(resolved)
-    indexes = _list_indexes(resolved)
+    columns = _schema_definitions(resolved, connection)
+    indexes = _list_indexes(resolved, connection)
     primary_key = [col["name"] for col in columns if col["primary_key"]]
     return {
         "table": resolved,
@@ -159,8 +167,8 @@ def _describe_table(resolved: str) -> dict[str, Any]:
     }
 
 
-def _list_indexes(table_name: str) -> list[dict[str, Any]]:
-    rows = _db().fetch_all(
+def _list_indexes(table_name: str, connection: str | None = None) -> list[dict[str, Any]]:
+    rows = _db(connection).fetch_all(
         """
         SELECT i.index_name, i.is_unique, i.is_primary_key, i.is_foreign_key,
                i.is_reverse, i.key_count, k.key_attr_name, k.key_order, k.asc_desc
@@ -192,48 +200,51 @@ def _list_indexes(table_name: str) -> list[dict[str, Any]]:
 
 
 @mcp.tool
-def list_indexes(table_name: str) -> list[dict[str, Any]]:
+def list_indexes(table_name: str, connection: str | None = None) -> list[dict[str, Any]]:
     """Return indexes for ``table_name`` with their key columns and flags."""
-    return _list_indexes(_resolve_table(table_name))
+    return _list_indexes(_resolve_table(table_name, connection), connection)
 
 
 @mcp.tool
-def explain_query(sql: str) -> dict[str, Any]:
+def explain_query(sql: str, connection: str | None = None) -> dict[str, Any]:
     """Return CUBRID's execution plan/trace for a ``SELECT`` or ``WITH`` statement."""
-    cleaned = sql.strip().rstrip(";").strip()
-    if not cleaned:
-        raise ValueError("empty SQL statement")
-    config = _cfg()
-    if len(cleaned) > config.max_sql_length:
-        raise ValueError(
-            f"SQL exceeds maximum length of {config.max_sql_length} characters "
-            f"(CUBRID_MCP_MAX_SQL_LENGTH)"
-        )
-    leading = cleaned.split(None, 1)[0].upper()
-    if leading not in {"SELECT", "WITH"}:
-        raise ValueError("explain_query only accepts SELECT or WITH statements")
-    # explain_query is *intentionally* always read-only, regardless of
-    # ``config.readonly``: it can only ever produce a plan for a SELECT/WITH query,
-    # so there is no meaningful write-mode behavior to gate. This differs from
-    # execute_query, which honors CUBRID_MCP_READONLY. ensure_read_only also rejects
-    # embedded second statements (e.g. "SELECT 1; DROP TABLE x") as defense in depth.
-    ensure_read_only(cleaned)
+    with _audit().track("explain_query", sql):
+        cleaned = sql.strip().rstrip(";").strip()
+        if not cleaned:
+            raise ValueError("empty SQL statement")
+        config = _cfg(connection)
+        if len(cleaned) > config.max_sql_length:
+            raise ValueError(
+                f"SQL exceeds maximum length of {config.max_sql_length} characters "
+                f"(CUBRID_MCP_MAX_SQL_LENGTH)"
+            )
+        leading = cleaned.split(None, 1)[0].upper()
+        if leading not in {"SELECT", "WITH"}:
+            raise ValueError("explain_query only accepts SELECT or WITH statements")
+        # explain_query is *intentionally* always read-only, regardless of
+        # ``config.readonly``: it can only ever produce a plan for a SELECT/WITH query,
+        # so there is no meaningful write-mode behavior to gate. This differs from
+        # execute_query, which honors CUBRID_MCP_READONLY. ensure_read_only also rejects
+        # embedded second statements (e.g. "SELECT 1; DROP TABLE x") as defense in depth.
+        ensure_read_only(cleaned)
 
-    plan = ""
-    with _db().trace_enabled() as cursor:
-        cursor.execute(cleaned, ())
-        cursor.execute("SHOW TRACE", ())
-        trace_rows = cursor.fetchall()
-        if trace_rows and trace_rows[0]:
-            plan = str(trace_rows[0][0] or "").strip()
+        plan = ""
+        with _db(connection).trace_enabled() as cursor:
+            cursor.execute(cleaned, ())
+            cursor.execute("SHOW TRACE", ())
+            trace_rows = cursor.fetchall()
+            if trace_rows and trace_rows[0]:
+                plan = str(trace_rows[0][0] or "").strip()
 
-    return {"sql": cleaned, "plan": plan}
+        return {"sql": cleaned, "plan": plan}
 
 
 @mcp.tool
-def table_row_counts(table_names: list[str] | None = None) -> list[dict[str, Any]]:
+def table_row_counts(
+    table_names: list[str] | None = None, connection: str | None = None
+) -> list[dict[str, Any]]:
     """Return ``COUNT(*)`` for each table (all user tables by default, capped)."""
-    known = _all_table_names()
+    known = _all_table_names(connection)
     known_lower = {name.lower(): name for name in known}
     targets = table_names if table_names else sorted(known)
     if len(targets) > _MAX_ROW_COUNT_TABLES:
@@ -247,7 +258,7 @@ def table_row_counts(table_names: list[str] | None = None) -> list[dict[str, Any
             results.append({"table": name, "row_count": None, "error": "unknown table"})
             continue
         try:
-            rows = _db().fetch_all("SELECT COUNT(*) FROM " + _quote_ident(resolved))
+            rows = _db(connection).fetch_all("SELECT COUNT(*) FROM " + _quote_ident(resolved))
             results.append({"table": resolved, "row_count": int(rows[0][0]) if rows else 0})
         except Exception as exc:
             logger.error("row count failed for table %s", resolved, exc_info=exc)
@@ -261,9 +272,9 @@ def _quote_ident(name: str) -> str:
 
 
 @mcp.tool
-def list_serials() -> list[dict[str, Any]]:
+def list_serials(connection: str | None = None) -> list[dict[str, Any]]:
     """Return CUBRID SERIAL sequences with current value, increment, and bounds."""
-    rows = _db().fetch_all(
+    rows = _db(connection).fetch_all(
         """
         SELECT name, current_val, increment_val, max_val, min_val,
                cyclic, started, class_name, att_name, cached_num, comment
@@ -290,16 +301,18 @@ def list_serials() -> list[dict[str, Any]]:
 
 
 @mcp.tool
-def list_class_hierarchy(table_name: str | None = None) -> list[dict[str, Any]]:
+def list_class_hierarchy(
+    table_name: str | None = None, connection: str | None = None
+) -> list[dict[str, Any]]:
     """Return CUBRID CLASS inheritance relationships (all classes or one class)."""
     if table_name:
-        rows = _db().fetch_all(
+        rows = _db(connection).fetch_all(
             "SELECT class_name, super_class_name FROM db_direct_super_class "
             "WHERE class_name = ? ORDER BY super_class_name",
             (table_name,),
         )
     else:
-        rows = _db().fetch_all(
+        rows = _db(connection).fetch_all(
             "SELECT class_name, super_class_name FROM db_direct_super_class "
             "ORDER BY class_name, super_class_name"
         )
@@ -310,31 +323,82 @@ def list_class_hierarchy(table_name: str | None = None) -> list[dict[str, Any]]:
 
 
 @mcp.tool
-def execute_query(sql: str) -> dict[str, Any]:
+def execute_query(sql: str, connection: str | None = None) -> dict[str, Any]:
     """Execute a read-only SQL statement and return rows, truncated if large."""
-    db = _db()
+    db = _db(connection)
+    config = _cfg(connection)
+    with _audit().track("execute_query", sql) as outcome:
+        if len(sql) > config.max_sql_length:
+            raise ValueError(
+                f"SQL exceeds maximum length of {config.max_sql_length} characters "
+                f"(CUBRID_MCP_MAX_SQL_LENGTH)"
+            )
+        if config.readonly:
+            ensure_read_only(sql)
+
+        rows, row_truncated = db.fetch_many(sql, None, config.max_rows)
+        rendered = _render_rows(rows, config.max_chars)
+        outcome.row_count = len(rendered["rows"])
+        outcome.truncated = bool(rendered["truncated"] or row_truncated)
+        return {
+            "row_count": outcome.row_count,
+            "truncated": outcome.truncated,
+            "rows": rendered["rows"],
+        }
+
+
+@mcp.tool
+def health_check(connection: str | None = None) -> dict[str, Any]:
+    """Check database connectivity on demand and report server status."""
+    return _db(connection).health_check()
+
+
+def _write_mode_requested() -> bool:
+    """Whether opt-in write mode is enabled, read from the environment.
+
+    Checked once at import to decide whether ``execute_write`` is registered as
+    an MCP tool at all: when disabled the tool is absent from capability
+    discovery, so there is no reachable write path. Call-time enforcement via
+    ``config.write_enabled`` provides defence in depth.
+
+    Fails closed: an invalid ``CUBRID_MCP_WRITE`` value must not raise at import
+    time (which would bypass ``main()``'s clean ConfigError handling and break
+    tool introspection). The same value is re-validated by ``Config.from_env``,
+    which surfaces the error consistently through ``main()``.
+    """
+    try:
+        return _parse_bool(os.environ.get("CUBRID_MCP_WRITE", "0"))
+    except ConfigError:
+        return False
+
+
+def execute_write(sql: str) -> dict[str, Any]:
+    """Execute a single write statement (INSERT/UPDATE/DELETE) atomically.
+
+    Only registered when ``CUBRID_MCP_WRITE`` is enabled. The statement runs in
+    an explicit transaction: it commits on success and rolls back on any error,
+    returning the number of affected rows. DDL, reads, and multi-statement input
+    are rejected by :func:`ensure_write_allowed`.
+    """
     config = _cfg()
+    if not config.write_enabled:
+        # Defence in depth: the tool is normally not registered when write mode
+        # is off, but refuse regardless if somehow reached.
+        raise ValueError("write mode is disabled (set CUBRID_MCP_WRITE=1 to enable)")
     if len(sql) > config.max_sql_length:
         raise ValueError(
             f"SQL exceeds maximum length of {config.max_sql_length} characters "
             f"(CUBRID_MCP_MAX_SQL_LENGTH)"
         )
-    if config.readonly:
-        ensure_read_only(sql)
-
-    rows, row_truncated = db.fetch_many(sql, None, config.max_rows)
-    rendered = _render_rows(rows, config.max_chars)
-    return {
-        "row_count": len(rendered["rows"]),
-        "truncated": bool(rendered["truncated"] or row_truncated),
-        "rows": rendered["rows"],
-    }
+    ensure_write_allowed(sql)
+    affected = _db().execute_write(sql)
+    return {"affected_rows": affected}
 
 
-@mcp.tool
-def health_check() -> dict[str, Any]:
-    """Check database connectivity on demand and report server status."""
-    return _db().health_check()
+# Register the write tool only when write mode is enabled at startup, so a
+# read-only deployment never exposes a write path in MCP capability discovery.
+if _write_mode_requested():
+    mcp.tool(execute_write)
 
 
 # Custom URI scheme for CUBRID schema resources. Registering schema metadata as

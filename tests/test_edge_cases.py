@@ -237,7 +237,9 @@ class _FakeConnDB:
     ],
 )
 def test_explain_query_accepts_select_and_with(sql: str, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(server, "_context", AppContext(config=_TEST_CONFIG, database=_FakeConnDB()))
+    monkeypatch.setattr(
+        server, "_context", AppContext.single(config=_TEST_CONFIG, database=_FakeConnDB())
+    )
     result = server.explain_query(sql)
     assert "plan" in result and "sql" in result
 
@@ -252,7 +254,9 @@ def test_explain_query_accepts_select_and_with(sql: str, monkeypatch: pytest.Mon
     ],
 )
 def test_explain_query_rejects_writes(sql: str, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(server, "_context", AppContext(config=_TEST_CONFIG, database=_FakeConnDB()))
+    monkeypatch.setattr(
+        server, "_context", AppContext.single(config=_TEST_CONFIG, database=_FakeConnDB())
+    )
     with pytest.raises(ValueError):
         server.explain_query(sql)
 
@@ -271,7 +275,9 @@ def test_explain_query_always_read_only_even_when_readonly_disabled(
         max_chars=4000,
         max_rows=1000,
     )
-    monkeypatch.setattr(server, "_context", AppContext(config=write_mode, database=_FakeConnDB()))
+    monkeypatch.setattr(
+        server, "_context", AppContext.single(config=write_mode, database=_FakeConnDB())
+    )
     with pytest.raises(ValueError):
         server.explain_query("DELETE FROM users")
 
