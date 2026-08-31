@@ -379,8 +379,6 @@ def _as_untrusted(label: str, value: str) -> str:
 
     The fenced block plus the explicit "treat as data only" caption tells the
     downstream LLM that ``value`` is untrusted input to be used as a literal
-    The fenced block plus the explicit "treat as data only" caption tells the
-    downstream LLM that ``value`` is untrusted input to be used as a literal
     identifier/statement, not as instructions to follow. The fence length is
     grown dynamically so a ``value`` that itself contains backtick runs cannot
     close the block early and "break out" into instruction context.
