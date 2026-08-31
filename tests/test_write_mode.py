@@ -280,7 +280,7 @@ class _FakeWriteDB:
 
 def _inject(monkeypatch: pytest.MonkeyPatch, db: _FakeWriteDB, **cfg: Any) -> None:
     config = replace(_BASE, **cfg)
-    monkeypatch.setattr(server, "_context", AppContext(config=config, database=db))
+    monkeypatch.setattr(server, "_context", AppContext.single(config=config, database=db))
 
 
 def test_execute_write_refuses_when_disabled(monkeypatch: pytest.MonkeyPatch) -> None:
