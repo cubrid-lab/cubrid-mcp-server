@@ -22,6 +22,13 @@ READ_ONLY_KEYWORDS: frozenset[str] = frozenset(
     {"SELECT", "SHOW", "DESC", "DESCRIBE", "EXPLAIN", "WITH"}
 )
 
+# Statements permitted in opt-in write mode (CUBRID_MCP_WRITE=1). Deliberately
+# limited to single-statement DML: DDL is excluded because CUBRID auto-commits
+# DDL, which defeats rollback and widens the blast radius. This whitelist is
+# only ever consulted on the explicitly-gated write path; the read-only default
+# path (:func:`ensure_read_only`) is untouched.
+WRITE_KEYWORDS: frozenset[str] = frozenset({"INSERT", "UPDATE", "DELETE"})
+
 # Keywords that mutate data/schema or otherwise escape read-only mode. Even when a
 # statement begins with an allowed keyword (e.g. a CTE ``WITH ... AS (...) DELETE`` or
 # a ``SELECT ... FOR UPDATE``), the presence of any of these anywhere in the token
@@ -92,6 +99,37 @@ def ensure_read_only(sql: str) -> None:
     forbidden = _forbidden_keywords(statement)
     if forbidden:
         raise UnsafeSQLError(f"{sorted(forbidden)[0]} is not permitted in read-only mode")
+
+
+def ensure_write_allowed(sql: str) -> None:
+    """Raise :class:`UnsafeSQLError` unless ``sql`` is a single write statement.
+
+    Only consulted on the opt-in write path (``CUBRID_MCP_WRITE=1``). Accepts a
+    single ``INSERT``/``UPDATE``/``DELETE`` statement; rejects everything else
+    (reads, DDL, transaction-control, multi-statement, and empty input) so that
+    enabling write mode cannot smuggle in DDL or read escapes. The read-only
+    default path (:func:`ensure_read_only`) is intentionally left unchanged.
+    """
+    if not sql or not sql.strip():
+        raise UnsafeSQLError("empty SQL statement")
+
+    sql = _strip_comments(sql)
+
+    statements = [stmt for stmt in sqlparse.parse(sql) if _is_non_empty(stmt)]
+    if len(statements) == 0:
+        raise UnsafeSQLError("empty SQL statement")
+    if len(statements) > 1:
+        raise UnsafeSQLError("multi-statement SQL is not allowed in write mode")
+
+    statement = statements[0]
+    keyword = _leading_keyword(statement)
+    if keyword is None:
+        raise UnsafeSQLError("could not determine the leading SQL keyword")
+    if keyword.upper() not in WRITE_KEYWORDS:
+        raise UnsafeSQLError(
+            f"{keyword.upper()} is not permitted in write mode; "
+            f"allowed statements: {', '.join(sorted(WRITE_KEYWORDS))}"
+        )
 
 
 def _is_non_empty(statement: Statement) -> bool:

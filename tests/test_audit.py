@@ -221,7 +221,7 @@ def test_execute_query_audits_without_stdout(
     monkeypatch.setattr(
         server,
         "_context",
-        AppContext(config=config, database=fake, audit=AuditLogger(True, stream=buf)),
+        AppContext.single(config=config, database=fake, audit=AuditLogger(True, stream=buf)),
     )
 
     sql = f"SELECT id FROM accounts WHERE token = '{_SECRET}'"
@@ -245,7 +245,7 @@ def test_execute_query_no_audit_when_disabled(monkeypatch: pytest.MonkeyPatch) -
     monkeypatch.setattr(
         server,
         "_context",
-        AppContext(config=_BASE_CONFIG, database=fake, audit=AuditLogger(False, stream=buf)),
+        AppContext.single(config=_BASE_CONFIG, database=fake, audit=AuditLogger(False, stream=buf)),
     )
     server.execute_query("SELECT 1")
     assert buf.getvalue() == ""
