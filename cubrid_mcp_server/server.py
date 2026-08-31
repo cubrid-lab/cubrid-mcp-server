@@ -335,8 +335,16 @@ def _write_mode_requested() -> bool:
     an MCP tool at all: when disabled the tool is absent from capability
     discovery, so there is no reachable write path. Call-time enforcement via
     ``config.write_enabled`` provides defence in depth.
+
+    Fails closed: an invalid ``CUBRID_MCP_WRITE`` value must not raise at import
+    time (which would bypass ``main()``'s clean ConfigError handling and break
+    tool introspection). The same value is re-validated by ``Config.from_env``,
+    which surfaces the error consistently through ``main()``.
     """
-    return _parse_bool(os.environ.get("CUBRID_MCP_WRITE", "0"))
+    try:
+        return _parse_bool(os.environ.get("CUBRID_MCP_WRITE", "0"))
+    except ConfigError:
+        return False
 
 
 def execute_write(sql: str) -> dict[str, Any]:

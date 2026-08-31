@@ -353,3 +353,17 @@ def test_write_tool_registered_when_enabled(monkeypatch: pytest.MonkeyPatch) -> 
     finally:
         monkeypatch.delenv("CUBRID_MCP_WRITE", raising=False)
         importlib.reload(server)
+
+
+def test_write_tool_absent_on_invalid_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    # An invalid CUBRID_MCP_WRITE must not raise at import time (which would
+    # bypass main()'s clean ConfigError handling); it fails closed instead.
+    monkeypatch.setenv("CUBRID_MCP_WRITE", "maybe")
+    module = importlib.reload(server)
+    try:
+        names = _tool_names(module)
+        assert "execute_write" not in names
+        assert len(names) == 11
+    finally:
+        monkeypatch.delenv("CUBRID_MCP_WRITE", raising=False)
+        importlib.reload(server)
