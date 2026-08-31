@@ -30,6 +30,7 @@ class Config:
     max_rows: int
     max_sql_length: int = 65536
     query_timeout: float = 30.0
+    write_enabled: bool = False
 
     @classmethod
     def from_env(cls, env: dict[str, str] | None = None) -> "Config":
@@ -76,6 +77,8 @@ def _parse_config(source: Mapping[str, str], prefix: str) -> Config:
     if query_timeout <= 0:
         raise ConfigError(f"{mcp_prefix}QUERY_TIMEOUT must be positive")
 
+    write_enabled = _parse_bool(source.get(f"{mcp_prefix}WRITE", "0"))
+
     return Config(
         host=host,
         port=port,
@@ -87,6 +90,7 @@ def _parse_config(source: Mapping[str, str], prefix: str) -> Config:
         max_rows=max_rows,
         max_sql_length=max_sql_length,
         query_timeout=query_timeout,
+        write_enabled=write_enabled,
     )
 
 
