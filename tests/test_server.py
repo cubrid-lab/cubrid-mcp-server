@@ -369,16 +369,19 @@ def test_schema_index_percent_encodes_uris(fake_db: FakeDatabase) -> None:
 
 
 def test_schema_resource_direct_matches_describe_table(fake_db: FakeDatabase) -> None:
-    # _resolve_table lookup, then columns, pk, indexes (same order as describe_table).
+    # schema_resource must return exactly what describe_table produces.
     fake_db.queue([("users",)])
     fake_db.queue([("id", "INTEGER", "NO", None)])
     fake_db.queue([("id",)])
     fake_db.queue([("pk_users", "YES", "YES", "NO", "NO", 1, "id", 0, "ASC")])
-    result = json.loads(server.schema_resource("users"))
-    assert result["table"] == "users"
-    assert result["primary_key"] == ["id"]
-    assert len(result["columns"]) == 1
-    assert len(result["indexes"]) == 1
+    resource_payload = json.loads(server.schema_resource("users"))
+    # Re-queue the identical batches for the describe_table call.
+    fake_db.queue([("users",)])
+    fake_db.queue([("id", "INTEGER", "NO", None)])
+    fake_db.queue([("id",)])
+    fake_db.queue([("pk_users", "YES", "YES", "NO", "NO", 1, "id", 0, "ASC")])
+    tool_payload = server.describe_table("users")
+    assert resource_payload == tool_payload
 
 
 def test_schema_resource_unknown_table_raises(fake_db: FakeDatabase) -> None:
@@ -444,7 +447,7 @@ async def test_read_schema_table_resource_matches_describe_table(fake_db: FakeDa
 async def test_read_unknown_table_resource_fails(fake_db: FakeDatabase) -> None:
     fake_db.queue([("users",)])  # 'nope' not present
     async with Client(server.mcp) as client:
-        with pytest.raises(Exception):
+        with pytest.raises(Exception, match="unknown table"):
             await client.read_resource("cubrid://schema/nope")
 
 
