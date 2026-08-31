@@ -161,13 +161,9 @@ def test_error_path_is_audited_and_redacted() -> None:
     audit = AuditLogger(True, stream=buf)
     sql = f"DELETE FROM users WHERE pw = '{_SECRET}'"
 
-    raised = False
-    try:
+    with pytest.raises(ValueError):
         with audit.track("execute_query", sql):
             raise ValueError(f"boom {_SECRET}")
-    except ValueError:
-        raised = True
-    assert raised
 
     records = _records(buf)
     assert len(records) == 1
