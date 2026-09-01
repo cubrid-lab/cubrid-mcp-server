@@ -19,7 +19,7 @@ import pytest
 
 import pycubrid
 from cubrid_mcp_server import server
-from cubrid_mcp_server.config import Config, ConfigError
+from cubrid_mcp_server.config import Config, ConfigError, ConnectionRegistry, DEFAULT_CONNECTION
 from cubrid_mcp_server.context import AppContext
 from cubrid_mcp_server.database import Database, DatabaseError, QueryTimeoutError
 from cubrid_mcp_server.safety import UnsafeSQLError, ensure_read_only, ensure_write_allowed
@@ -356,6 +356,112 @@ def test_write_tool_registered_when_enabled(monkeypatch: pytest.MonkeyPatch) -> 
 
 
 def test_write_tool_absent_on_invalid_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    # An invalid CUBRID_MCP_WRITE must not raise at import time (which would
+    # bypass main()'s clean ConfigError handling); it fails closed instead.
+    monkeypatch.setenv("CUBRID_MCP_WRITE", "maybe")
+    module = importlib.reload(server)
+    try:
+        names = _tool_names(module)
+        assert "execute_write" not in names
+        assert len(names) == 11
+    finally:
+        monkeypatch.delenv("CUBRID_MCP_WRITE", raising=False)
+        importlib.reload(server)
+
+
+# --------------------------------------------------------------------------- #
+# Multi-connection write routing + per-connection enablement (#136, #137)
+# --------------------------------------------------------------------------- #
+
+
+def _multi_inject(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    default_cfg: Config,
+    default_db: _FakeWriteDB,
+    named_cfg: Config,
+    named_db: _FakeWriteDB,
+    named: str = "reporting",
+) -> None:
+    registry = ConnectionRegistry(
+        configs={DEFAULT_CONNECTION: default_cfg, named: named_cfg},
+        default_name=DEFAULT_CONNECTION,
+    )
+    ctx = AppContext(
+        registry=registry,
+        databases={DEFAULT_CONNECTION: default_db, named: named_db},  # type: ignore[dict-item]
+    )
+    monkeypatch.setattr(server, "_context", ctx)
+
+
+def test_execute_write_routes_to_selected_connection(monkeypatch: pytest.MonkeyPatch) -> None:
+    # #136: execute_write must honour the per-call ``connection`` argument
+    # instead of always using the default connection.
+    default_db = _FakeWriteDB(affected=1)
+    named_db = _FakeWriteDB(affected=7)
+    _multi_inject(
+        monkeypatch,
+        default_cfg=replace(_BASE, write_enabled=True),
+        default_db=default_db,
+        named_cfg=replace(_BASE, write_enabled=True),
+        named_db=named_db,
+    )
+    result = server.execute_write("INSERT INTO t VALUES (1)", connection="reporting")
+    assert result == {"affected_rows": 7}
+    assert named_db.writes == ["INSERT INTO t VALUES (1)"]
+    assert default_db.writes == []
+
+
+def test_execute_write_refuses_when_target_connection_disabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # #137: write-enablement is enforced per connection. The default may enable
+    # writes while a named connection keeps them off (and vice versa).
+    default_db = _FakeWriteDB()
+    named_db = _FakeWriteDB()
+    _multi_inject(
+        monkeypatch,
+        default_cfg=replace(_BASE, write_enabled=True),
+        default_db=default_db,
+        named_cfg=replace(_BASE, write_enabled=False),
+        named_db=named_db,
+    )
+    with pytest.raises(ValueError, match="write mode is disabled"):
+        server.execute_write("INSERT INTO t VALUES (1)", connection="reporting")
+    assert named_db.writes == []
+    # The default connection, which does enable writes, still works.
+    assert server.execute_write("INSERT INTO t VALUES (1)") == {"affected_rows": 1}
+    assert default_db.writes == ["INSERT INTO t VALUES (1)"]
+
+
+def test_write_mode_requested_true_for_named_connection_only(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # #137: the write tool must be registered when a *named* connection enables
+    # writes, even if the default connection does not.
+    monkeypatch.delenv("CUBRID_MCP_WRITE", raising=False)
+    monkeypatch.setenv("CUBRID_CONNECTIONS", "reporting")
+    monkeypatch.setenv("CUBRID_REPORTING_MCP_WRITE", "1")
+    assert server._write_mode_requested() is True
+
+
+def test_write_mode_requested_false_when_none_enabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("CUBRID_MCP_WRITE", raising=False)
+    monkeypatch.setenv("CUBRID_CONNECTIONS", "reporting")
+    monkeypatch.delenv("CUBRID_REPORTING_MCP_WRITE", raising=False)
+    assert server._write_mode_requested() is False
+
+
+def test_write_mode_requested_fails_closed_on_invalid_named(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # An invalid named write value must not raise at import time; it fails closed.
+    monkeypatch.delenv("CUBRID_MCP_WRITE", raising=False)
+    monkeypatch.setenv("CUBRID_CONNECTIONS", "reporting")
+    monkeypatch.setenv("CUBRID_REPORTING_MCP_WRITE", "maybe")
+    assert server._write_mode_requested() is False
     # An invalid CUBRID_MCP_WRITE must not raise at import time (which would
     # bypass main()'s clean ConfigError handling); it fails closed instead.
     monkeypatch.setenv("CUBRID_MCP_WRITE", "maybe")
