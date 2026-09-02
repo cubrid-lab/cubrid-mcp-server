@@ -57,8 +57,8 @@ def _cfg(connection: str | None = None) -> Config:
     return _get_context().config_for(connection)
 
 
-def _audit() -> AuditLogger:
-    audit = _get_context().audit
+def _audit(connection: str | None = None) -> AuditLogger:
+    audit = _get_context().audit_for(connection)
     assert audit is not None  # AppContext.__post_init__ always populates this
     return audit
 
@@ -208,7 +208,7 @@ def list_indexes(table_name: str, connection: str | None = None) -> list[dict[st
 @mcp.tool
 def explain_query(sql: str, connection: str | None = None) -> dict[str, Any]:
     """Return CUBRID's execution plan/trace for a ``SELECT`` or ``WITH`` statement."""
-    with _audit().track("explain_query", sql):
+    with _audit(connection).track("explain_query", sql):
         cleaned = sql.strip().rstrip(";").strip()
         if not cleaned:
             raise ValueError("empty SQL statement")
@@ -327,7 +327,7 @@ def execute_query(sql: str, connection: str | None = None) -> dict[str, Any]:
     """Execute a read-only SQL statement and return rows, truncated if large."""
     db = _db(connection)
     config = _cfg(connection)
-    with _audit().track("execute_query", sql) as outcome:
+    with _audit(connection).track("execute_query", sql) as outcome:
         if len(sql) > config.max_sql_length:
             raise ValueError(
                 f"SQL exceeds maximum length of {config.max_sql_length} characters "
@@ -354,45 +354,74 @@ def health_check(connection: str | None = None) -> dict[str, Any]:
 
 
 def _write_mode_requested() -> bool:
-    """Whether opt-in write mode is enabled, read from the environment.
+    """Whether any connection opts into write mode, read from the environment.
 
     Checked once at import to decide whether ``execute_write`` is registered as
-    an MCP tool at all: when disabled the tool is absent from capability
-    discovery, so there is no reachable write path. Call-time enforcement via
-    ``config.write_enabled`` provides defence in depth.
+    an MCP tool at all: when no connection enables writes the tool is absent from
+    capability discovery, so there is no reachable write path. Per-call
+    enforcement via ``config.write_enabled`` (resolved for the *target*
+    connection) provides defence in depth and decides which connection may write.
 
-    Fails closed: an invalid ``CUBRID_MCP_WRITE`` value must not raise at import
-    time (which would bypass ``main()``'s clean ConfigError handling and break
-    tool introspection). The same value is re-validated by ``Config.from_env``,
-    which surfaces the error consistently through ``main()``.
+    Scans the default ``CUBRID_MCP_WRITE`` plus every ``CUBRID_<NAME>_MCP_WRITE``
+    named in ``CUBRID_CONNECTIONS`` (#137), so a deployment that enables writes on
+    a named connection only still exposes the tool. Reads only the write knobs
+    (not the connection fields), so it stays import-safe and never requires
+    ``CUBRID_HOST`` etc. to be present.
+
+    Fails closed: an invalid write value must not raise at import time (which
+    would bypass ``main()``'s clean ConfigError handling and break tool
+    introspection). The same values are re-validated by ``Config.from_env``,
+    which surfaces any error consistently through ``main()``.
     """
-    try:
-        return _parse_bool(os.environ.get("CUBRID_MCP_WRITE", "0"))
-    except ConfigError:
-        return False
+    env = os.environ
+    prefixes = ["CUBRID_"]
+    raw = env.get("CUBRID_CONNECTIONS", "").strip()
+    if raw:
+        for part in raw.split(","):
+            name = part.strip()
+            if name:
+                prefixes.append(f"CUBRID_{name.upper()}_")
+    for prefix in prefixes:
+        try:
+            if _parse_bool(env.get(f"{prefix}MCP_WRITE", "0")):
+                return True
+        except ConfigError:
+            # Fail closed on this connection's invalid value; main() re-validates.
+            continue
+    return False
 
 
-def execute_write(sql: str) -> dict[str, Any]:
+def execute_write(sql: str, connection: str | None = None) -> dict[str, Any]:
     """Execute a single write statement (INSERT/UPDATE/DELETE) atomically.
 
-    Only registered when ``CUBRID_MCP_WRITE`` is enabled. The statement runs in
-    an explicit transaction: it commits on success and rolls back on any error,
-    returning the number of affected rows. DDL, reads, and multi-statement input
-    are rejected by :func:`ensure_write_allowed`.
+    Only registered when at least one connection enables ``CUBRID_MCP_WRITE``. The
+    statement runs against the *selected* connection in an explicit transaction:
+    it commits on success and rolls back on any error, returning the number of
+    affected rows. DDL, reads, and multi-statement input are rejected by
+    :func:`ensure_write_allowed`. Write-enablement is enforced per connection, so
+    a connection whose ``MCP_WRITE`` is off refuses even when another enables it.
     """
-    config = _cfg()
-    if not config.write_enabled:
-        # Defence in depth: the tool is normally not registered when write mode
-        # is off, but refuse regardless if somehow reached.
-        raise ValueError("write mode is disabled (set CUBRID_MCP_WRITE=1 to enable)")
-    if len(sql) > config.max_sql_length:
-        raise ValueError(
-            f"SQL exceeds maximum length of {config.max_sql_length} characters "
-            f"(CUBRID_MCP_MAX_SQL_LENGTH)"
-        )
-    ensure_write_allowed(sql)
-    affected = _db().execute_write(sql)
-    return {"affected_rows": affected}
+    config = _cfg(connection)
+    db = _db(connection)
+    with _audit(connection).track("execute_write", sql) as outcome:
+        if not config.write_enabled:
+            # Defence in depth: the tool is normally not registered when no
+            # connection enables write mode, but refuse regardless if the target
+            # connection has writes disabled.
+            raise ValueError(
+                "write mode is disabled for this connection "
+                "(set CUBRID_MCP_WRITE=1, or CUBRID_<NAME>_MCP_WRITE=1 for a "
+                "named connection, to enable)"
+            )
+        if len(sql) > config.max_sql_length:
+            raise ValueError(
+                f"SQL exceeds maximum length of {config.max_sql_length} characters "
+                f"(CUBRID_MCP_MAX_SQL_LENGTH)"
+            )
+        ensure_write_allowed(sql)
+        affected = db.execute_write(sql)
+        outcome.row_count = affected
+        return {"affected_rows": affected}
 
 
 # Register the write tool only when write mode is enabled at startup, so a
