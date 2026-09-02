@@ -35,23 +35,37 @@ class AppContext:
     registry: ConnectionRegistry
     databases: Mapping[str, Database]
     audit: AuditLogger | None = None
+    audits: Mapping[str, AuditLogger] | None = None
 
     def __post_init__(self) -> None:
-        # Derive a disabled/enabled audit logger from the default connection's
-        # config when one is not explicitly injected, so every context always
-        # has a usable ``audit``.
+        # Build a per-connection audit logger so each named connection honours
+        # its own MCP_AUDIT_LOG setting (#137). When an explicit default
+        # ``audit`` is injected (tests/callers) it is reused for the default
+        # slot so existing behaviour and spies are preserved.
+        if self.audits is None:
+            audits: dict[str, AuditLogger] = {}
+            for name, cfg in self.registry.configs.items():
+                if name == self.registry.default_name and self.audit is not None:
+                    audits[name] = self.audit
+                else:
+                    audits[name] = AuditLogger(cfg.audit_log)
+            object.__setattr__(self, "audits", audits)
+        else:
+            audits = dict(self.audits)
         if self.audit is None:
-            object.__setattr__(self, "audit", AuditLogger(self.registry.config_for().audit_log))
+            object.__setattr__(self, "audit", audits[self.registry.default_name])
 
     @classmethod
     def from_env(cls) -> "AppContext":
         """Build a context and its databases from environment configuration."""
         registry = ConnectionRegistry.from_env()
         databases = {name: Database(config) for name, config in registry.configs.items()}
+        audits = {name: AuditLogger(config.audit_log) for name, config in registry.configs.items()}
         return cls(
             registry=registry,
             databases=databases,
-            audit=AuditLogger(registry.config_for().audit_log),
+            audit=audits[registry.default_name],
+            audits=audits,
         )
 
     @classmethod
@@ -69,6 +83,21 @@ class AppContext:
     def config_for(self, connection: str | None = None) -> Config:
         """Return the :class:`Config` for ``connection`` (default when ``None``)."""
         return self.registry.config_for(connection)
+
+    def audit_for(self, connection: str | None = None) -> AuditLogger:
+        """Return the :class:`AuditLogger` for ``connection`` (default when ``None``).
+
+        Validates the name through the registry first so an unknown connection
+        raises the same clear, client-safe error as :meth:`config_for`.
+        """
+        self.registry.config_for(connection)
+        name = (
+            connection.strip().lower()
+            if connection and connection.strip()
+            else self.registry.default_name
+        )
+        assert self.audits is not None  # __post_init__ always populates this
+        return self.audits[name]
 
     def database_for(self, connection: str | None = None) -> Database:
         """Return the :class:`Database` for ``connection`` (default when ``None``).

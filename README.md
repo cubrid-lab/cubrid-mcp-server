@@ -70,7 +70,8 @@ Optional settings:
 | `CUBRID_MCP_MAX_ROWS` | `1000` | Max rows returned by `execute_query` before truncation |
 | `CUBRID_MCP_MAX_SQL_LENGTH` | `65536` | Max length (characters) of a submitted SQL statement |
 | `CUBRID_MCP_QUERY_TIMEOUT` | `30` | Per-statement socket read timeout in seconds. If the server sends no data within this window the query is aborted and the connection is reset. This is a socket read timeout, not a true server-side statement timeout. |
-| `CUBRID_MCP_AUDIT_LOG` | `0` | Opt-in audit logging. When enabled, emits one redaction-safe JSON record per executed statement (`execute_query`/`explain_query`) to **stderr** — see [Logging](#logging). |
+| `CUBRID_MCP_AUDIT_LOG` | `0` | Opt-in audit logging. When enabled, emits one redaction-safe JSON record per executed statement (`execute_query`/`explain_query`/`execute_write`) to **stderr** — see [Logging](#logging). Honoured per connection (`CUBRID_<NAME>_MCP_AUDIT_LOG`). |
+| `CUBRID_MCP_WRITE` | `0` | Opt-in write mode. When enabled (`1`), registers the `execute_write` tool for single-statement DML. Honoured per connection (`CUBRID_<NAME>_MCP_WRITE`); the tool is registered when any connection enables it. Off by default. |
 | `CUBRID_MCP_WRITE` | `0` | Opt-in write mode. When enabled (`1`), registers the `execute_write` tool for single-statement DML. Off by default. |
 
 ### Multiple connections
@@ -219,12 +220,13 @@ For production use, also configure a read-only database user. See [`SECURITY.md`
 
 ### Write mode (opt-in)
 
-Write access is **disabled by default**. Setting `CUBRID_MCP_WRITE=1` registers an additional `execute_write` tool that accepts a **single** `INSERT`, `UPDATE`, or `DELETE` statement and runs it in an explicit transaction (commit on success, rollback on any error). When write mode is off the tool is not registered at all, so no write path is exposed in MCP capability discovery.
+Write access is **disabled by default**. Setting `CUBRID_MCP_WRITE=1` registers an additional `execute_write` tool that accepts a **single** `INSERT`, `UPDATE`, or `DELETE` statement and runs it in an explicit transaction (commit on success, rollback on any error). When write mode is off the tool is not registered at all, so no write path is exposed in MCP capability discovery. With multiple connections configured, the tool is registered when **any** connection enables writes (via `CUBRID_MCP_WRITE` or `CUBRID_<NAME>_MCP_WRITE`).
 
 Constraints and rationale:
 
 - **Single-statement DML only.** Standalone reads, DDL (`CREATE`/`ALTER`/`DROP`/`TRUNCATE`), transaction-control, and multi-statement input are rejected. (A single DML statement may still legally contain subqueries, e.g. `INSERT ... SELECT`.)
 - **DDL is intentionally unsupported.** CUBRID auto-commits DDL, which defeats the rollback guarantee, so it is excluded from write mode.
+- **Write mode is per-connection.** `execute_write` accepts the same optional `connection` argument as the read tools and runs against that connection; a connection whose `CUBRID_<NAME>_MCP_WRITE` is off refuses the write even when another connection enables it.
 - `execute_query` remains **read-only regardless** of the write-mode flag.
 - Enforcement is defense-in-depth; still run the server as a CUBRID user granted only the privileges it needs. See [`SECURITY.md`](./SECURITY.md).
 
@@ -236,11 +238,11 @@ Errors surfaced back to the LLM client are **sanitized**: only the exception cat
 
 ### Audit logging (opt-in)
 
-Set `CUBRID_MCP_AUDIT_LOG=1` to record every executed statement (`execute_query` and `explain_query`) as a single structured JSON line on **stderr**. It is **off by default**. Each record is redaction-safe and contains only:
+Set `CUBRID_MCP_AUDIT_LOG=1` to record every executed statement (`execute_query`, `explain_query`, and `execute_write`) as a single structured JSON line on **stderr**. It is **off by default** and honoured **per connection** — a named connection sets `CUBRID_<NAME>_MCP_AUDIT_LOG` independently of the default. Each record is redaction-safe and contains only:
 
 | Field | Description |
 |-------|-------------|
-| `tool` | The MCP tool that ran the statement (`execute_query` / `explain_query`). |
+| `tool` | The MCP tool that ran the statement (`execute_query` / `explain_query` / `execute_write`). |
 | `status` | `ok` or `error`. |
 | `category` | The leading SQL keyword only (e.g. `SELECT`, `WITH`) — never the full statement. |
 | `identifiers` | Table names extracted after `FROM`/`JOIN` via a strict identifier regex; anything that is not a bare identifier (values, literals, expressions) is dropped. |

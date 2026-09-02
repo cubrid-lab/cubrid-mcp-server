@@ -121,3 +121,38 @@ def test_close_closes_all_even_when_one_fails() -> None:
         ctx.close()
     # The second database is still closed despite the first raising.
     assert sorted(closed) == ["failing", "ok"]
+
+
+def test_audit_for_is_per_connection() -> None:
+    from dataclasses import replace
+
+    default_cfg = replace(_TEST_CONFIG, audit_log=False)
+    reporting_cfg = replace(_REPORTING_CONFIG, audit_log=True)
+    registry = ConnectionRegistry(configs={"default": default_cfg, "reporting": reporting_cfg})
+    ctx = AppContext(
+        registry=registry,
+        databases={"default": object(), "reporting": object()},  # type: ignore[dict-item]
+    )
+    # Each connection honours its own MCP_AUDIT_LOG (#137).
+    assert ctx.audit_for().enabled is False
+    assert ctx.audit_for("reporting").enabled is True
+    # Selection is case-insensitive and whitespace-tolerant, matching database_for.
+    assert ctx.audit_for("  REPORTING ").enabled is True
+    # The default audit attribute points at the default connection's logger.
+    assert ctx.audit is ctx.audit_for()
+
+
+def test_audit_for_unknown_connection_raises() -> None:
+    ctx = AppContext.single(config=_TEST_CONFIG, database=object())  # type: ignore[arg-type]
+    with pytest.raises(ConfigError) as excinfo:
+        ctx.audit_for("nope")
+    assert "unknown connection" in str(excinfo.value)
+
+
+def test_injected_audit_is_reused_for_default_slot() -> None:
+    from cubrid_mcp_server.audit import AuditLogger
+
+    injected = AuditLogger(False)
+    ctx = AppContext.single(config=_TEST_CONFIG, database=object(), audit=injected)  # type: ignore[arg-type]
+    assert ctx.audit is injected
+    assert ctx.audit_for() is injected
