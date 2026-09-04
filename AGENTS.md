@@ -36,6 +36,25 @@ cubrid_mcp_server/
 - `make integration` — integration tests (requires a live CUBRID)
 - `make release VERSION=x.y.z` — release commit + tag
 
+## Release Process
+
+Version is single-sourced from `cubrid_mcp_server/__init__.py` → `__version__ = "x.y.z"`.
+
+Steps:
+1. Bump the version and add a dated changelog entry in `CHANGELOG.md` (`## [x.y.z] - YYYY-MM-DD`).
+2. Open a PR and merge to `main`.
+3. Push the tag on the merged commit: `git tag vx.y.z <merged-sha> && git push origin vx.y.z`.
+4. The tag push triggers `.github/workflows/create-release.yml`, which extracts the
+   `## [x.y.z] - YYYY-MM-DD` section from `CHANGELOG.md` (fail-closed — no fallback) and
+   creates the GitHub Release titled `vx.y.z` with that body, after verifying the tag is
+   an ancestor of `origin/main`.
+5. Publishing the GitHub Release triggers `.github/workflows/publish-pypi.yml`, which
+   rebuilds, verifies, and publishes to PyPI via Trusted Publisher (OIDC).
+
+Release notes are never hand-written: `CHANGELOG.md` is the single source of truth and
+`scripts/extract_release_notes.py` renders the Release body. To re-create a release body,
+re-run `create-release.yml` via `workflow_dispatch` with `update_existing: true`.
+
 ## Development Workflow (cubrid-lab org standard)
 
 All non-trivial work MUST follow this cycle:
