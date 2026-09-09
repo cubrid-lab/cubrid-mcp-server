@@ -1,0 +1,8 @@
+cubrid-mcp-server
+Copyright (c) 2025 Yeongseon Choe
+
+This product is licensed under the MIT License (see LICENSE).
+
+This package is an original implementation. It contains no third-party
+source code and embeds no third-party assets. Runtime dependencies and
+their licenses are enumerated in THIRD_PARTY_LICENSES.md.

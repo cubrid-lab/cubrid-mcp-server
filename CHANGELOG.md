@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Documentation site (mkdocs-material) deployed to https://cubrid-lab.github.io/cubrid-mcp-server/ — quickstart, full tool reference, security model, multi-connection guide, and troubleshooting.
 - Korean README translation (`docs/README.ko.md`), matching the sibling repositories' translation set.
 - `upstream-canary.yml` now also tracks `fastmcp@latest` in addition to `pycubrid@main`, giving the eventual fastmcp 4.x migration decision CI evidence. The dependency pin intentionally remains `>=3.0,<4` until that canary is green.
+- `THIRD_PARTY_LICENSES.md` (full runtime license inventory, pip-licenses generated) and a `NOTICE` file (original implementation, no third-party code embedded) added.
 - Official MCP Registry readiness: PyPI ownership-verification marker (`mcp-name: io.github.cubrid-lab/cubrid-mcp-server`) embedded in README, and `glama.json` added at the repo root for Glama registry indexing.
 
 ### Changed
