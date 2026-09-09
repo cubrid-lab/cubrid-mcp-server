@@ -14,9 +14,10 @@ authors = [
 ]
 keywords = ["CUBRID", "database", "MCP", "Model Context Protocol", "LLM"]
 classifiers = [
-    "Development Status :: 2 - Pre-Alpha",
+    "Development Status :: 4 - Beta",
     "Environment :: Console",
     "Intended Audience :: Developers",
+    "Framework :: AsyncIO",
     "Programming Language :: Python",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
@@ -50,6 +51,8 @@ cubrid-mcp-server = "cubrid_mcp_server.__main__:main"
 Homepage = "https://github.com/cubrid-lab/cubrid-mcp-server"
 Repository = "https://github.com/cubrid-lab/cubrid-mcp-server"
 Issues = "https://github.com/cubrid-lab/cubrid-mcp-server/issues"
+Documentation = "https://cubrid-lab.github.io/cubrid-mcp-server/"
+Changelog = "https://github.com/cubrid-lab/cubrid-mcp-server/blob/main/CHANGELOG.md"
 
 [tool.setuptools]
 packages = ["cubrid_mcp_server"]

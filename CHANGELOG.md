@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-09-09
+
+### Added
+- Published to PyPI: `uvx cubrid-mcp-server` and `pipx run cubrid-mcp-server` now install from PyPI instead of a git checkout.
+- Documentation site (mkdocs-material) deployed to https://cubrid-lab.github.io/cubrid-mcp-server/ — quickstart, full tool reference, security model, multi-connection guide, and troubleshooting.
+- Korean README translation (`docs/README.ko.md`), matching the sibling repositories' translation set.
+- `upstream-canary.yml` now also tracks `fastmcp@latest` in addition to `pycubrid@main`, giving the eventual fastmcp 4.x migration decision CI evidence. The dependency pin intentionally remains `>=3.0,<4` until that canary is green.
+- Official MCP Registry readiness: PyPI ownership-verification marker (`mcp-name: io.github.cubrid-lab/cubrid-mcp-server`) embedded in README, and `glama.json` added at the repo root for Glama registry indexing.
+
+### Changed
+- Development Status classifier raised from `2 - Pre-Alpha` to `4 - Beta`: the server has shipped multi-database connections, opt-in write mode, audit logging, Resources, and Prompts since 0.3.0.
+- `[project.urls]` now includes `Documentation` and `Changelog` links, matching the sibling repositories.
+- `Framework :: AsyncIO` trove classifier added for registry/search discoverability.
+
+### Fixed
+- README: removed a duplicated `CUBRID_MCP_WRITE` row in the configuration table.
+
 ## [0.3.1] - 2026-09-02
 
 ### Fixed
