@@ -18,3 +18,19 @@ jobs:
       - run: pip install -e ".[dev]"
       - run: pip install --force-reinstall "git+https://github.com/cubrid-lab/pycubrid.git@main"
       - run: pytest -m "not integration" -q
+
+  # fastmcp 4.x is a major rewrite (MCP SDK v2, sessionless protocol). The
+  # dependency pin stays >=3.0,<4; this canary collects evidence for the
+  # eventual migration decision instead of discovering breakage at release time.
+  fastmcp-canary:
+    name: Test against fastmcp@latest
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - run: pip install -e ".[dev]"
+      - run: pip install --force-reinstall "fastmcp@latest"
+      - run: pytest -m "not integration" -q

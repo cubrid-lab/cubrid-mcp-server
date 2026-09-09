@@ -2,6 +2,8 @@
 
 A [Model Context Protocol](https://modelcontextprotocol.io) server for [CUBRID](https://www.cubrid.org/), enabling LLMs to safely inspect schemas and execute read-only queries via [pycubrid](https://pypi.org/project/pycubrid/).
 
+<!-- mcp-name: io.github.cubrid-lab/cubrid-mcp-server -->
+
 ## Features
 
 | Tool | Description |
@@ -72,7 +74,6 @@ Optional settings:
 | `CUBRID_MCP_QUERY_TIMEOUT` | `30` | Per-statement socket read timeout in seconds. If the server sends no data within this window the query is aborted and the connection is reset. This is a socket read timeout, not a true server-side statement timeout. |
 | `CUBRID_MCP_AUDIT_LOG` | `0` | Opt-in audit logging. When enabled, emits one redaction-safe JSON record per executed statement (`execute_query`/`explain_query`/`execute_write`) to **stderr** — see [Logging](#logging). Honoured per connection (`CUBRID_<NAME>_MCP_AUDIT_LOG`). |
 | `CUBRID_MCP_WRITE` | `0` | Opt-in write mode. When enabled (`1`), registers the `execute_write` tool for single-statement DML. Honoured per connection (`CUBRID_<NAME>_MCP_WRITE`); the tool is registered when any connection enables it. Off by default. |
-| `CUBRID_MCP_WRITE` | `0` | Opt-in write mode. When enabled (`1`), registers the `execute_write` tool for single-statement DML. Off by default. |
 
 ### Multiple connections
 
@@ -119,19 +120,7 @@ Notes:
 
 ### Run
 
-> **Note:** The package is not yet published to PyPI. Until the first release lands, install and run it from source (see [Development](#development)); the `uvx`/`pipx` commands below will work once the package is available on PyPI.
-
-### Run from source (available now)
-
-```bash
-git clone https://github.com/cubrid-lab/cubrid-mcp-server.git
-cd cubrid-mcp-server
-python -m venv .venv && source .venv/bin/activate
-pip install -e .
-cubrid-mcp-server
-```
-
-### Run from PyPI (once published)
+### Run from PyPI
 
 Use [`uvx`](https://docs.astral.sh/uv/guides/tools/) to run directly from PyPI:
 
@@ -143,6 +132,16 @@ Or with `pipx`:
 
 ```bash
 pipx run cubrid-mcp-server
+```
+
+### Run from source
+
+```bash
+git clone https://github.com/cubrid-lab/cubrid-mcp-server.git
+cd cubrid-mcp-server
+python -m venv .venv && source .venv/bin/activate
+pip install -e .
+cubrid-mcp-server
 ```
 
 ## MCP Client Integration
