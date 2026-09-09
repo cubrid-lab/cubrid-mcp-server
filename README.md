@@ -1,5 +1,7 @@
 # cubrid-mcp-server
 
+[![coverage](https://codecov.io/gh/cubrid-lab/cubrid-mcp-server/branch/main/graph/badge.svg)](https://codecov.io/gh/cubrid-lab/cubrid-mcp-server)
+
 A [Model Context Protocol](https://modelcontextprotocol.io) server for [CUBRID](https://www.cubrid.org/), enabling LLMs to safely inspect schemas and execute read-only queries via [pycubrid](https://pypi.org/project/pycubrid/).
 
 <!-- mcp-name: io.github.cubrid-lab/cubrid-mcp-server -->

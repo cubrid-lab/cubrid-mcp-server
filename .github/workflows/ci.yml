@@ -42,7 +42,22 @@ jobs:
         run: mypy cubrid_mcp_server
 
       - name: Pytest (unit)
-        run: pytest -m "not integration" --cov=cubrid_mcp_server --cov-report=term-missing
+        run: >-
+          pytest -m "not integration"
+          --cov=cubrid_mcp_server
+          --cov-report=term-missing
+          --cov-report=xml
+
+      - name: Upload coverage to Codecov
+        if: matrix.python-version == '3.10' && github.actor != 'dependabot[bot]'
+        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./coverage.xml
+          verbose: true
+          fail_ci_if_error: false
+        env:
+          CODECOV_RETRIES: 3
 
   lowest-direct:
     # Verify the project works against the lowest versions of its direct
