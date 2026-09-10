@@ -274,10 +274,15 @@ def _quote_ident(name: str) -> str:
 @mcp.tool
 def list_serials(connection: str | None = None) -> list[dict[str, Any]]:
     """Return CUBRID SERIAL sequences with current value, increment, and bounds."""
-    rows = _db(connection).fetch_all(
-        """
+    database = _db(connection)
+    # Identifier comes from Database's fixed allowlist (att_name/attr_name),
+    # never from user input, so interpolation here is injection-safe.
+    att_column = database.serial_attribute_column()
+    rows = database.fetch_all(
+        f"""
         SELECT name, current_val, increment_val, max_val, min_val,
-               cyclic, started, class_name, att_name, cached_num, comment
+               cyclic, started, class_name, {att_column} AS att_name,
+               cached_num, comment
         FROM db_serial
         ORDER BY name
         """
