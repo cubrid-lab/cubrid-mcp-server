@@ -4,6 +4,13 @@ This file lists the third-party open-source software used by **cubrid-mcp-server
 
 All listed dependencies are distributed under permissive licenses (MIT, BSD-2/3-Clause, Apache-2.0, ISC, PSF, MPL-2.0, Unlicense). No dependency is copyleft/GPL, and none conflicts with this project's MIT license. The single MPL-2.0 package (`certifi`) is a file-level-licensed data bundle distributed unmodified.
 
+> **CUBRID server license, for the record.** The CUBRID server engine is
+> distributed under Apache License 2.0 and the official APIs/connectors under
+> BSD (upstream `COPYING`, http://www.cubrid.org/cubrid) — the frequently cited
+> GPL v2+ no longer applies. This project is an independent wire-protocol client
+> that neither includes nor links any CUBRID server code; the `cubrid/cubrid`
+> Docker image is used for CI verification only.
+
 Direct runtime dependencies: `fastmcp>=3.0,<4` (Apache-2.0), `pycubrid>=1.4,<2` (MIT), `sqlparse>=0.5,<1` (BSD). Everything else below is pulled in transitively by `fastmcp`.
 
 ## Runtime dependencies
