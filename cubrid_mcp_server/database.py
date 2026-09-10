@@ -101,9 +101,7 @@ class Database:
                     self._serial_attribute_column = column
                     break
                 else:
-                    raise DatabaseError(
-                        "db_serial exposes neither att_name nor attr_name"
-                    )
+                    raise DatabaseError("db_serial exposes neither att_name nor attr_name")
             return self._serial_attribute_column
 
     def connect(self) -> Any:
