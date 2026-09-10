@@ -14,7 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Integration tests now run against a CUBRID **11.2 + 11.4 job matrix** (previously 11.2 only), matching the pycubrid/sqlalchemy-cubrid integration matrices and the cookbook smoke matrix.
 
 ### Documentation
-- **CUBRID server license relationship documented; copyright and authors unified (#150)** — `THIRD_PARTY_LICENSES.md` carries the verified upstream licensing statement (server engine Apache-2.0, APIs/connectors BSD per CUBRID's `COPYING` — the often-cited GPL v2+ no longer applies; independent wire-protocol client, Docker image CI-only). LICENSE/NOTICE copyright lines now read `Yeongseon Choe and Gyeongjun Paik` (2025-2026), and `pyproject.toml` lists both primary authors.
+- **CUBRID server license relationship documented; copyright and authors unified (#150)** — `THIRD_PARTY_LICENSES.md` carries the verified upstream licensing statement (server engine Apache-2.0, APIs/connectors BSD per CUBRID's `COPYING` — the often-cited GPL v2+ no longer applies; independent wire-protocol client, Docker image CI-only). LICENSE/NOTICE copyright lines now read `Yeongseon Choe, Gyeongjun Paik` (2025-2026), and `pyproject.toml` lists both primary authors.
 
 ## [0.4.0] - 2026-09-09
 
