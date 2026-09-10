@@ -76,10 +76,33 @@ class Database:
     serialization is ever shown, by measurement, to be a real bottleneck.
     """
 
+    _SERIAL_ATTRIBUTE_COLUMNS = ("att_name", "attr_name")
+
     def __init__(self, config: Config) -> None:
         self._config = config
         self._connection: Any = None
         self._lock = threading.RLock()
+        self._serial_attribute_column: str | None = None
+
+    def serial_attribute_column(self) -> str:
+        """Resolve ``db_serial``'s attribute column once per connection.
+
+        CUBRID 11.2 names it ``att_name``; 11.4 renamed it to ``attr_name``.
+        Probed with a zero-row SELECT and cached, so every later
+        ``list_serials`` call uses the version-correct identifier.
+        """
+        with self._lock:
+            if self._serial_attribute_column is None:
+                for column in self._SERIAL_ATTRIBUTE_COLUMNS:
+                    try:
+                        self.fetch_all(f'SELECT "{column}" FROM db_serial WHERE 1 = 0')
+                    except DatabaseError:
+                        continue
+                    self._serial_attribute_column = column
+                    break
+                else:
+                    raise DatabaseError("db_serial exposes neither att_name nor attr_name")
+            return self._serial_attribute_column
 
     def connect(self) -> Any:
         # Return the cached connection without a liveness ping: pinging on every

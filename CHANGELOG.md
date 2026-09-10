@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- `list_serials` now works on **CUBRID 11.4**: the `db_serial` system catalog renamed its `att_name` column to `attr_name` in 11.4, so the hardcoded query failed there with a semantic error. The column is now resolved once per connection by a zero-row probe against a fixed allowlist and aliased back to `att_name`, keeping the tool's output shape identical on both versions. Found by the new 11.2+11.4 integration matrix.
+
+### CI
+- Integration tests now run against a CUBRID **11.2 + 11.4 job matrix** (previously 11.2 only), matching the pycubrid/sqlalchemy-cubrid integration matrices and the cookbook smoke matrix.
+
 ## [0.4.0] - 2026-09-09
 
 ### Added

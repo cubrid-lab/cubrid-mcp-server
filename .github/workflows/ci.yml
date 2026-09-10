@@ -82,6 +82,10 @@ jobs:
 
   integration:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        cubrid: ["11.2", "11.4"]
 
     steps:
       - uses: actions/checkout@v7
@@ -105,7 +109,7 @@ jobs:
             -e CUBRID_DB=demodb \
             -p 33000:33000 \
             -p 1523:1523 \
-            cubrid/cubrid:11.2
+            cubrid/cubrid:${{ matrix.cubrid }}
           docker ps
 
       - name: Wait for CUBRID demodb to be ready

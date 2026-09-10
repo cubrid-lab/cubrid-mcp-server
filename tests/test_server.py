@@ -35,6 +35,9 @@ class FakeDatabase:
     def queue(self, rows: list[tuple[Any, ...]]) -> None:
         self.responses.append(rows)
 
+    def serial_attribute_column(self) -> str:
+        return "att_name"
+
     def fetch_all(self, sql: str, params: tuple[Any, ...] | None = None) -> list[tuple[Any, ...]]:
         self.calls.append((sql, params or ()))
         if not self.responses:
