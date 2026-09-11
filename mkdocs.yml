@@ -40,7 +40,13 @@ nav:
       - Troubleshooting: TROUBLESHOOTING.md
   - Project:
       - Translations:
-          - 한국어: README.ko.md
+          - 한국어 README: README.ko.md
+          - 한국어 문서:
+              - 빠른 시작: ko/quickstart.md
+              - 도구 참조: ko/TOOLS.md
+              - 보안 모델: ko/SECURITY_MODEL.md
+              - 멀티커넥션: ko/MULTI_CONNECTION.md
+              - 문제 해결: ko/TROUBLESHOOTING.md
   - Changelog: https://github.com/cubrid-lab/cubrid-mcp-server/blob/main/CHANGELOG.md
   - Contributing: https://github.com/cubrid-lab/cubrid-mcp-server/blob/main/CONTRIBUTING.md
 

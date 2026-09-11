@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Documentation
+- **한국어 문서 페이지 (#160)** — 사이트 문서 5개 페이지(quickstart·TOOLS·보안 모델·멀티커넥션·문제 해결)의 한국어 번역을 `docs/ko/`에 추가하고 Project → Translations → 한국어 문서로 노출. 페이지 번역은 경고 수준 동기화(README.ko의 하드 게이트는 유지).
 - **Korean docs governance** — `docs/README.ko.md` carries a sync marker, and docs-sync gained a `translation-sync` job that fails a PR when `README.md` changes without the translation changing (escape hatch: the `translations-deferred` label).
 - **Docs site information architecture unified across the ecosystem** — nav reorganized to the shared six-tab skeleton (Home / Getting Started / Usage / Reference / Operations / Project): Tools and Multi-Connection under Usage, Security Model under Reference, 한국어 under Project → Translations; homepage gains an Ecosystem section linking the three sibling sites.
 - **Community files**: bug/feature issue templates (adapted from the siblings, with an MCP-specific environment field: server/Python/CUBRID/client versions), `SUPPORT.md`, and `CODE_OF_CONDUCT.md` — the repo previously relied on org-level fallbacks only. README gains the docs-site badge matching pycubrid and sqlalchemy-cubrid.
