@@ -1,6 +1,7 @@
 # cubrid-mcp-server (한국어)
 
-> 영어 원문: [README.md](https://github.com/cubrid-lab/cubrid-mcp-server/blob/main/README.md)
+> 🌐 Translated from [README.md](https://github.com/cubrid-lab/cubrid-mcp-server/blob/main/README.md) — keep this translation in sync with the original in the same PR (enforced by the `translation-sync` CI check; use the `translations-deferred` label to defer).
+
 
 [CUBRID](https://www.cubrid.org/) 데이터베이스를 위한 [Model Context Protocol](https://modelcontextprotocol.io) 서버. LLM 클라이언트가 순수 Python 드라이버 [pycubrid](https://pypi.org/project/pycubrid/)를 통해 스키마를 안전하게 조회하고 **읽기 전용** 쿼리를 실행할 수 있습니다.
 
