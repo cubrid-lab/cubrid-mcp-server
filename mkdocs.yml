@@ -31,13 +31,16 @@ nav:
   - Home: index.md
   - Getting Started:
       - Quick Start: quickstart.md
-  - Reference:
+  - Usage:
       - Tools: TOOLS.md
-      - Security Model: SECURITY_MODEL.md
       - Multi-Connection: MULTI_CONNECTION.md
+  - Reference:
+      - Security Model: SECURITY_MODEL.md
   - Operations:
       - Troubleshooting: TROUBLESHOOTING.md
-  - 한국어: README.ko.md
+  - Project:
+      - Translations:
+          - 한국어: README.ko.md
   - Changelog: https://github.com/cubrid-lab/cubrid-mcp-server/blob/main/CHANGELOG.md
   - Contributing: https://github.com/cubrid-lab/cubrid-mcp-server/blob/main/CONTRIBUTING.md
 
