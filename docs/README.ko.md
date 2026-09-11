@@ -1,6 +1,6 @@
 # cubrid-mcp-server (한국어)
 
-> 🌐 Translated from [README.md](https://github.com/cubrid-lab/cubrid-mcp-server/blob/main/README.md) — keep this translation in sync with the original in the same PR (enforced by the `translation-sync` CI check; use the `translations-deferred` label to defer).
+> 🌐 Translated from [README.md](https://github.com/cubrid-lab/cubrid-mcp-server/blob/main/README.md) — 한국어는 심사 기간 동안 동기화가 **필수**입니다: README.md가 바뀌면 같은 PR에서 이 파일도 업데이트하세요 (`translation-sync` CI 검사, 보류 시 `translations-deferred` 라벨). English is canonical.
 
 
 [CUBRID](https://www.cubrid.org/) 데이터베이스를 위한 [Model Context Protocol](https://modelcontextprotocol.io) 서버. LLM 클라이언트가 순수 Python 드라이버 [pycubrid](https://pypi.org/project/pycubrid/)를 통해 스키마를 안전하게 조회하고 **읽기 전용** 쿼리를 실행할 수 있습니다.
