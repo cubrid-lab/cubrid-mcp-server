@@ -46,3 +46,12 @@ See the full [Tools reference](TOOLS.md) for parameters and return shapes, the [
 MIT — see [LICENSE](https://github.com/cubrid-lab/cubrid-mcp-server/blob/main/LICENSE).
 
 > This project is part of [CUBRID Lab](https://github.com/cubrid-lab), an independent open-source initiative for CUBRID developer tooling, and is not affiliated with, sponsored by, or endorsed by CUBRID Corporation or the official CUBRID project.
+
+## Ecosystem
+
+Part of the cubrid-lab Python ecosystem:
+
+- **cubrid-mcp-server** — MCP server — natural-language access for LLM clients
+- [pycubrid](https://github.com/cubrid-lab/pycubrid) — Pure-Python DB-API 2.0 driver for CUBRID (sync + native asyncio)
+- [sqlalchemy-cubrid](https://github.com/cubrid-lab/sqlalchemy-cubrid) — SQLAlchemy 2.0–2.2 dialect + Alembic
+- [cubrid-cookbook-python](https://github.com/cubrid-lab/cubrid-cookbook-python) — 68 runnable examples and application templates
