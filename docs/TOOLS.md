@@ -75,6 +75,11 @@ Schema metadata is also exposed as read-only [MCP Resources](https://modelcontex
 
 | Resource URI | Description |
 |--------------|-------------|
+| `cubrid://agent-guide` | Comprehensive CUBRID agent guide: SQL dialect, types, safety, performance, tool selection |
+| `cubrid://guide/sql-dialect` | CUBRID syntax differences from MySQL/PostgreSQL |
+| `cubrid://guide/types` | Data type guide: collections, ENUM, JSON, Python mapping |
+| `cubrid://guide/performance` | Performance optimization: SHOW TRACE, indexes, anti-patterns |
+| `cubrid://guide/collections` | Deep dive on SET, MULTISET, SEQUENCE types |
 | `cubrid://schema` | Whole-schema index: every user table with its per-table resource URI |
 | `cubrid://schema/{table}` | Per-table metadata (columns, primary key, indexes) — mirrors `describe_table` |
 
@@ -90,3 +95,8 @@ The server exposes MCP **Prompt templates** — guidance-only starting points fo
 | `explain_query` | `sql` | Obtain and interpret a `SELECT`/`WITH` execution plan via `explain_query` |
 | `inspect_schema` | *(none)* | Build a high-level overview of the whole schema from the read-only tools |
 | `find_index_candidates` | `table` | Review a table's index coverage for potential review areas |
+| `optimize_query` | `sql` | Analyze execution plan and suggest CUBRID-specific optimizations |
+| `migrate_from_mysql` | `sql` | Convert MySQL query syntax to valid CUBRID SQL |
+| `explore_unknown_db` | *(none)* | Systematically explore an unfamiliar database |
+| `safe_data_analysis` | `question` | Answer data questions using read-only queries |
+| `write_cubrid_sql` | `natural_language` | Generate valid CUBRID SQL from natural language |

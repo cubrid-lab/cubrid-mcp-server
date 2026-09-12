@@ -597,3 +597,138 @@ async def test_summarize_table_prompt_arg_is_required() -> None:
     summarize = next(p for p in prompts if p.name == "summarize_table")
     table_arg = next(a for a in (summarize.arguments or []) if a.name == "table")
     assert table_arg.required is True
+
+
+class TestSkillResources:
+    """Domain-knowledge resources for LLM clients (#162)."""
+
+    def test_agent_guide_registered(self):
+        from cubrid_mcp_server.server import _agent_guide
+
+        result = _agent_guide()
+        assert "CUBRID MCP Server" in result
+        assert len(result) > 1000
+
+    def test_guide_resources_importable(self):
+        from cubrid_mcp_server.server import (
+            _sql_dialect_guide,
+            _types_guide,
+            _performance_guide,
+            _collections_guide,
+        )
+
+        for fn in [_sql_dialect_guide, _types_guide, _performance_guide, _collections_guide]:
+            result = fn()
+            assert isinstance(result, str)
+            assert len(result) > 200
+
+    def test_agent_guide_content_substantive(self):
+        from cubrid_mcp_server.server import _AGENT_GUIDE
+
+        assert len(_AGENT_GUIDE) > 1000
+        assert "SHOW TRACE" in _AGENT_GUIDE
+        assert "LIMIT n OFFSET m" in _AGENT_GUIDE
+        assert "SET" in _AGENT_GUIDE
+        assert "SEQ SCAN" in _AGENT_GUIDE
+        assert "Tool Selection" in _AGENT_GUIDE
+
+    def test_sql_dialect_guide_has_syntax_examples(self):
+        from cubrid_mcp_server.server import _SQL_DIALECT_GUIDE
+
+        assert "LIMIT" in _SQL_DIALECT_GUIDE
+        assert "SYS_DATETIME" in _SQL_DIALECT_GUIDE
+        assert "ON DUPLICATE KEY" in _SQL_DIALECT_GUIDE
+
+    def test_types_guide_covers_collections(self):
+        from cubrid_mcp_server.server import _TYPES_GUIDE
+
+        for type_name in ["SET", "MULTISET", "SEQUENCE", "ENUM", "JSON"]:
+            assert type_name in _TYPES_GUIDE
+
+    def test_performance_guide_has_indicators(self):
+        from cubrid_mcp_server.server import _PERFORMANCE_GUIDE
+
+        assert "SEQ SCAN" in _PERFORMANCE_GUIDE
+        assert "INDEX SCAN" in _PERFORMANCE_GUIDE
+        assert "USING INDEX" in _PERFORMANCE_GUIDE
+
+
+class TestExpertPrompts:
+    """Expert-level workflow prompts (#162)."""
+
+    def test_optimize_query_prompt_returns_guidance(self):
+        from cubrid_mcp_server.server import optimize_query as prompt_fn
+
+        result = prompt_fn("SELECT * FROM users")
+        assert "explain_query" in result.lower()
+        assert "SEQ SCAN" in result
+        assert "index" in result.lower()
+
+    def test_all_expert_prompts_importable(self):
+        from cubrid_mcp_server import server
+
+        for fn_name in [
+            "optimize_query",
+            "migrate_from_mysql",
+            "explore_unknown_db",
+            "safe_data_analysis",
+            "write_cubrid_sql",
+        ]:
+            fn = getattr(server, fn_name, None)
+            assert callable(fn), f"missing prompt function: {fn_name}"
+            result = fn("test") if fn_name != "explore_unknown_db" else fn()
+            assert isinstance(result, str)
+            assert len(result) > 50
+
+    def test_server_instructions_present(self):
+        from cubrid_mcp_server.server import mcp
+
+        assert mcp.instructions is not None
+        assert "CUBRID" in mcp.instructions
+        assert "SHOW TRACE" in mcp.instructions
+
+    def test_tool_descriptions_enriched(self):
+        """Verify CUBRID hints in tool descriptions."""
+        from cubrid_mcp_server.server import execute_query, explain_query, list_indexes
+
+        assert "LIMIT n OFFSET m" in execute_query.__doc__
+        assert "SHOW TRACE" in explain_query.__doc__
+        assert "USING INDEX" in list_indexes.__doc__
+
+
+class TestOracleReviewFixes:
+    """Regression tests for Oracle post-implementation review findings (#162)."""
+
+    def test_limit_syntax_not_claimed_invalid(self):
+        """Oracle: LIMIT offset,count IS supported — guides must not say it fails."""
+        from cubrid_mcp_server.server import _SQL_DIALECT_GUIDE
+
+        assert "also works" in _SQL_DIALECT_GUIDE  # comma form acknowledged
+        assert "Also valid" in _SQL_DIALECT_GUIDE or "also valid" in _SQL_DIALECT_GUIDE
+        assert "will fail" not in _SQL_DIALECT_GUIDE  # no false claim
+
+    def test_now_current_date_acknowledged(self):
+        """Oracle: NOW()/CURRENT_DATE are supported aliases."""
+        from cubrid_mcp_server.server import _SQL_DIALECT_GUIDE
+
+        assert "also works" in _SQL_DIALECT_GUIDE  # NOW() acknowledged
+
+    def test_serial_not_called_type(self):
+        """Oracle: SERIAL is an object, not a type."""
+        from cubrid_mcp_server.server import _AGENT_GUIDE
+
+        assert "SERIAL objects" in _AGENT_GUIDE or "SERIAL` objects" in _AGENT_GUIDE
+
+    def test_optimize_query_no_auto_ddl(self):
+        """Oracle: prompt must not instruct executing CREATE INDEX."""
+        from cubrid_mcp_server.server import optimize_query
+
+        result = optimize_query("SELECT * FROM t")
+        assert "do not execute" in result.lower() or "for human approval" in result.lower()
+
+    def test_write_cubrid_sql_distinguishes_read_write(self):
+        """Oracle: prompt must distinguish read-only vs DML/DDL execution."""
+        from cubrid_mcp_server.server import write_cubrid_sql
+
+        result = write_cubrid_sql("insert a user")
+        assert "read-only" in result.lower() or "do not execute" in result.lower()

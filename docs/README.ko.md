@@ -28,12 +28,14 @@
 
 | 리소스 URI | 설명 |
 |--------------|------|
+| `cubrid://agent-guide` | CUBRID 에이전트 가이드: 구문·타입·성능 |
+| `cubrid://guide/*` | 4개 주제별 가이드: sql-dialect, types, performance, collections |
 | `cubrid://schema` | 전체 스키마 인덱스 (모든 사용자 테이블과 개별 리소스 URI) |
 | `cubrid://schema/{table}` | 테이블별 메타데이터 (컬럼, 기본 키, 인덱스) — `describe_table`과 동일 |
 
 모두 `application/json`을 반환합니다.
 
-### 프롬프트 (Prompts)
+### 프롬프트 (Prompts, 9개)
 
 일반적인 조회 작업을 안내하는 **MCP 프롬프트 템플릿**도 제공합니다. 프롬프트는 **안내 전용**입니다 — 어떤 읽기 전용 도구를 어떤 순서로 호출할지 알려줄 뿐, 데이터베이스에 접근하거나 SQL을 실행하지 않으며, 전달된 인자는 신뢰할 수 없는 데이터로 취급됩니다.
 
@@ -43,6 +45,11 @@
 | `explain_query` | `sql` | `SELECT`/`WITH` 실행 계획 해석 |
 | `inspect_schema` | (없음) | 읽기 전용 도구들로 전체 스키마 개요 작성 |
 | `find_index_candidates` | `table` | 테이블의 인덱스 커버리지 검토 |
+| `optimize_query` | `sql` | 실행계획 분석 및 인덱스 제안 |
+| `migrate_from_mysql` | `sql` | MySQL 구문 변환 |
+| `explore_unknown_db` | (없음) | 처음 보는 DB 체계적 탐색 |
+| `safe_data_analysis` | `question` | 읽기 전용 데이터 분석 |
+| `write_cubrid_sql` | `natural_language` | 자연어 → CUBRID SQL 생성 |
 
 ## 빠른 시작
 

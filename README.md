@@ -29,6 +29,8 @@ Schema metadata is also exposed as read-only [MCP Resources](https://modelcontex
 
 | Resource URI | Description |
 |--------------|-------------|
+| `cubrid://agent-guide` | CUBRID agent guide: dialect, types, performance |
+| `cubrid://guide/*` | 4 topic guides: sql-dialect, types, performance, collections |
 | `cubrid://schema` | Whole-schema index: every user table with its per-table resource URI |
 | `cubrid://schema/{table}` | Per-table metadata (columns, primary key, indexes) — mirrors `describe_table` |
 
