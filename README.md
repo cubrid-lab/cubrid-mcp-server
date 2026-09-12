@@ -6,6 +6,8 @@ A [Model Context Protocol](https://modelcontextprotocol.io) server for [CUBRID](
 
 <!-- mcp-name: io.github.cubrid-lab/cubrid-mcp-server -->
 
+<img src="docs/demo.gif" alt="cubrid-mcp-server demo" width="100%"/>
+
 ## Features
 
 | Tool | Description |
