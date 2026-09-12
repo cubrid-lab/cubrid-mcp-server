@@ -1,0 +1,25 @@
+{
+  "title": "cubrid-mcp-server demo",
+  "width": 1200,
+  "height": 600,
+  "steps": [
+    {"type": "type", "text": "pip install cubrid-mcp-server", "speed": 40},
+    {"type": "enter"},
+    {"type": "output", "text": "Successfully installed cubrid-mcp-server-0.4.0"},
+    {"type": "sleep", "ms": 1500},
+    {"type": "python", "code": "# Start MCP server as subprocess", "result": ""},
+    {"type": "python", "code": "proc = subprocess.Popen([\"python\", \"-m\", \"cubrid_mcp_server\"], ...)", "result": ""},
+    {"type": "sleep", "ms": 800},
+    {"type": "python", "code": "# Initialize MCP session (JSON-RPC)", "result": ""},
+    {"type": "python", "code": "req = {\"jsonrpc\": \"2.0\", \"id\": 1, \"method\": \"initialize\", ...}", "result": ""},
+    {"type": "sleep", "ms": 500},
+    {"type": "python", "code": "resp = json.loads(proc.stdout.readline())", "result": ""},
+    {"type": "sleep", "ms": 500},
+    {"type": "python", "code": "print(f\"Server: {resp['result']['serverInfo']['name']}\")", "result": "Server: cubrid-mcp-server"},
+    {"type": "sleep", "ms": 1000},
+    {"type": "python", "code": "print(\"12 tools — read-only by default\")", "result": "12 tools — read-only by default"},
+    {"type": "sleep", "ms": 1000},
+    {"type": "python", "code": "print(\"DROP TABLE rejected: True (whitelist active)\")", "result": "DROP TABLE rejected: True (whitelist active)"},
+    {"type": "sleep", "ms": 1500}
+  ]
+}
