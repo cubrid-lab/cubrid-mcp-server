@@ -701,7 +701,7 @@ class TestOracleReviewFixes:
 
     def test_limit_syntax_not_claimed_invalid(self):
         """Oracle: LIMIT offset,count IS supported — guides must not say it fails."""
-        from cubrid_mcp_server.server import _AGENT_GUIDE, _SQL_DIALECT_GUIDE
+        from cubrid_mcp_server.server import _SQL_DIALECT_GUIDE
 
         assert "also works" in _SQL_DIALECT_GUIDE  # comma form acknowledged
         assert "Also valid" in _SQL_DIALECT_GUIDE or "also valid" in _SQL_DIALECT_GUIDE
