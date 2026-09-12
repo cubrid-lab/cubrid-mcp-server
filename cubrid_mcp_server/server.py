@@ -350,7 +350,7 @@ def list_class_hierarchy(
 def execute_query(sql: str, connection: str | None = None) -> dict[str, Any]:
     """Execute a read-only SQL statement and return rows, truncated if large.
 
-    CUBRID SQL notes: use LIMIT n OFFSET m (not LIMIT offset, count);
+    CUBRID SQL notes: prefer LIMIT n OFFSET m (comma form also works);
     no RETURNING clause; collection types (SET, MULTISET, SEQUENCE)
     may appear in results — see cubrid://guide/types for interpretation.
     """
@@ -566,14 +566,14 @@ This guide teaches LLM agents how to work effectively with CUBRID.
 | Feature | MySQL/PostgreSQL | CUBRID |
 |---|---|---|
 | Execution plan | `EXPLAIN` | `SHOW TRACE` (use `explain_query` tool) |
-| Row limiting | `LIMIT offset, count` | `LIMIT n OFFSET m` |
+| Row limiting | `LIMIT offset, count` | `LIMIT n OFFSET m` (preferred; comma form also works) |
 | RETURNING clause | Supported (PG) | **Not supported** — use `LAST_INSERT_ID()` |
 | Upsert | `ON DUPLICATE KEY UPDATE` | Supported (same syntax as MySQL) |
 | Merge | `MERGE INTO` | Supported |
 | Replace | `REPLACE INTO` | Supported |
 | Index hints | `USE INDEX`/`FORCE INDEX` | `USING INDEX` (also USE/FORCE) |
 | Auto-increment | `AUTO_INCREMENT` | `AUTO_INCREMENT` (same) |
-| Sequences | `CREATE SEQUENCE` | `SERIAL` type (similar) |
+| Sequences | `CREATE SEQUENCE` | `SERIAL` objects + `AUTO_INCREMENT` columns |
 
 ## Collection Types
 
@@ -600,7 +600,7 @@ or joining on collection columns, you may need to unnest them.
 
 - Check for `SEQ SCAN` in `explain_query` output — indicates full table scan
 - Use `USING INDEX (index_name)` hint to force a specific index
-- Collection columns can be indexed for faster membership checks
+- Collection columns may be indexable depending on CUBRID version and use case
 - Use `table_row_counts` to understand table sizes before complex joins
 
 ## Tool Selection
@@ -618,7 +618,7 @@ or joining on collection columns, you may need to unnest them.
 
 ## Common Pitfalls
 
-1. **LIMIT syntax**: `LIMIT 10 OFFSET 5` is correct; `LIMIT 5, 10` is NOT
+1. **LIMIT syntax**: prefer `LIMIT 10 OFFSET 5`; `LIMIT 5, 10` also works but is less readable
 2. **No RETURNING**: After INSERT, use `SELECT LAST_INSERT_ID()` separately
 3. **DDL auto-commits**: CREATE/ALTER/DROP cannot be rolled back
 4. **Reserved words**: `value`, `count`, `data`, `level` need double quotes
@@ -633,10 +633,10 @@ Key differences from MySQL and PostgreSQL that affect query generation.
 
 ### Row Limiting
 ```sql
--- Correct (CUBRID)
+-- Preferred (CUBRID, clearer intent)
 SELECT * FROM users LIMIT 10 OFFSET 20;
 
--- Wrong (MySQL syntax — will fail)
+-- Also valid (MySQL-compatible comma form)
 SELECT * FROM users LIMIT 20, 10;
 ```
 
@@ -661,8 +661,8 @@ ON DUPLICATE KEY UPDATE name = 'Alice Updated';
 
 ### Date/Time
 ```sql
--- Current timestamp: SYS_DATETIME (not NOW())
--- Current date: SYS_DATE (not CURRENT_DATE)
+-- Current timestamp: SYS_DATETIME (NOW() also works as alias)
+-- Current date: SYS_DATE (CURRENT_DATE also works)
 -- Current time: SYS_TIME
 ```
 
@@ -799,7 +799,7 @@ Use `table_row_counts` to understand data volume:
 
 - **Covering indexes**: Include all SELECT columns in the index
 - **Partitioning**: Range/list partitioning for large tables
-- **Query cache**: CUBRID caches identical query plans automatically
+- **Query optimization**: CUBRID's optimizer generally caches frequently-used plans
 """
 
 _COLLECTIONS_GUIDE = """# CUBRID Collection Types Deep Dive
@@ -834,27 +834,20 @@ CREATE TABLE articles (
 -- Membership test
 SELECT * FROM articles WHERE 'python' IN tags;
 
--- Cardinality (size)
-SELECT id, tags.cardinality() AS tag_count FROM articles;
+-- Size (cardinality function)
+SELECT id, CARDINALITY(tags) AS tag_count FROM articles;
 
--- Intersection
-SELECT id, tags.intersection({'python', 'cubrid'}) FROM articles;
-
--- Union (adds elements)
-SELECT id, tags.union({'new_tag'}) FROM articles;
-
--- Difference (removes elements)
-SELECT id, tags.difference({'old_tag'}) FROM articles;
+-- Set operations use standard SQL set operators
+-- UNION, INTERSECT, EXCEPT work on result sets
+-- For collection columns, use +, -, * operators in UPDATE
 ```
 
 ## Updating Collections
 
 ```sql
--- Add elements
-UPDATE articles SET tags = tags.union({'featured'}) WHERE id = 1;
-
--- Remove elements
-UPDATE articles SET tags = tags.difference({'outdated'}) WHERE id = 1;
+-- Collection column updates use standard SQL
+-- See CUBRID manual for collection update syntax
+-- These are examples — always validate before executing
 ```
 
 ## Indexing Collection Columns
@@ -1033,7 +1026,7 @@ def optimize_query(sql: str) -> str:
         "1. Use the `explain_query` tool to get the execution trace\n"
         "2. Check for SEQ SCAN (full table scan) in the output\n"
         "3. Review the table structure with `describe_table`\n"
-        "4. Suggest specific indexes that would help (CREATE INDEX syntax)\n"
+        "4. Propose specific indexes with CREATE INDEX syntax (for human approval — do not execute)\n"
         "5. If the query uses functions on indexed columns, suggest rewriting\n"
         "6. Consider CUBRID-specific optimizations: index hints, covering indexes\n\n"
         "Present your analysis as:\n"
@@ -1052,16 +1045,17 @@ def migrate_from_mysql(sql: str) -> str:
         f"MySQL query:\n```sql\n{sql}\n```\n\n"
         "Key CUBRID differences to fix:\n"
         "- `LIMIT offset, count` → `LIMIT count OFFSET offset`\n"
-        "- `NOW()` → `SYS_DATETIME()`\n"
-        "- `CURRENT_DATE` → `SYS_DATE`\n"
+        "- `NOW()` works but `SYS_DATETIME()` is CUBRID-native\n"
+        "- `CURRENT_DATE` works but `SYS_DATE` is CUBRID-native\n"
         "- Reserved words need double quotes: value, count, data, level, type, status\n"
         "- No RETURNING clause — use separate SELECT LAST_INSERT_ID()\n"
         "- Boolean → SMALLINT (0/1)\n\n"
         "Steps:\n"
         "1. Identify MySQL-specific syntax in the query\n"
         "2. Convert each to the CUBRID equivalent\n"
-        "3. Validate by running the converted query with `execute_query`\n"
-        "4. If it fails, check for additional differences (see cubrid://guide/sql-dialect)"
+        "3. If the converted query is read-only (SELECT/SHOW/DESC), validate with `execute_query`\n"
+        "4. If it involves DML/DDL, present the SQL for human review — do not execute\n"
+        "5. Check cubrid://guide/sql-dialect for additional differences"
     )
 
 
@@ -1123,8 +1117,9 @@ def write_cubrid_sql(natural_language: str) -> str:
         "Steps:\n"
         "1. Use `describe_table` to understand the relevant schema\n"
         "2. Write the CUBRID-compatible SQL\n"
-        "3. Validate with `execute_query` (read-only)\n"
-        "4. If syntax error, consult cubrid://guide/sql-dialect\n\n"
+        "3. If the SQL is read-only, validate with `execute_query`\n"
+        "4. If it involves DML/DDL, present for human review — do not execute\n"
+        "5. If syntax error, consult cubrid://guide/sql-dialect\n\n"
         "Present: the SQL, explanation of each clause, and any CUBRID-specific choices made."
     )
 

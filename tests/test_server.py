@@ -694,3 +694,41 @@ class TestExpertPrompts:
         assert "LIMIT n OFFSET m" in execute_query.__doc__
         assert "SHOW TRACE" in explain_query.__doc__
         assert "USING INDEX" in list_indexes.__doc__
+
+
+class TestOracleReviewFixes:
+    """Regression tests for Oracle post-implementation review findings (#162)."""
+
+    def test_limit_syntax_not_claimed_invalid(self):
+        """Oracle: LIMIT offset,count IS supported — guides must not say it fails."""
+        from cubrid_mcp_server.server import _AGENT_GUIDE, _SQL_DIALECT_GUIDE
+
+        assert "also works" in _SQL_DIALECT_GUIDE  # comma form acknowledged
+        assert "Also valid" in _SQL_DIALECT_GUIDE or "also valid" in _SQL_DIALECT_GUIDE
+        assert "will fail" not in _SQL_DIALECT_GUIDE  # no false claim
+
+    def test_now_current_date_acknowledged(self):
+        """Oracle: NOW()/CURRENT_DATE are supported aliases."""
+        from cubrid_mcp_server.server import _SQL_DIALECT_GUIDE
+
+        assert "also works" in _SQL_DIALECT_GUIDE  # NOW() acknowledged
+
+    def test_serial_not_called_type(self):
+        """Oracle: SERIAL is an object, not a type."""
+        from cubrid_mcp_server.server import _AGENT_GUIDE
+
+        assert "SERIAL objects" in _AGENT_GUIDE or "SERIAL` objects" in _AGENT_GUIDE
+
+    def test_optimize_query_no_auto_ddl(self):
+        """Oracle: prompt must not instruct executing CREATE INDEX."""
+        from cubrid_mcp_server.server import optimize_query
+
+        result = optimize_query("SELECT * FROM t")
+        assert "do not execute" in result.lower() or "for human approval" in result.lower()
+
+    def test_write_cubrid_sql_distinguishes_read_write(self):
+        """Oracle: prompt must distinguish read-only vs DML/DDL execution."""
+        from cubrid_mcp_server.server import write_cubrid_sql
+
+        result = write_cubrid_sql("insert a user")
+        assert "read-only" in result.lower() or "do not execute" in result.lower()
