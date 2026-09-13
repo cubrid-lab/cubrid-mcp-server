@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Documentation
+- **PyPI badge added to README** — version badge linking to https://pypi.org/project/cubrid-mcp-server/
 - **Demo GIF embedded in README** — programmatic MCP server interaction showing initialize → tools list → read-only whitelist.
 - **CUBRID Skills — domain knowledge + expert prompts (#162)** — the server now ships with a knowledge layer so LLM clients can use CUBRID effectively without prior CUBRID expertise: (1) server instructions sent on connect (CUBRID dialect primer), (2) enriched tool descriptions with CUBRID-specific hints (LIMIT syntax, SHOW TRACE, USING INDEX), (3) five domain-knowledge resources (`cubrid://agent-guide` + 4 topic guides on sql-dialect/types/performance/collections), (4) five expert prompts (`optimize_query`, `migrate_from_mysql`, `explore_unknown_db`, `safe_data_analysis`, `write_cubrid_sql`). 10 new tests. Oracle-validated design.
 - **Oracle post-implementation review fixes**: corrected LIMIT syntax claim (comma form is valid), acknowledged NOW()/CURRENT_DATE as supported aliases, corrected SERIAL nomenclature (objects not types), replaced undocumented collection methods with standard operators, hedged performance claims, added 'for human approval — do not execute' guardrails to DDL suggestions, distinguished read-only vs DML validation in write_cubrid_sql prompt. 5 regression tests added (284 total).

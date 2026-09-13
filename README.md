@@ -1,5 +1,6 @@
 # cubrid-mcp-server
 
+[![PyPI](https://img.shields.io/pypi/v/cubrid-mcp-server.svg)](https://pypi.org/project/cubrid-mcp-server/)
 [![coverage](https://codecov.io/gh/cubrid-lab/cubrid-mcp-server/branch/main/graph/badge.svg)](https://codecov.io/gh/cubrid-lab/cubrid-mcp-server)
 
 A [Model Context Protocol](https://modelcontextprotocol.io) server for [CUBRID](https://www.cubrid.org/), enabling LLMs to safely inspect schemas and execute read-only queries via [pycubrid](https://pypi.org/project/pycubrid/).
