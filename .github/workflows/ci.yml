@@ -10,6 +10,25 @@ permissions:
   contents: read
 
 jobs:
+  # Docs-only / metadata-only PRs skip the live integration matrix; anything
+  # touching the server, tests, deps, or CI runs it.
+  detect-changes:
+    name: Detect changed paths
+    runs-on: ubuntu-latest
+    outputs:
+      code: ${{ steps.filter.outputs.code }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
+        id: filter
+        with:
+          filters: |
+            code:
+              - 'cubrid_mcp_server/**'
+              - 'tests/**'
+              - 'pyproject.toml'
+              - '.github/workflows/**'
+
   lint-and-test:
     runs-on: ubuntu-latest
     strategy:
@@ -82,6 +101,8 @@ jobs:
 
   integration:
     runs-on: ubuntu-latest
+    needs: [detect-changes]
+    if: needs.detect-changes.outputs.code == 'true'
     strategy:
       fail-fast: false
       matrix:
