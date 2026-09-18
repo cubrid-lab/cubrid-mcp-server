@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import re
+from math import isfinite
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 
@@ -75,7 +76,7 @@ def _parse_config(source: Mapping[str, str], prefix: str) -> Config:
         raise ConfigError(
             f"{mcp_prefix}QUERY_TIMEOUT must be a number, got {query_timeout_raw!r}"
         ) from exc
-    if query_timeout <= 0:
+    if not isfinite(query_timeout) or query_timeout <= 0:
         raise ConfigError(f"{mcp_prefix}QUERY_TIMEOUT must be positive")
 
     write_enabled = _parse_bool(source.get(f"{mcp_prefix}WRITE", "0"))

@@ -91,11 +91,15 @@ def test_from_env_query_timeout_default_and_override() -> None:
     assert cfg.query_timeout == 2.5
 
 
-def test_from_env_invalid_query_timeout() -> None:
+def test_from_env_non_numeric_query_timeout() -> None:
     with pytest.raises(ConfigError, match="CUBRID_MCP_QUERY_TIMEOUT"):
         Config.from_env(BASE_ENV | {"CUBRID_MCP_QUERY_TIMEOUT": "soon"})
+
+
+@pytest.mark.parametrize("value", ["nan", "inf", "-1", "0"])
+def test_from_env_non_positive_or_non_finite_query_timeout(value: str) -> None:
     with pytest.raises(ConfigError, match="positive"):
-        Config.from_env(BASE_ENV | {"CUBRID_MCP_QUERY_TIMEOUT": "0"})
+        Config.from_env(BASE_ENV | {"CUBRID_MCP_QUERY_TIMEOUT": value})
 
 
 def test_password_not_in_repr() -> None:
