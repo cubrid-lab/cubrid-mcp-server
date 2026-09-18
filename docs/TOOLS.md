@@ -47,9 +47,9 @@ Multi-statement input is rejected. Binary values are base64-encoded when small a
 
 Returns the execution plan/trace for a `SELECT` or `WITH` statement via CUBRID `SHOW TRACE`. Always read-only, independent of the `CUBRID_MCP_READONLY` flag.
 
-#### `table_row_counts(connection=None, ...)`
+#### `table_row_counts(table_names=None, connection=None)`
 
-`COUNT(*)` for one table or many — cheaper than sampling rows to estimate size.
+`COUNT(*)` for one table or many — cheaper than sampling rows to estimate size. Defaults to all user tables when omitted or `None`; passing an empty list (`[]`) returns an empty result.
 
 ### CUBRID specifics
 
