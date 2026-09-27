@@ -287,6 +287,19 @@ def test_table_row_counts_defaults_to_all(fake_db: FakeDatabase) -> None:
     assert result == [{"table": "users", "row_count": 3}]
 
 
+def test_table_row_counts_explicit_none_defaults_to_all(fake_db: FakeDatabase) -> None:
+    fake_db.queue([("users",)])
+    fake_db.queue([(3,)])
+    result = server.table_row_counts(None)
+    assert result == [{"table": "users", "row_count": 3}]
+
+
+def test_table_row_counts_empty_list_returns_empty(fake_db: FakeDatabase) -> None:
+    fake_db.queue([("users",), ("orders",)])
+    result = server.table_row_counts([])
+    assert result == []
+
+
 def test_list_serials(fake_db: FakeDatabase) -> None:
     fake_db.queue(
         [
