@@ -49,9 +49,9 @@ CUBRID `CLASS` 상속 관계 — 어느 테이블이 어느 테이블을 상속�
 
 CUBRID `SHOW TRACE`를 통해 `SELECT`/`WITH` 문의 실행 계획/트레이스를 반환합니다. `CUBRID_MCP_READONLY` 플래그와 무관하게 항상 읽기 전용입니다.
 
-#### `table_row_counts(connection=None, ...)`
+#### `table_row_counts(table_names=None, connection=None)`
 
-한 테이블 또는 여러 테이블의 `COUNT(*)` — 크기를 추정하려고 행을 샘플링하는 것보다 저렴합니다.
+한 테이블 또는 여러 테이블의 `COUNT(*)` — 크기를 추정하려고 행을 샘플링하는 것보다 저렴합니다. 생략하거나 `None`인 경우 기본적으로 모든 사용자 테이블을 스캔하며, 빈 리스트(`[]`)를 전달하면 빈 결과를 반환합니다.
 
 ### CUBRID 특화
 

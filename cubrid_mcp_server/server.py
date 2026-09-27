@@ -262,10 +262,13 @@ def explain_query(sql: str, connection: str | None = None) -> dict[str, Any]:
 def table_row_counts(
     table_names: list[str] | None = None, connection: str | None = None
 ) -> list[dict[str, Any]]:
-    """Return ``COUNT(*)`` for each table (all user tables by default, capped)."""
+    """Return ``COUNT(*)`` for each table (all user tables by default when omitted/None, capped).
+
+    Passing an empty list (``table_names=[]``) requests zero tables and returns an empty list.
+    """
     known = _all_table_names(connection)
     known_lower = {name.lower(): name for name in known}
-    targets = table_names if table_names else sorted(known)
+    targets = sorted(known) if table_names is None else table_names
     if len(targets) > _MAX_ROW_COUNT_TABLES:
         raise ValueError(
             f"too many tables requested ({len(targets)}); limit is {_MAX_ROW_COUNT_TABLES} per call"
