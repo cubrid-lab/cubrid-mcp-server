@@ -13,6 +13,7 @@ body:
         Python: 3.12
         CUBRID: 11.4 (docker)
         Client: Claude Desktop
+        OS: macOS 15 / Ubuntu 24.04 / Windows 11
     validations:
       required: true
 
@@ -52,20 +53,6 @@ body:
       label: Actual Behavior
       description: Describe what actually happened
       placeholder: What actually happened instead?
-    validations:
-      required: true
-
-  - type: textarea
-    id: environment
-    attributes:
-      label: Environment
-      description: Provide details about your environment
-      placeholder: |
-        - Python version: 3.10
-        - SQLAlchemy version: 2.0.0
-        - CUBRID version: 11.2
-        - cubrid-mcp-server version: 1.4.0
-        - Operating System: Linux/macOS/Windows
     validations:
       required: true
 
