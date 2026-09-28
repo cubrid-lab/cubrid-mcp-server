@@ -1,5 +1,6 @@
-.PHONY: help install lint format typecheck check test integration clean release
+.PHONY: help install lint format typecheck check test integration clean release-check
 
+PYTHON = python3
 PYTEST = python3 -m pytest
 RUFF = ruff
 MYPY = mypy
@@ -33,24 +34,16 @@ integration: ## Run integration tests (requires live CUBRID)
 clean: ## Clean build artifacts
 	rm -rf build/ dist/ *.egg-info .pytest_cache .mypy_cache
 
-# ──────────────────────────────────────────
-# Release: one-command version bump + changelog + commit + tag
-# ──────────────────────────────────────────
-release: ## Create a release commit + tag. Usage: make release VERSION=0.2.2
-	@if [ -z "$(VERSION)" ]; then echo "Usage: make release VERSION=0.2.2"; exit 1; fi
-	@git diff --quiet || { echo "ERROR: Working tree is dirty. Commit or stash first."; exit 1; }
-	@[ "$$(git branch --show-current)" = "main" ] || { echo "ERROR: Must be on main branch."; exit 1; }
-	@CURRENT=$$(python3 -c "from $(SRC) import __version__; print(__version__)" 2>/dev/null) || \
-		{ echo "ERROR: Cannot import $(SRC). Run 'make install' first."; exit 1; }
-	@if [ "$$CURRENT" = "$(VERSION)" ]; then echo "Version is already $(VERSION)"; exit 1; fi
-	@echo "Bumping $$CURRENT → $(VERSION)..."
-	@TODAY=$$(date +%Y-%m-%d) && \
-		perl -pi -e 's/__version__ = ".*"/__version__ = "$(VERSION)"/' $(SRC)/__init__.py && \
-		perl -pi -e "s/## \[Unreleased\]/## [Unreleased]\n\n## [$(VERSION)] - $$TODAY/" CHANGELOG.md
-	@git add $(SRC)/__init__.py CHANGELOG.md
-	@git commit -m "release: v$(VERSION)"
-	@git tag "v$(VERSION)"
-	@echo ""
-	@echo "Done. Review the diff, then push:"
-	@echo "  git push origin main v$(VERSION)"
-	@echo "Then create a GitHub Release to trigger PyPI publish."
+release-check: ## Read-only pre-tag release gate (no commit/tag). Usage: make release-check VERSION=x.y.z
+	@if [ -z "$(VERSION)" ]; then echo "Usage: make release-check VERSION=x.y.z"; exit 1; fi
+	@ACTUAL=$$($(PYTHON) -c 'import ast, pathlib; tree = ast.parse(pathlib.Path("$(SRC)/__init__.py").read_text()); print(next(n.value.value for n in ast.walk(tree) if isinstance(n, ast.Assign) for t in n.targets if isinstance(t, ast.Name) and t.id == "__version__"))') || exit 1; \
+		if [ "$$ACTUAL" != "$(VERSION)" ]; then echo "ERROR: $(SRC).__version__ is $$ACTUAL, expected $(VERSION)"; exit 1; fi; \
+		echo "OK: $(SRC).__version__ == $(VERSION)"
+	@$(PYTHON) -c 'import json, sys; d = json.load(open(".mcpb/server.json")); found = {d["version"]} | {p["version"] for p in d["packages"]}; sys.exit(0) if found == {"$(VERSION)"} else sys.exit("ERROR: .mcpb/server.json versions %s, expected $(VERSION)" % sorted(found))' && \
+		echo "OK: .mcpb/server.json versions == $(VERSION)"
+	$(PYTHON) scripts/lint_changelog.py
+	$(PYTHON) scripts/extract_release_notes.py v$(VERSION)
+	rm -f RELEASE_NOTES.md
+	rm -rf dist
+	$(PYTHON) -m build
+	$(PYTHON) -m twine check dist/*

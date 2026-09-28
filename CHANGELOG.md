@@ -26,6 +26,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### CI
 - Integration tests now run against a CUBRID **11.2 + 11.4 job matrix** (previously 11.2 only), matching the pycubrid/sqlalchemy-cubrid integration matrices and the cookbook smoke matrix.
+- Release workflow unified with pycubrid and sqlalchemy-cubrid: new `RELEASING.md`;
+  `make release` replaced by the read-only `make release-check VERSION=x.y.z` (which also
+  checks the `.mcpb/server.json` versions); `publish-pypi.yml` is manual-dispatch only,
+  requires the GitHub Release + SBOM, and dispatches the cookbook smoke test after a
+  successful publish (replacing `notify-cookbook.yml`).
 
 ### Documentation
 - **CUBRID server license relationship documented; copyright and authors unified (#150)** — `THIRD_PARTY_LICENSES.md` carries the verified upstream licensing statement (server engine Apache-2.0, APIs/connectors BSD per CUBRID's `COPYING` — the often-cited GPL v2+ no longer applies; independent wire-protocol client, Docker image CI-only). LICENSE/NOTICE copyright lines now read `Yeongseon Choe, Gyeongjun Paik` (2025-2026), and `pyproject.toml` lists both primary authors.

@@ -83,7 +83,8 @@ Add an entry under `## [Unreleased]` in
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) style, in the
 appropriate group (`Added` / `Changed` / `Fixed` / `Security`), and reference
 the issue or PR number — match the format of the existing entries. Do **not**
-bump the version yourself; releases are cut with `make release VERSION=x.y.z`.
+bump the version yourself; maintainers cut releases following
+[`RELEASING.md`](RELEASING.md).
 
 ## Commit Style
 
