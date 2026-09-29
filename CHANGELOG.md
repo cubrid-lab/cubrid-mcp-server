@@ -31,6 +31,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   checks the `.mcpb/server.json` versions); `publish-pypi.yml` is manual-dispatch only,
   requires the GitHub Release + SBOM, and dispatches the cookbook smoke test after a
   successful publish (replacing `notify-cookbook.yml`).
+- **PyPI publish fails closed on duplicate files (cubrid-lab/sqlalchemy-cubrid#566)** —
+  `publish-pypi.yml` no longer passes `skip-existing: true`. The new stdlib-only `scripts/pypi_duplicate_guard.py`
+  compares the SHA-256 of every verified file with the file PyPI already serves under the
+  same name: an identical file (a partial upload recovered with `gh run rerun --failed`)
+  is dropped from the upload, and a different hash or an unreachable PyPI fails the job.
+  `RELEASING.md` documents the bounded recovery; offline tests cover the guard.
 
 ### Documentation
 - **CUBRID server license relationship documented; copyright and authors unified (#150)** — `THIRD_PARTY_LICENSES.md` carries the verified upstream licensing statement (server engine Apache-2.0, APIs/connectors BSD per CUBRID's `COPYING` — the often-cited GPL v2+ no longer applies; independent wire-protocol client, Docker image CI-only). LICENSE/NOTICE copyright lines now read `Yeongseon Choe, Gyeongjun Paik` (2025-2026), and `pyproject.toml` lists both primary authors.
