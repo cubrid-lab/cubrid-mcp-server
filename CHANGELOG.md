@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - README gains a **Related Projects** section linking pycubrid, sqlalchemy-cubrid, and cubrid-cookbook-python, matching the sibling packages' READMEs — every cubrid-lab PyPI page now leads to the runnable examples.
 
 ### Fixed
+- **Composite primary key order (#186)** — `describe_table` and the `cubrid://schema/{table}` resource now return `primary_key` in declared key order (`db_index_key.key_order`) instead of table-column order, so it agrees with the primary-key entry in `indexes`. `schema_definitions` is unchanged (table-column order with per-column `primary_key` flags). Verified against live CUBRID 10.2 and 11.4.
 - **Query timeout validation (#175)** — reject non-finite `CUBRID_MCP_QUERY_TIMEOUT` values such as `nan` and `inf` during configuration parsing instead of failing later in the socket layer.
 - **table_row_counts: distinguish empty list from omitted input (#182)** — passing ``table_names=[]`` now returns an empty result instead of scanning all tables; omitting ``table_names`` (or passing ``None``) retains the default behavior of scanning all user tables.
 - **create-release.yml: dropped `--target` from `gh release create`** — with an already-pushed tag (the normal tag-push trigger) `--verify-tag` already guarantees the tag exists, and passing `target_commitish` for an existing tag makes the Releases API return `422 Validation Failed`, so the first tag-triggered run of this workflow always failed. Verified live by the v0.4.0 tag attempt in cubrid-mcp-server.
