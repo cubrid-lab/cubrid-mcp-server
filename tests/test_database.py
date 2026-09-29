@@ -414,3 +414,33 @@ def test_safe_close_cursor_swallows_close_error() -> None:
 
     # Logged, not raised.
     Database._safe_close_cursor(_BadCursor())
+
+
+def test_cursor_creation_failure_is_sanitized_and_discards(
+    patch_connect: list[FakeConnection], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # #180: a failing connection.cursor() must take the same sanitize + discard
+    # recovery path as a failed query instead of escaping raw.
+    db = Database(_TEST_CONFIG)
+    first = db.connect()
+    monkeypatch.setattr(
+        first, "cursor", lambda: _raise(RuntimeError("host=db.internal closed connection"))
+    )
+    with pytest.raises(DatabaseError) as excinfo:
+        db.fetch_all("SELECT 1")
+    assert str(excinfo.value) == "query failed: RuntimeError"
+    assert first.closed is True
+    # The next call reconnects and succeeds.
+    assert db.fetch_all("SELECT 1") == []
+    assert len(patch_connect) == 2
+
+
+def test_cursor_creation_timeout_raises_timeout_error(
+    patch_connect: list[FakeConnection], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    db = Database(_TEST_CONFIG)
+    first = db.connect()
+    monkeypatch.setattr(first, "cursor", lambda: _raise(socket.timeout()))
+    with pytest.raises(QueryTimeoutError):
+        db.fetch_all("SELECT 1")
+    assert first.closed is True

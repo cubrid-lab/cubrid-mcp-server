@@ -183,9 +183,10 @@ class Database:
         """
         with self._lock:
             connection = self.connect()
-            cursor = connection.cursor()
+            cursor: Any = None
             timed_out = False
             try:
+                cursor = connection.cursor()
                 cursor.execute(sql, params or ())
                 affected = int(cursor.rowcount)
                 connection.commit()
@@ -196,11 +197,16 @@ class Database:
                     # block again. _timeout_error discards the connection.
                     timed_out = True
                     raise self._timeout_error(exc) from exc
-                self._rollback_or_discard(connection)
+                if cursor is None:
+                    # Cursor creation itself failed: no statement ran, and a
+                    # connection that cannot open a cursor is not worth reusing.
+                    self._discard_connection()
+                else:
+                    self._rollback_or_discard(connection)
                 logger.error("write failed", exc_info=exc)
                 raise DatabaseError(f"write failed: {sanitize_error(exc)}") from exc
             finally:
-                if not timed_out:
+                if cursor is not None and not timed_out:
                     self._safe_close_cursor(cursor)
 
     def _timeout_error(self, exc: BaseException) -> QueryTimeoutError:
@@ -217,9 +223,12 @@ class Database:
     def cursor(self) -> Iterator[Any]:
         with self._lock:
             connection = self.connect()
-            cursor = connection.cursor()
+            cursor: Any = None
             timed_out = False
             try:
+                # Created inside the try so a cursor-creation failure takes the
+                # same sanitize + discard recovery path as a failed query.
+                cursor = connection.cursor()
                 yield cursor
             except Exception as exc:
                 if _is_timeout_error(exc):
@@ -235,7 +244,7 @@ class Database:
             finally:
                 # After a timeout the connection is already discarded and the
                 # socket is dead; closing the cursor would only block again.
-                if not timed_out:
+                if cursor is not None and not timed_out:
                     self._safe_close_cursor(cursor)
 
     @contextmanager
