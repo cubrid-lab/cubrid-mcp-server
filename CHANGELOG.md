@@ -27,6 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `list_serials` now works on **CUBRID 11.4**: the `db_serial` system catalog renamed its `att_name` column to `attr_name` in 11.4, so the hardcoded query failed there with a semantic error. The column is now resolved once per connection by a zero-row probe against a fixed allowlist and aliased back to `att_name`, keeping the tool's output shape identical on both versions. Found by the new 11.2+11.4 integration matrix.
 
 ### CI
+- **FastMCP canary now reaches pytest (#185)** — `upstream-canary.yml` installed `"fastmcp@latest"`, which pip parses as a direct-URL requirement (`Invalid URL 'latest'`), so the job failed at install and its tests were always skipped. It now runs `pip install --upgrade --force-reinstall fastmcp`, prints the resolved version, then runs the unit tests. The lane explicitly tracks the latest **stable** release (no `--pre`); the stale `<4` pin comment is corrected to the actual `>=3.0,<5` range. The job stays advisory (`continue-on-error: true`).
 - Integration tests now run against a CUBRID **11.2 + 11.4 job matrix** (previously 11.2 only), matching the pycubrid/sqlalchemy-cubrid integration matrices and the cookbook smoke matrix.
 - Release workflow unified with pycubrid and sqlalchemy-cubrid: new `RELEASING.md`;
   `make release` replaced by the read-only `make release-check VERSION=x.y.z` (which also
