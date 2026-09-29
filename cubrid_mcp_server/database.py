@@ -135,9 +135,15 @@ class Database:
         return self._connection
 
     def _discard_connection(self) -> None:
-        """Drop the cached connection, closing it first on a best-effort basis."""
+        """Drop the cached connection, closing it first on a best-effort basis.
+
+        Also forgets the per-connection ``db_serial`` column probe: the next
+        connection may reach a different CUBRID version (e.g. after a broker
+        failover), so it must be re-probed rather than reused.
+        """
         connection = self._connection
         self._connection = None
+        self._serial_attribute_column = None
         if connection is not None:
             try:
                 connection.close()
@@ -145,6 +151,7 @@ class Database:
                 logger.debug("failed to close stale connection: %s", exc)
 
     def close(self) -> None:
+        self._serial_attribute_column = None
         if self._connection is not None:
             try:
                 self._connection.close()
