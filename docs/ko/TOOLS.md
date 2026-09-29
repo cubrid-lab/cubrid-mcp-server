@@ -24,6 +24,8 @@
 
 한 테이블의 전체 메타데이터를 한 번의 호출로 — 컬럼, 기본 키, 인덱스. `cubrid://schema/{table}` 리소스와 동일합니다.
 
+`primary_key`는 키 컬럼을 **선언된 기본 키 순서**(`PRIMARY KEY (...)`에 적은 순서, 즉 CUBRID `db_index_key.key_order`)로 나열하며, `indexes`의 기본 키 항목과 일치합니다. `columns`는 테이블 정의 순서를 유지하고 컬럼별 불리언 `primary_key` 플래그를 가집니다. 기본 키가 없는 테이블은 `"primary_key": []`를 반환합니다.
+
 #### `list_indexes(table_name, connection=None)`
 
 테이블에 정의된 인덱스와 인덱스된 키 컬럼·플래그(유니크, 리버스).

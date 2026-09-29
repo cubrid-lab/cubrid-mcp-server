@@ -168,7 +168,12 @@ def _describe_table(resolved: str, connection: str | None = None) -> dict[str, A
     """
     columns = _schema_definitions(resolved, connection)
     indexes = _list_indexes(resolved, connection)
-    primary_key = [col["name"] for col in columns if col["primary_key"]]
+    # Declared key order comes from the primary-key index (ordered by
+    # db_index_key.key_order), not from table-column order.
+    primary_key = next(
+        ([key["name"] for key in index["columns"]] for index in indexes if index["primary_key"]),
+        [],
+    )
     return {
         "table": resolved,
         "columns": columns,
