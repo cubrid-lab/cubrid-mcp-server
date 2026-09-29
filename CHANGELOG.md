@@ -6,6 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+- Reject empty or blank required host, user, and database environment variables at configuration time. (#177)
 
 ### Documentation
 - **PyPI badge added to README** — version badge linking to https://pypi.org/project/cubrid-mcp-server/
