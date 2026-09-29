@@ -65,6 +65,9 @@ alongside a type label (`bug`/`enhancement`/`documentation`/`chore`/`ci`/…) an
 `area:` label when applicable. These must be GitHub labels, not just text in the
 issue title or body.
 
+Issue titles use the same `type(scope): description` format as pull request
+titles (see [CONTRIBUTING.md](CONTRIBUTING.md#pull-request-and-commit-titles)).
+
 Use the following exact names, with **one space after the colon**:
 
 - Priority: `priority: critical`, `priority: high`, `priority: medium`, `priority: low`.
@@ -108,13 +111,15 @@ Do not mark work complete until code, tests, and documentation are consistent.
 
 ## Commit Convention
 
-```
-<type>: <description>
+Issue titles, pull request titles and commit subjects follow
+[CONTRIBUTING.md - Pull request and commit titles](CONTRIBUTING.md#pull-request-and-commit-titles):
+`type(scope)!: description` with types `feat`, `fix`, `docs`, `test`, `perf`,
+`refactor`, `ci`, `build`, `chore`, `style`, `revert`; English, lowercase start,
+no trailing period, no issue numbers in pull request titles (use `Closes #N` /
+`Refs #N` in the body). Pull requests are squash-merged and the pull request
+title becomes the commit title. The `PR title` check enforces it.
 
-<body>
-```
-
-Types: `feat`, `fix`, `docs`, `chore`, `ci`, `style`, `test`, `refactor`
+There is no `security` type: security fixes use `fix:` plus the `security` label.
 
 ## Related Projects
 
