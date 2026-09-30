@@ -34,17 +34,20 @@ cubrid_mcp_server/
 - `make check` — ruff lint + mypy typecheck
 - `make test` — unit tests (excludes integration)
 - `make integration` — integration tests (requires a live CUBRID)
-- `make release-check VERSION=x.y.z` — read-only pre-tag release gate (no commit/tag)
+- `make release-check VERSION=x.y.z` — read-only release consistency gate (run by `prepare-release.yml` and `release.yml`)
 
 ## Release Process
 
 Version is single-sourced from `cubrid_mcp_server/__init__.py` → `__version__ = "x.y.z"`
 (`pyproject.toml` reads it dynamically; `.mcpb/server.json` mirrors it for the MCP Registry).
-The full maintainer procedure — release PR, `make release-check VERSION=x.y.z`, tagging the
-squash-merged commit, waiting for the tag-triggered `integration-full.yml` +
-`create-release.yml`, the manual `publish-pypi.yml` dispatch, cookbook smoke, and
-recovery — lives in [`RELEASING.md`](RELEASING.md). There is no `make release`; never tag
-a local commit.
+Merging a reviewed release PR is the only normal way to release: `prepare-release.yml`
+opens it (dated CHANGELOG section + `__version__` and `.mcpb/server.json` bump, checked by
+`make release-check VERSION=x.y.z`), and after the squash-merge `release.yml` detects the
+version change and runs consistency → full matrix → build → tag/Release/PyPI → cookbook
+verification → summary on its own. Ordinary PRs never change `__version__` or date a
+CHANGELOG section. Never push tags or publish by hand; the only manual entry point is the
+narrow recovery dispatch of `release.yml`. Procedure, failure matrix and recovery:
+[`RELEASING.md`](RELEASING.md).
 
 ## Development Workflow (cubrid-lab org standard)
 

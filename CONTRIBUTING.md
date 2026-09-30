@@ -150,6 +150,14 @@ Maintainers merge with **squash merge only** and keep the pull request title as
 the commit title. Branch commits are squashed into the commit body, so keep
 their messages meaningful and keep any `Co-authored-by:` trailers intact.
 
+## Releases
+
+Contributors never release. Add user-visible changes under `## [Unreleased]` in
+`CHANGELOG.md`, and do not change `__version__`, the `.mcpb/server.json`
+versions or add a dated `## [X.Y.Z]` section in an ordinary PR: a merged
+version change is what starts an automatic release. Maintainers open release
+PRs with `prepare-release.yml`; see [`RELEASING.md`](RELEASING.md).
+
 ## A Note on stdout
 
 The server speaks the MCP **stdio transport**, so `stdout` carries the JSON-RPC
