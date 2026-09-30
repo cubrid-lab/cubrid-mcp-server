@@ -82,20 +82,73 @@ them are optional — the final `ci-gate` job requires every one to pass:
 Add an entry under `## [Unreleased]` in
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) style, in the
 appropriate group (`Added` / `Changed` / `Fixed` / `Security`), and reference
-the issue or PR number — match the format of the existing entries. Do **not**
+the issue or PR number — match the format of the existing entries. Security
+fixes use a `fix:` title plus the `security` label and go under `Security`. Do **not**
 bump the version yourself; maintainers cut releases following
 [`RELEASING.md`](RELEASING.md).
 
-## Commit Style
+## Pull request and commit titles
 
-This repo uses [Conventional Commits](https://www.conventionalcommits.org/):
+This rule covers issue titles, pull request titles and commit subjects in every
+cubrid-lab repository. Pull requests are squash-merged and the pull request
+title becomes the commit title on `main`, so the pull request title is the one
+that must be right. The `PR title` check enforces it.
 
+```text
+type: description
+type(scope): description
+type!: description
+type(scope)!: description
 ```
-<type>: <description>
+
+- **type** (lowercase, exactly one of): `feat`, `fix`, `docs`, `test`, `perf`,
+  `refactor`, `ci`, `build`, `chore`, `style`, `revert`.
+- **scope** is optional: lowercase letters, digits, `-` or `_`, such as
+  `compiler`, `aio`, `deps` or `release`.
+- **`!`** before the colon marks a breaking change. Follow the repository's
+  release policy for breaking changes as well.
+- Exactly **one space** after the colon.
+- **description**: English and specific (name the function, type or behavior
+  that changed). Start with a lowercase letter unless the first word is an API
+  name, acronym or proper noun. No trailing period.
+- No bracket, status or priority prefixes (`[Bug]`, `[WIP]`, `Track:`,
+  `epic:`, `P1`). Open a draft pull request for unfinished work; priority and
+  size are labels.
+- No issue or pull request numbers in the title. Put `Closes #123` or
+  `Refs #123` in the pull request body. GitHub appends the pull request
+  number, for example `(#456)`, to the squash commit by itself.
+
+| Type | Use for |
+|------|---------|
+| `feat` | A new user-facing capability |
+| `fix` | Corrects wrong behavior, including security fixes |
+| `docs` | Documentation only |
+| `test` | Tests only |
+| `perf` | Faster or lighter with no behavior change |
+| `refactor` | Restructuring with no behavior change |
+| `ci` | CI workflows and their configuration |
+| `build` | Packaging and the build system |
+| `chore` | Maintenance: releases, dependency bumps, housekeeping |
+| `style` | Formatting only |
+| `revert` | Reverts an earlier change; name it in the description |
+
+Examples:
+
+```text
+fix(protocol): keep the CAS session after OUT_TRAN
+feat(aio): add a charset connection option
+docs: document JSON as_numeric() input limits
+chore(deps): bump ruff from 0.16.8 to 0.16.9
+chore: release v1.9.0
+refactor(compiler)!: drop legacy LIMIT rendering
 ```
 
-Types in use: `feat`, `fix`, `docs`, `chore`, `ci`, `style`, `test`,
-`refactor`, `security`.
+Issue forms prefill a type prefix; keep it and write the rest of the title the
+same way. A tracking issue (epic) uses the type of the work it tracks.
+
+Maintainers merge with **squash merge only** and keep the pull request title as
+the commit title. Branch commits are squashed into the commit body, so keep
+their messages meaningful and keep any `Co-authored-by:` trailers intact.
 
 ## A Note on stdout
 
