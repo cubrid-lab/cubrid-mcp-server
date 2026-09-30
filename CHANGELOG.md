@@ -6,8 +6,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
-- Reject empty or blank required host, user, and database environment variables at configuration time. (#177)
-
 ### Documentation
 - **PyPI badge added to README** — version badge linking to https://pypi.org/project/cubrid-mcp-server/
 - **Demo GIF embedded in README** — programmatic MCP server interaction showing initialize → tools list → read-only whitelist.
@@ -20,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - README gains a **Related Projects** section linking pycubrid, sqlalchemy-cubrid, and cubrid-cookbook-python, matching the sibling packages' READMEs — every cubrid-lab PyPI page now leads to the runnable examples.
 
 ### Fixed
+- **Blank required connection values are rejected (#177)** — an empty or whitespace-only `CUBRID_HOST`, `CUBRID_USER`, or `CUBRID_DATABASE` (and the `CUBRID_<NAME>_*` equivalents) now raises `ConfigError` at configuration time, like a missing variable, instead of producing a broken connection config. An empty `CUBRID_PASSWORD` remains allowed.
 - **Query timeout validation (#175)** — reject non-finite `CUBRID_MCP_QUERY_TIMEOUT` values such as `nan` and `inf` during configuration parsing instead of failing later in the socket layer.
 - **table_row_counts: distinguish empty list from omitted input (#182)** — passing ``table_names=[]`` now returns an empty result instead of scanning all tables; omitting ``table_names`` (or passing ``None``) retains the default behavior of scanning all user tables.
 - **create-release.yml: dropped `--target` from `gh release create`** — with an already-pushed tag (the normal tag-push trigger) `--verify-tag` already guarantees the tag exists, and passing `target_commitish` for an existing tag makes the Releases API return `422 Validation Failed`, so the first tag-triggered run of this workflow always failed. Verified live by the v0.4.0 tag attempt in cubrid-mcp-server.
