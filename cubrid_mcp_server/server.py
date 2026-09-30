@@ -17,7 +17,7 @@ from cubrid_mcp_server.audit import AuditLogger
 from cubrid_mcp_server.config import Config, ConfigError, _parse_bool
 from cubrid_mcp_server.context import AppContext
 from cubrid_mcp_server.database import Database, sanitize_error
-from cubrid_mcp_server.safety import ensure_read_only, ensure_write_allowed
+from cubrid_mcp_server.safety import ensure_read_only, ensure_write_allowed, strip_comments
 
 logger = logging.getLogger(__name__)
 
@@ -237,7 +237,8 @@ def explain_query(sql: str, connection: str | None = None) -> dict[str, Any]:
                 f"SQL exceeds maximum length of {config.max_sql_length} characters "
                 f"(CUBRID_MCP_MAX_SQL_LENGTH)"
             )
-        leading = cleaned.split(None, 1)[0].upper()
+        normalized = strip_comments(cleaned).strip()
+        leading = normalized.split(None, 1)[0].upper() if normalized else ""
         if leading not in {"SELECT", "WITH"}:
             raise ValueError("explain_query only accepts SELECT or WITH statements")
         # explain_query is *intentionally* always read-only, regardless of
