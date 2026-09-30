@@ -414,3 +414,87 @@ def test_safe_close_cursor_swallows_close_error() -> None:
 
     # Logged, not raised.
     Database._safe_close_cursor(_BadCursor())
+
+
+def test_cursor_creation_failure_is_sanitized_and_discards(
+    patch_connect: list[FakeConnection], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # #180: a failing connection.cursor() must take the same sanitize + discard
+    # recovery path as a failed query instead of escaping raw.
+    db = Database(_TEST_CONFIG)
+    first = db.connect()
+    monkeypatch.setattr(
+        first, "cursor", lambda: _raise(RuntimeError("host=db.internal closed connection"))
+    )
+    with pytest.raises(DatabaseError) as excinfo:
+        db.fetch_all("SELECT 1")
+    assert str(excinfo.value) == "query failed: RuntimeError"
+    assert first.closed is True
+    # The next call reconnects and succeeds.
+    assert db.fetch_all("SELECT 1") == []
+    assert len(patch_connect) == 2
+
+
+def test_cursor_creation_timeout_raises_timeout_error(
+    patch_connect: list[FakeConnection], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    db = Database(_TEST_CONFIG)
+    first = db.connect()
+    monkeypatch.setattr(first, "cursor", lambda: _raise(socket.timeout()))
+    with pytest.raises(QueryTimeoutError):
+        db.fetch_all("SELECT 1")
+    assert first.closed is True
+
+
+class _SerialProbeConnection(FakeConnection):
+    """Fake connection whose ``db_serial`` exposes only ``column``."""
+
+    def __init__(self, column: str) -> None:
+        super().__init__()
+        self.column = column
+
+    def cursor(self) -> FakeCursor:
+        column = self.column
+        cursor = super().cursor()
+        original_execute = cursor.execute
+
+        def _execute(sql: str, params: tuple[Any, ...] = ()) -> None:
+            original_execute(sql, params)
+            if "db_serial" in sql and f'"{column}"' not in sql:
+                raise RuntimeError("Semantic: unknown column")
+
+        cursor.execute = _execute  # type: ignore[method-assign]
+        return cursor
+
+
+@pytest.mark.parametrize("reset", ["discard", "close"])
+def test_serial_attribute_column_reprobed_after_reconnect(
+    monkeypatch: pytest.MonkeyPatch, reset: str
+) -> None:
+    # #181: first connection reaches 11.2 (att_name); after the connection is
+    # dropped the broker fails over to 11.4 (attr_name) and must be re-probed.
+    backend = {"column": "att_name"}
+    monkeypatch.setattr(pycubrid, "connect", lambda **_k: _SerialProbeConnection(backend["column"]))
+    db = Database(_TEST_CONFIG)
+    assert db.serial_attribute_column() == "att_name"
+    assert db.serial_attribute_column() == "att_name"  # cached while connected
+    if reset == "discard":
+        db._discard_connection()
+    else:
+        db.close()
+    backend["column"] = "attr_name"
+    assert db.serial_attribute_column() == "attr_name"
+
+
+def test_serial_attribute_column_reset_by_failed_query(monkeypatch: pytest.MonkeyPatch) -> None:
+    # A failed query discards the connection through the lazy-recovery path,
+    # which must also drop the cached probe result.
+    backend = {"column": "att_name"}
+    monkeypatch.setattr(pycubrid, "connect", lambda **_k: _SerialProbeConnection(backend["column"]))
+    db = Database(_TEST_CONFIG)
+    assert db.serial_attribute_column() == "att_name"
+    with pytest.raises(DatabaseError):
+        with db.cursor():
+            _raise(ConnectionResetError("broker restarted"))
+    backend["column"] = "attr_name"
+    assert db.serial_attribute_column() == "attr_name"
