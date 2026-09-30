@@ -8,7 +8,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Documentation
-- **Cookbook smoke-test fallback is now pinned** — `RELEASING.md`'s manual `gh workflow run smoke-test.yml -R cubrid-lab/cubrid-cookbook-python` fallback now passes `-f package=cubrid-mcp-server -f version=X.Y.Z`, so it verifies the exact published release instead of testing the cookbook's latest releases (cubrid-lab/cubrid-cookbook-python#179).
 - **PyPI badge added to README** — version badge linking to https://pypi.org/project/cubrid-mcp-server/
 - **Demo GIF embedded in README** — programmatic MCP server interaction showing initialize → tools list → read-only whitelist.
 - **CUBRID Skills — domain knowledge + expert prompts (#162)** — the server now ships with a knowledge layer so LLM clients can use CUBRID effectively without prior CUBRID expertise: (1) server instructions sent on connect (CUBRID dialect primer), (2) enriched tool descriptions with CUBRID-specific hints (LIMIT syntax, SHOW TRACE, USING INDEX), (3) five domain-knowledge resources (`cubrid://agent-guide` + 4 topic guides on sql-dialect/types/performance/collections), (4) five expert prompts (`optimize_query`, `migrate_from_mysql`, `explore_unknown_db`, `safe_data_analysis`, `write_cubrid_sql`). 10 new tests. Oracle-validated design.
@@ -52,8 +51,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   release check, the full `integration-full.yml` matrix (now also a `workflow_call`
   workflow, no longer run on tag pushes), one build with SHA-256 hashes, the annotated
   tag, a draft GitHub Release with SBOM, the PyPI upload through the duplicate guard, and
-  the cookbook verification of that exact version (`scripts/cookbook_wait.py`;
-  "incomplete" without `COOKBOOK_DISPATCH_TOKEN`), with one run summary.
+  the cookbook verification of that exact version, with one run summary. The cookbook
+  smoke test runs inside the release run as a reusable workflow pinned to a cookbook
+  commit, so it needs no cross-repository token or secret; the release fails unless it
+  reports the requested version installed (#206).
   `create-release.yml` and the manual `publish-pypi.yml` are removed; a narrow recovery
   dispatch (`resume`, `verify-only`, `dry-run`) remains. The CHANGELOG stays hand-curated.
   This supersedes the `create-release.yml` and `publish-pypi.yml` details in the entries
