@@ -42,6 +42,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   same name: an identical file (a partial upload recovered with `gh run rerun --failed`)
   is dropped from the upload, and a different hash or an unreachable PyPI fails the job.
   `RELEASING.md` documents the bounded recovery; offline tests cover the guard.
+- **CI: releases happen automatically when a reviewed release PR is merged (#204)** —
+  ported from cubrid-lab/pycubrid#540. `prepare-release.yml` opens the
+  `chore: release vX.Y.Z` PR (moves `[Unreleased]` into a dated section, bumps
+  `__version__` and both `.mcpb/server.json` versions, runs `make release-check`). On every
+  push to `main`, the new `release.yml` decides from git facts only
+  (`scripts/release_detect.py`: version changed against the first parent, dated CHANGELOG
+  section, tag absent or at the same commit) and then runs, pinned to the merge SHA:
+  release check, the full `integration-full.yml` matrix (now also a `workflow_call`
+  workflow, no longer run on tag pushes), one build with SHA-256 hashes, the annotated
+  tag, a draft GitHub Release with SBOM, the PyPI upload through the duplicate guard, and
+  the cookbook verification of that exact version (`scripts/cookbook_wait.py`;
+  "incomplete" without `COOKBOOK_DISPATCH_TOKEN`), with one run summary.
+  `create-release.yml` and the manual `publish-pypi.yml` are removed; a narrow recovery
+  dispatch (`resume`, `verify-only`, `dry-run`) remains. The CHANGELOG stays hand-curated.
+  This supersedes the `create-release.yml` and `publish-pypi.yml` details in the entries
+  above; the duplicate guard and the `.mcpb/server.json` check in `make release-check` stay.
 
 ### Documentation
 - **CUBRID server license relationship documented; copyright and authors unified (#150)** — `THIRD_PARTY_LICENSES.md` carries the verified upstream licensing statement (server engine Apache-2.0, APIs/connectors BSD per CUBRID's `COPYING` — the often-cited GPL v2+ no longer applies; independent wire-protocol client, Docker image CI-only). LICENSE/NOTICE copyright lines now read `Yeongseon Choe, Gyeongjun Paik` (2025-2026), and `pyproject.toml` lists both primary authors.
