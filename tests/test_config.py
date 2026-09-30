@@ -55,9 +55,20 @@ def test_from_env_non_empty_required_values_still_work() -> None:
     assert (cfg.host, cfg.user, cfg.database) == ("localhost", "mcp", "demodb")
 
 
+@pytest.mark.parametrize("value", ["0", "-1", "65536", "99999"])
+def test_from_env_out_of_range_port(value: str) -> None:
+    with pytest.raises(ConfigError, match="CUBRID_PORT must be between 1 and 65535"):
+        Config.from_env(BASE_ENV | {"CUBRID_PORT": value})
+
+
 def test_from_env_invalid_port() -> None:
-    with pytest.raises(ConfigError, match="CUBRID_PORT"):
+    with pytest.raises(ConfigError, match="CUBRID_PORT must be an integer"):
         Config.from_env(BASE_ENV | {"CUBRID_PORT": "not-a-port"})
+
+
+@pytest.mark.parametrize("value", ["1", "33000", "65535"])
+def test_from_env_valid_port_boundaries(value: str) -> None:
+    assert Config.from_env(BASE_ENV | {"CUBRID_PORT": value}).port == int(value)
 
 
 def test_from_env_invalid_max_chars() -> None:

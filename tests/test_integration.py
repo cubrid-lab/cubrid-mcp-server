@@ -89,6 +89,29 @@ class TestCubridIntegration:
         assert desc["table"] == tables[0]
         assert "columns" in desc and "indexes" in desc
 
+    def test_describe_table_composite_pk_declared_order(self) -> None:
+        from cubrid_mcp_server import server
+
+        table = "mcp_it_pk_order"
+        self.db.execute_write(f"DROP TABLE IF EXISTS {table}")
+        self.db.execute_write(
+            f"CREATE TABLE {table} (a INT NOT NULL, b INT NOT NULL, c INT NOT NULL, "
+            f"CONSTRAINT pk_{table} PRIMARY KEY (c, a, b))"
+        )
+        try:
+            desc = server.describe_table(table)
+            assert desc["primary_key"] == ["c", "a", "b"]
+            pk_index = next(i for i in desc["indexes"] if i["primary_key"])
+            assert [k["name"] for k in pk_index["columns"]] == ["c", "a", "b"]
+            cols = server.schema_definitions(table)
+            assert [(c["name"], c["primary_key"]) for c in cols] == [
+                ("a", True),
+                ("b", True),
+                ("c", True),
+            ]
+        finally:
+            self.db.execute_write(f"DROP TABLE IF EXISTS {table}")
+
     def test_schema_definitions_unknown_table_raises(self) -> None:
         from cubrid_mcp_server import server
 

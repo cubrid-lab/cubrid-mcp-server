@@ -1,8 +1,15 @@
 name: Feature Request
 description: Suggest a new feature or enhancement
-title: "[Feature]: "
+title: "feat: "
 labels: ["enhancement"]
 body:
+  - type: markdown
+    attributes:
+      value: |
+        Keep the `feat:` title prefix and finish the title in English, for example
+        `feat: add a table DDL inspection tool`. You do not need to apply
+        labels; maintainers assign priority and size after triage.
+
   - type: textarea
     id: problem
     attributes:
