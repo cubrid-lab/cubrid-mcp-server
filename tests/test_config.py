@@ -43,6 +43,13 @@ def test_from_env_missing_required(missing_key: str) -> None:
         Config.from_env(env)
 
 
+@pytest.mark.parametrize("key", ["CUBRID_HOST", "CUBRID_USER", "CUBRID_DATABASE"])
+@pytest.mark.parametrize("value", ["", "   "])
+def test_from_env_blank_required(key: str, value: str) -> None:
+    with pytest.raises(ConfigError, match=key):
+        Config.from_env(BASE_ENV | {key: value})
+
+
 def test_from_env_invalid_port() -> None:
     with pytest.raises(ConfigError, match="CUBRID_PORT"):
         Config.from_env(BASE_ENV | {"CUBRID_PORT": "not-a-port"})
