@@ -44,7 +44,8 @@ Merging a reviewed release PR is the only normal way to release: `prepare-releas
 opens it (dated CHANGELOG section + `__version__` and `.mcpb/server.json` bump, checked by
 `make release-check VERSION=x.y.z`), and after the squash-merge `release.yml` detects the
 version change and runs consistency → full matrix → build → tag/Release/PyPI → cookbook
-verification → summary on its own. Ordinary PRs never change `__version__` or date a
+verification (the cookbook smoke test called as a pinned reusable workflow, no token) →
+summary on its own. Ordinary PRs never change `__version__` or date a
 CHANGELOG section. Never push tags or publish by hand; the only manual entry point is the
 narrow recovery dispatch of `release.yml`. Procedure, failure matrix and recovery:
 [`RELEASING.md`](RELEASING.md).
