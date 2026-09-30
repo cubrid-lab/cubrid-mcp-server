@@ -62,7 +62,9 @@ def bump_server_json(text: str, version: str, path: str) -> tuple[str, str]:
         fields = [data] + list(data["packages"])
         found = {entry["version"] for entry in fields}
     except (ValueError, TypeError, KeyError) as exc:
-        raise PrepareError(f"{path}: expected a top-level and a packages[] version ({exc!r})")
+        raise PrepareError(
+            f"{path}: expected a top-level and a packages[] version ({exc!r})"
+        ) from exc
     if len(fields) < 2 or len(found) != 1 or not all(isinstance(value, str) for value in found):
         raise PrepareError(
             f"{path}: expected one version string in version and packages[].version, "

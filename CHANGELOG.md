@@ -56,6 +56,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   "incomplete" without `COOKBOOK_DISPATCH_TOKEN`), with one run summary.
   `create-release.yml` and the manual `publish-pypi.yml` are removed; a narrow recovery
   dispatch (`resume`, `verify-only`, `dry-run`) remains. The CHANGELOG stays hand-curated.
+  This supersedes the `create-release.yml` and `publish-pypi.yml` details in the entries
+  above; the duplicate guard and the `.mcpb/server.json` check in `make release-check` stay.
 
 ### Documentation
 - **CUBRID server license relationship documented; copyright and authors unified (#150)** — `THIRD_PARTY_LICENSES.md` carries the verified upstream licensing statement (server engine Apache-2.0, APIs/connectors BSD per CUBRID's `COPYING` — the often-cited GPL v2+ no longer applies; independent wire-protocol client, Docker image CI-only). LICENSE/NOTICE copyright lines now read `Yeongseon Choe, Gyeongjun Paik` (2025-2026), and `pyproject.toml` lists both primary authors.
