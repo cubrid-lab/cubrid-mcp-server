@@ -62,6 +62,8 @@ def _parse_config(source: Mapping[str, str], prefix: str) -> Config:
         port = int(port_raw)
     except ValueError as exc:
         raise ConfigError(f"{prefix}PORT must be an integer, got {port_raw!r}") from exc
+    if not 1 <= port <= 65535:
+        raise ConfigError(f"{prefix}PORT must be between 1 and 65535, got {port}")
 
     readonly = _parse_bool(source.get(f"{mcp_prefix}READONLY", "1"))
 
