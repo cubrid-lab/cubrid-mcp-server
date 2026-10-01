@@ -224,13 +224,29 @@ def test_explain_query_uses_trace(monkeypatch: pytest.MonkeyPatch) -> None:
         "/* investigate */ WITH x AS (SELECT 1) SELECT * FROM x",
     ],
 )
-def test_explain_query_accepts_leading_comments(
-    sql: str, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_explain_query_accepts_leading_comments(sql: str, monkeypatch: pytest.MonkeyPatch) -> None:
     fake = FakeConnDatabase()
     monkeypatch.setattr(server, "_context", AppContext.single(config=_TEST_CONFIG, database=fake))
     result = server.explain_query(sql)
     assert result["sql"] == sql
+
+
+@pytest.mark.parametrize(
+    "sql",
+    [
+        "-- only a comment",
+        "/* c */",
+        "/* SELECT */ DELETE FROM t",
+    ],
+)
+def test_explain_query_rejects_comment_only_and_commented_writes(
+    sql: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        server, "_context", AppContext.single(config=_TEST_CONFIG, database=FakeConnDatabase())
+    )
+    with pytest.raises(ValueError):
+        server.explain_query(sql)
 
 
 def test_explain_query_rejects_non_select(monkeypatch: pytest.MonkeyPatch) -> None:
