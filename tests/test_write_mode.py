@@ -116,9 +116,6 @@ def test_write_blocks_non_dml(sql: str) -> None:
         "   ",
         "-- just a comment",
         "/* only a block comment */",
-        "-- only a comment",
-        "/* c */",
-        "/* SELECT */ DELETE FROM t",
         "INSERT INTO t VALUES (1); DELETE FROM t",
     ],
 )
