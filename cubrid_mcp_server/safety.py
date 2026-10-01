@@ -113,7 +113,7 @@ def ensure_write_allowed(sql: str) -> None:
     if not sql or not sql.strip():
         raise UnsafeSQLError("empty SQL statement")
 
-    sql = _strip_comments(sql)
+    sql = strip_comments(sql)
 
     statements = [stmt for stmt in sqlparse.parse(sql) if _is_non_empty(stmt)]
     if len(statements) == 0:
