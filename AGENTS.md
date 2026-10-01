@@ -34,17 +34,21 @@ cubrid_mcp_server/
 - `make check` — ruff lint + mypy typecheck
 - `make test` — unit tests (excludes integration)
 - `make integration` — integration tests (requires a live CUBRID)
-- `make release-check VERSION=x.y.z` — read-only pre-tag release gate (no commit/tag)
+- `make release-check VERSION=x.y.z` — read-only release consistency gate (run by `prepare-release.yml` and `release.yml`)
 
 ## Release Process
 
 Version is single-sourced from `cubrid_mcp_server/__init__.py` → `__version__ = "x.y.z"`
 (`pyproject.toml` reads it dynamically; `.mcpb/server.json` mirrors it for the MCP Registry).
-The full maintainer procedure — release PR, `make release-check VERSION=x.y.z`, tagging the
-squash-merged commit, waiting for the tag-triggered `integration-full.yml` +
-`create-release.yml`, the manual `publish-pypi.yml` dispatch, cookbook smoke, and
-recovery — lives in [`RELEASING.md`](RELEASING.md). There is no `make release`; never tag
-a local commit.
+Merging a reviewed release PR is the only normal way to release: `prepare-release.yml`
+opens it (dated CHANGELOG section + `__version__` and `.mcpb/server.json` bump, checked by
+`make release-check VERSION=x.y.z`), and after the squash-merge `release.yml` detects the
+version change and runs consistency → full matrix → build → tag/Release/PyPI → cookbook
+verification (the cookbook smoke test called as a pinned reusable workflow, no token) →
+summary on its own. Ordinary PRs never change `__version__` or date a
+CHANGELOG section. Never push tags or publish by hand; the only manual entry point is the
+narrow recovery dispatch of `release.yml`. Procedure, failure matrix and recovery:
+[`RELEASING.md`](RELEASING.md).
 
 ## Development Workflow (cubrid-lab org standard)
 
@@ -64,6 +68,9 @@ When creating an issue in **any cubrid-lab repository**, assign exactly one
 alongside a type label (`bug`/`enhancement`/`documentation`/`chore`/`ci`/…) and an
 `area:` label when applicable. These must be GitHub labels, not just text in the
 issue title or body.
+
+Issue titles use the same `type(scope): description` format as pull request
+titles (see [CONTRIBUTING.md](CONTRIBUTING.md#pull-request-and-commit-titles)).
 
 Use the following exact names, with **one space after the colon**:
 
@@ -108,13 +115,16 @@ Do not mark work complete until code, tests, and documentation are consistent.
 
 ## Commit Convention
 
-```
-<type>: <description>
+Issue titles, pull request titles and commit subjects follow
+[CONTRIBUTING.md - Pull request and commit titles](CONTRIBUTING.md#pull-request-and-commit-titles):
+`type(scope)!: description` with types `feat`, `fix`, `docs`, `test`, `perf`,
+`refactor`, `ci`, `build`, `chore`, `style`, `revert`; English, lowercase start
+unless the first word is an API name, acronym, or proper noun; no trailing
+period, no issue numbers in pull request titles (use `Closes #N` /
+`Refs #N` in the body). Pull requests are squash-merged and the pull request
+title becomes the commit title. The `PR title` check enforces it.
 
-<body>
-```
-
-Types: `feat`, `fix`, `docs`, `chore`, `ci`, `style`, `test`, `refactor`
+There is no `security` type: security fixes use `fix:` plus the `security` label.
 
 ## Related Projects
 

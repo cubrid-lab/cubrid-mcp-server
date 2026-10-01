@@ -20,18 +20,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - **Accept leading comments in `explain_query` (#178)** — SELECT/WITH statements now use the same comment normalization as the read-only safety checker before the leading-token gate.
+- **Blank required connection values are rejected (#177)** — an empty or whitespace-only `CUBRID_HOST`, `CUBRID_USER`, or `CUBRID_DATABASE` (and the `CUBRID_<NAME>_*` equivalents) now raises `ConfigError` at configuration time, like a missing variable, instead of producing a broken connection config. An empty `CUBRID_PASSWORD` remains allowed.
+- **Port range validation (#176)** — `CUBRID_PORT` (and `CUBRID_<NAME>_PORT`) must now be an integer in the TCP port range `1..65535`; out-of-range values such as `0` or `65536` raise `ConfigError` at configuration time instead of failing later at connect time.
+- **`db_serial` column probe is reset on reconnect (#181)** — the cached `att_name`/`attr_name` probe result used by `list_serials` is now cleared whenever the connection is discarded or closed, so a reconnect that lands on a different CUBRID version (e.g. 11.2 → 11.4 after a broker failover) re-probes instead of reusing the stale column name.
+- **Cursor-creation failures take the normal recovery path (#180)** — `connection.cursor()` is now created inside the recovery block of both `Database.cursor()` and `execute_write()`, so a failure opening a cursor (e.g. on a connection the broker already closed) is surfaced as a sanitized `DatabaseError` (or `QueryTimeoutError`) and the unusable connection is discarded so the next call reconnects, instead of escaping raw and leaving the dead connection cached.
+- **Composite primary key order (#186)** — `describe_table` and the `cubrid://schema/{table}` resource now return `primary_key` in declared key order (`db_index_key.key_order`) instead of table-column order, so it agrees with the primary-key entry in `indexes`. `schema_definitions` is unchanged (table-column order with per-column `primary_key` flags). Verified against live CUBRID 10.2 and 11.4.
 - **Query timeout validation (#175)** — reject non-finite `CUBRID_MCP_QUERY_TIMEOUT` values such as `nan` and `inf` during configuration parsing instead of failing later in the socket layer.
 - **table_row_counts: distinguish empty list from omitted input (#182)** — passing ``table_names=[]`` now returns an empty result instead of scanning all tables; omitting ``table_names`` (or passing ``None``) retains the default behavior of scanning all user tables.
 - **create-release.yml: dropped `--target` from `gh release create`** — with an already-pushed tag (the normal tag-push trigger) `--verify-tag` already guarantees the tag exists, and passing `target_commitish` for an existing tag makes the Releases API return `422 Validation Failed`, so the first tag-triggered run of this workflow always failed. Verified live by the v0.4.0 tag attempt in cubrid-mcp-server.
 - `list_serials` now works on **CUBRID 11.4**: the `db_serial` system catalog renamed its `att_name` column to `attr_name` in 11.4, so the hardcoded query failed there with a semantic error. The column is now resolved once per connection by a zero-row probe against a fixed allowlist and aliased back to `att_name`, keeping the tool's output shape identical on both versions. Found by the new 11.2+11.4 integration matrix.
 
 ### CI
+- **FastMCP canary now reaches pytest (#185)** — `upstream-canary.yml` installed `"fastmcp@latest"`, which pip parses as a direct-URL requirement (`Invalid URL 'latest'`), so the job failed at install and its tests were always skipped. It now runs `pip install --upgrade --force-reinstall fastmcp`, prints the resolved version, then runs the unit tests. The lane explicitly tracks the latest **stable** release (no `--pre`); the stale `<4` pin comment is corrected to the actual `>=3.0,<5` range. The job stays advisory (`continue-on-error: true`).
 - Integration tests now run against a CUBRID **11.2 + 11.4 job matrix** (previously 11.2 only), matching the pycubrid/sqlalchemy-cubrid integration matrices and the cookbook smoke matrix.
 - Release workflow unified with pycubrid and sqlalchemy-cubrid: new `RELEASING.md`;
   `make release` replaced by the read-only `make release-check VERSION=x.y.z` (which also
   checks the `.mcpb/server.json` versions); `publish-pypi.yml` is manual-dispatch only,
   requires the GitHub Release + SBOM, and dispatches the cookbook smoke test after a
   successful publish (replacing `notify-cookbook.yml`).
+- **PyPI publish fails closed on duplicate files (cubrid-lab/sqlalchemy-cubrid#566)** —
+  `publish-pypi.yml` no longer passes `skip-existing: true`. The new stdlib-only `scripts/pypi_duplicate_guard.py`
+  compares the SHA-256 of every verified file with the file PyPI already serves under the
+  same name: an identical file (a partial upload recovered with `gh run rerun --failed`)
+  is dropped from the upload, and a different hash or an unreachable PyPI fails the job.
+  `RELEASING.md` documents the bounded recovery; offline tests cover the guard.
+- **CI: releases happen automatically when a reviewed release PR is merged (#204)** —
+  ported from cubrid-lab/pycubrid#540. `prepare-release.yml` opens the
+  `chore: release vX.Y.Z` PR (moves `[Unreleased]` into a dated section, bumps
+  `__version__` and both `.mcpb/server.json` versions, runs `make release-check`). On every
+  push to `main`, the new `release.yml` decides from git facts only
+  (`scripts/release_detect.py`: version changed against the first parent, dated CHANGELOG
+  section, tag absent or at the same commit) and then runs, pinned to the merge SHA:
+  release check, the full `integration-full.yml` matrix (now also a `workflow_call`
+  workflow, no longer run on tag pushes), one build with SHA-256 hashes, the annotated
+  tag, a draft GitHub Release with SBOM, the PyPI upload through the duplicate guard, and
+  the cookbook verification of that exact version, with one run summary. The cookbook
+  smoke test runs inside the release run as a reusable workflow pinned to a cookbook
+  commit, so it needs no cross-repository token or secret; the release fails unless it
+  reports the requested version installed (#206).
+  `create-release.yml` and the manual `publish-pypi.yml` are removed; a narrow recovery
+  dispatch (`resume`, `verify-only`, `dry-run`) remains. The CHANGELOG stays hand-curated.
+  This supersedes the `create-release.yml` and `publish-pypi.yml` details in the entries
+  above; the duplicate guard and the `.mcpb/server.json` check in `make release-check` stay.
 
 ### Documentation
 - **CUBRID server license relationship documented; copyright and authors unified (#150)** — `THIRD_PARTY_LICENSES.md` carries the verified upstream licensing statement (server engine Apache-2.0, APIs/connectors BSD per CUBRID's `COPYING` — the often-cited GPL v2+ no longer applies; independent wire-protocol client, Docker image CI-only). LICENSE/NOTICE copyright lines now read `Yeongseon Choe, Gyeongjun Paik` (2025-2026), and `pyproject.toml` lists both primary authors.

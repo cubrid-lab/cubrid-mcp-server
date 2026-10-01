@@ -22,6 +22,8 @@ Column-level metadata for one table: column name, type, nullability, default val
 
 Full metadata for one table in a single call — columns, primary key, and indexes. Mirrors the `cubrid://schema/{table}` resource.
 
+`primary_key` lists the key columns in **declared primary-key order** (the order in `PRIMARY KEY (...)`, i.e. CUBRID's `db_index_key.key_order`), matching the primary-key entry in `indexes`. `columns` stays in table-definition order, with a per-column boolean `primary_key` flag. A table without a primary key returns `"primary_key": []`.
+
 #### `list_indexes(table_name, connection=None)`
 
 Indexes defined on a table, with the indexed key columns and flags (unique, reverse).

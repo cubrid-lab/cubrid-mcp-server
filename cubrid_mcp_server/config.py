@@ -57,11 +57,22 @@ def _parse_config(source: Mapping[str, str], prefix: str) -> Config:
     except KeyError as missing:
         raise ConfigError(f"missing required environment variable: {missing.args[0]}") from None
 
+    required = {
+        f"{prefix}HOST": host,
+        f"{prefix}USER": user,
+        f"{prefix}DATABASE": database,
+    }
+    for key, value in required.items():
+        if not value.strip():
+            raise ConfigError(f"missing required environment variable: {key}")
+
     port_raw = source.get(f"{prefix}PORT", "33000")
     try:
         port = int(port_raw)
     except ValueError as exc:
         raise ConfigError(f"{prefix}PORT must be an integer, got {port_raw!r}") from exc
+    if not 1 <= port <= 65535:
+        raise ConfigError(f"{prefix}PORT must be between 1 and 65535, got {port}")
 
     readonly = _parse_bool(source.get(f"{mcp_prefix}READONLY", "1"))
 
