@@ -234,6 +234,9 @@ class _FakeConnDB:
         "SELECT 1;",
         "WITH cte AS (SELECT 1) SELECT * FROM cte",
         "with cte as (select 1) select * from cte",
+        "-- investigate\nSELECT 1",
+        "/* c */ SELECT 1",
+        "/* c */ WITH x AS (SELECT 1) SELECT * FROM x",
     ],
 )
 def test_explain_query_accepts_select_and_with(sql: str, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -251,6 +254,7 @@ def test_explain_query_accepts_select_and_with(sql: str, monkeypatch: pytest.Mon
         "INSERT INTO users VALUES (1)",
         "UPDATE users SET x=1",
         "DELETE FROM users",
+        "/* not a select */ DROP TABLE users",
     ],
 )
 def test_explain_query_rejects_writes(sql: str, monkeypatch: pytest.MonkeyPatch) -> None:
