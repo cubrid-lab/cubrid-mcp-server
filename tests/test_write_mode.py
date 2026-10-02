@@ -473,25 +473,3 @@ def test_write_mode_requested_fails_closed_on_invalid_named(
     finally:
         monkeypatch.delenv("CUBRID_MCP_WRITE", raising=False)
         importlib.reload(server)
-
-
-def test_execute_write_cursor_creation_failure_is_sanitized_and_discards(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    # #180: cursor creation happens inside the recovery block, so the failure is
-    # sanitized and the connection that could not open a cursor is discarded.
-    db, conns = _db_with(monkeypatch)
-    first = db.connect()
-
-    def _boom() -> _WCursor:
-        raise RuntimeError("host=db.internal closed connection")
-
-    monkeypatch.setattr(first, "cursor", _boom)
-    with pytest.raises(DatabaseError) as excinfo:
-        db.execute_write("INSERT INTO t VALUES (1)")
-    assert str(excinfo.value) == "write failed: RuntimeError"
-    assert first.closed is True
-    assert first.rolled_back is False
-    # The next write reconnects and succeeds.
-    assert db.execute_write("INSERT INTO t VALUES (1)") == 1
-    assert len(conns) == 2

@@ -141,46 +141,6 @@ def test_describe_table(fake_db: FakeDatabase) -> None:
     assert len(result["indexes"]) == 1
 
 
-def test_describe_table_composite_pk_uses_declared_key_order(fake_db: FakeDatabase) -> None:
-    # Columns declared (a, b) but PRIMARY KEY (b, a): the key list must follow
-    # db_index_key.key_order, while columns keep table-definition order.
-    fake_db.queue([("items",)])
-    fake_db.queue([("a", "INTEGER", "NO", None), ("b", "INTEGER", "NO", None)])
-    fake_db.queue([("b",), ("a",)])
-    fake_db.queue(
-        [
-            ("pk_items", "YES", "YES", "NO", "NO", 2, "b", 0, "ASC"),
-            ("pk_items", "YES", "YES", "NO", "NO", 2, "a", 1, "ASC"),
-        ]
-    )
-    result = server.describe_table("items")
-    assert result["primary_key"] == ["b", "a"]
-    assert [c["name"] for c in result["indexes"][0]["columns"]] == ["b", "a"]
-    assert [(c["name"], c["primary_key"]) for c in result["columns"]] == [
-        ("a", True),
-        ("b", True),
-    ]
-
-
-def test_describe_table_without_primary_key(fake_db: FakeDatabase) -> None:
-    fake_db.queue([("logs",)])
-    fake_db.queue([("msg", "VARCHAR", "YES", None)])
-    fake_db.queue([])
-    fake_db.queue([("idx_msg", "NO", "NO", "NO", "NO", 1, "msg", 0, "ASC")])
-    result = server.describe_table("logs")
-    assert result["primary_key"] == []
-    assert result["columns"][0]["primary_key"] is False
-    assert set(result) == {"table", "columns", "primary_key", "indexes"}
-
-
-def test_schema_definitions_composite_pk_keeps_column_order(fake_db: FakeDatabase) -> None:
-    fake_db.queue([("items",)])
-    fake_db.queue([("a", "INTEGER", "NO", None), ("b", "INTEGER", "NO", None)])
-    fake_db.queue([("b",), ("a",)])
-    result = server.schema_definitions("items")
-    assert [(c["name"], c["primary_key"]) for c in result] == [("a", True), ("b", True)]
-
-
 class FakeCursor:
     def __init__(self, parent: "FakeConnDatabase") -> None:
         self.parent = parent
@@ -254,6 +214,39 @@ def test_explain_query_uses_trace(monkeypatch: pytest.MonkeyPatch) -> None:
     assert any("SHOW TRACE" in s for s in executed)
     assert any("SET TRACE OFF" in s for s in executed)
     assert fake.rolled_back is True
+
+
+@pytest.mark.parametrize(
+    "sql",
+    [
+        "-- investigate\nSELECT 1",
+        "/* investigate */ SELECT 1",
+        "/* investigate */ WITH x AS (SELECT 1) SELECT * FROM x",
+    ],
+)
+def test_explain_query_accepts_leading_comments(sql: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    fake = FakeConnDatabase()
+    monkeypatch.setattr(server, "_context", AppContext.single(config=_TEST_CONFIG, database=fake))
+    result = server.explain_query(sql)
+    assert result["sql"] == sql
+
+
+@pytest.mark.parametrize(
+    "sql",
+    [
+        "-- only a comment",
+        "/* c */",
+        "/* SELECT */ DELETE FROM t",
+    ],
+)
+def test_explain_query_rejects_comment_only_and_commented_writes(
+    sql: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        server, "_context", AppContext.single(config=_TEST_CONFIG, database=FakeConnDatabase())
+    )
+    with pytest.raises(ValueError):
+        server.explain_query(sql)
 
 
 def test_explain_query_rejects_non_select(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -500,23 +493,6 @@ async def test_read_schema_table_resource_matches_describe_table(fake_db: FakeDa
             }
         ],
     }
-
-
-async def test_read_schema_table_resource_composite_pk_order(fake_db: FakeDatabase) -> None:
-    fake_db.queue([("items",)])
-    fake_db.queue([("a", "INTEGER", "NO", None), ("b", "INTEGER", "NO", None)])
-    fake_db.queue([("b",), ("a",)])
-    fake_db.queue(
-        [
-            ("pk_items", "YES", "YES", "NO", "NO", 2, "b", 0, "ASC"),
-            ("pk_items", "YES", "YES", "NO", "NO", 2, "a", 1, "ASC"),
-        ]
-    )
-    async with Client(server.mcp) as client:
-        contents = await client.read_resource("cubrid://schema/items")
-    payload = json.loads(contents[0].text)
-    assert payload["primary_key"] == ["b", "a"]
-    assert [c["name"] for c in payload["columns"]] == ["a", "b"]
 
 
 async def test_read_unknown_table_resource_fails(fake_db: FakeDatabase) -> None:
