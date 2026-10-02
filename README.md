@@ -280,6 +280,18 @@ export CUBRID_HOST=localhost CUBRID_USER=dba CUBRID_PASSWORD="" CUBRID_DATABASE=
 pytest -m integration
 ```
 
+The live shared-session concurrency regression can also be run on its own:
+
+```bash
+pytest tests/test_integration.py::TestCubridIntegration::test_concurrent_tool_calls_serialize_shared_session -q
+```
+
+It starts simultaneous in-process `explain_query` and `execute_query` calls on
+the same cached Database connection: the query must wait until the real trace
+context releases the existing RLock. It verifies independent responses, session
+reuse and cursor cleanup. This is not a test of MCP stdio transport concurrency,
+connection pooling or per-request transaction isolation.
+
 ## Related Projects
 
 - [pycubrid](https://github.com/cubrid-lab/pycubrid) — Pure-Python DB-API 2.0 driver this server is built on

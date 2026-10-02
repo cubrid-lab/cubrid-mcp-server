@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Tests
+- **Live shared-session concurrency regression (#211)** — two simultaneous in-process tool calls now verify that `execute_query` waits while `explain_query` owns the real `SET TRACE` context on the cached Database connection. The test checks distinct responses, connection reuse and closure of every real cursor, including trace cleanup. It exercises the existing serialized RLock model, not MCP stdio concurrency, a connection pool or per-request transaction isolation. No runtime change.
+
 ### Documentation
 - **PyPI badge added to README** — version badge linking to https://pypi.org/project/cubrid-mcp-server/
 - **Demo GIF embedded in README** — programmatic MCP server interaction showing initialize → tools list → read-only whitelist.

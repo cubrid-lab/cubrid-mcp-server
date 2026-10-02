@@ -249,6 +249,18 @@ export CUBRID_HOST=localhost CUBRID_USER=dba CUBRID_PASSWORD="" CUBRID_DATABASE=
 pytest -m integration
 ```
 
+실제 서버를 사용하는 공유 세션 동시 호출 회귀 테스트만 실행할 수도 있습니다:
+
+```bash
+pytest tests/test_integration.py::TestCubridIntegration::test_concurrent_tool_calls_serialize_shared_session -q
+```
+
+같은 캐시된 Database 연결에서 `explain_query`와 `execute_query`를 프로세스
+내에서 동시에 호출합니다. 쿼리는 실제 트레이스 컨텍스트가 기존 RLock을 해제할
+때까지 기다려야 합니다. 독립적인 응답, 세션 재사용 및 커서 정리를 확인하며,
+MCP stdio 전송의 동시성, 커넥션 풀 또는 요청별 트랜잭션 격리를 검증하는 것은
+아닙니다.
+
 ## 고지
 
 > 이 프로젝트는 CUBRID 개발자 도구를 위한 독립 오픈소스 이니셔티브인 [CUBRID Lab](https://github.com/cubrid-lab)의 일부이며, CUBRID Corporation 또는 공식 CUBRID 프로젝트와 제휴, 후원, 보증 관계가 없습니다.
