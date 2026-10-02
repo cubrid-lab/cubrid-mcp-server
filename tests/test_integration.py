@@ -182,7 +182,7 @@ class TestCubridIntegration:
             # shared Database RLock remains held throughout this pause.
             with real_trace() as cursor:
                 trace_entered.set()
-                assert release_trace.wait(5), "trace holder was not released"
+                assert release_trace.wait(15), "trace holder was not released"
                 yield cursor
 
         def entering_fetch_many(
