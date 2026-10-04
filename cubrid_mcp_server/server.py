@@ -242,7 +242,8 @@ def explain_query(sql: str, connection: str | None = None) -> dict[str, Any]:
                 f"SQL exceeds maximum length of {config.max_sql_length} characters "
                 f"(CUBRID_MCP_MAX_SQL_LENGTH)"
             )
-        normalized = strip_comments(cleaned).strip()\n        leading = normalized.split(None, 1)[0].upper() if normalized else ""
+        normalized = strip_comments(cleaned).strip()
+        leading = normalized.split(None, 1)[0].upper() if normalized else ""
         if leading not in {"SELECT", "WITH"}:
             raise ValueError("explain_query only accepts SELECT or WITH statements")
         # explain_query is *intentionally* always read-only, regardless of
