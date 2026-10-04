@@ -168,7 +168,12 @@ def _describe_table(resolved: str, connection: str | None = None) -> dict[str, A
     """
     columns = _schema_definitions(resolved, connection)
     indexes = _list_indexes(resolved, connection)
-    primary_key = [col["name"] for col in columns if col["primary_key"]]
+    # Declared key order comes from the primary-key index (ordered by
+    # db_index_key.key_order), not from table-column order.
+    primary_key = next(
+        ([key["name"] for key in index["columns"]] for index in indexes if index["primary_key"]),
+        [],
+    )
     return {
         "table": resolved,
         "columns": columns,
@@ -237,8 +242,7 @@ def explain_query(sql: str, connection: str | None = None) -> dict[str, Any]:
                 f"SQL exceeds maximum length of {config.max_sql_length} characters "
                 f"(CUBRID_MCP_MAX_SQL_LENGTH)"
             )
-        normalized = strip_comments(cleaned).strip()
-        leading = normalized.split(None, 1)[0].upper() if normalized else ""
+        normalized = strip_comments(cleaned).strip()\n        leading = normalized.split(None, 1)[0].upper() if normalized else ""
         if leading not in {"SELECT", "WITH"}:
             raise ValueError("explain_query only accepts SELECT or WITH statements")
         # explain_query is *intentionally* always read-only, regardless of
