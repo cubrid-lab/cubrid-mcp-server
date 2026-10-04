@@ -259,7 +259,7 @@ def test_explain_query_uses_trace(monkeypatch: pytest.MonkeyPatch) -> None:
 @pytest.mark.parametrize(
     "sql",
     [
-        "-- investigate\\nSELECT 1",
+        "-- investigate\nSELECT 1",
         "/* investigate */ SELECT 1",
         "/* investigate */ WITH x AS (SELECT 1) SELECT * FROM x",
     ],
