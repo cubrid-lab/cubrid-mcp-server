@@ -7,6 +7,11 @@ Requires CUBRID_HOST, CUBRID_USER, CUBRID_PASSWORD, CUBRID_DATABASE env vars.
 from __future__ import annotations
 
 import os
+from collections.abc import Iterator
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
+from contextlib import contextmanager
+from threading import Event
+from typing import Any
 
 import pytest
 
@@ -149,6 +154,69 @@ class TestCubridIntegration:
 
         explain = server.explain_query("SELECT COUNT(*) FROM db_class")
         assert "plan" in explain
+
+    def test_concurrent_tool_calls_serialize_shared_session(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A contending query cannot interleave with a real trace session."""
+        import pycubrid
+
+        from cubrid_mcp_server import server
+
+        connection = self.db.connect()
+        generation = getattr(connection, "_physical_generation", None)
+        trace_entered, query_entered, release_trace = Event(), Event(), Event()
+        cursors: list[Any] = []
+        real_cursor = connection.cursor
+        real_trace = self.db.trace_enabled
+        real_fetch_many = self.db.fetch_many
+
+        def record_cursor() -> Any:
+            cursor = real_cursor()
+            cursors.append(cursor)
+            return cursor
+
+        @contextmanager
+        def hold_trace() -> Iterator[Any]:
+            # Enter the real context first: SET TRACE ON has executed and the
+            # shared Database RLock remains held throughout this pause.
+            with real_trace() as cursor:
+                trace_entered.set()
+                assert release_trace.wait(15), "trace holder was not released"
+                yield cursor
+
+        def entering_fetch_many(
+            sql: str, params: tuple[Any, ...] | None = None, max_rows: int | None = None
+        ) -> tuple[list[tuple[Any, ...]], bool]:
+            query_entered.set()
+            return real_fetch_many(sql, params, max_rows)
+
+        monkeypatch.setattr(connection, "cursor", record_cursor)
+        monkeypatch.setattr(self.db, "trace_enabled", hold_trace)
+        monkeypatch.setattr(self.db, "fetch_many", entering_fetch_many)
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            try:
+                tracing = pool.submit(server.explain_query, "SELECT 1")
+                assert trace_entered.wait(5), "explain_query did not enter trace context"
+                querying = pool.submit(server.execute_query, "SELECT 2")
+                assert query_entered.wait(5), "execute_query did not reach the database"
+                with pytest.raises(FutureTimeoutError):
+                    querying.result(timeout=0.25)
+                assert len(cursors) == 1, "query acquired a cursor during the trace context"
+            finally:
+                release_trace.set()
+            explain = tracing.result(timeout=10)
+            query = querying.result(timeout=10)
+
+        assert explain["sql"] == "SELECT 1"
+        assert isinstance(explain["plan"], str) and explain["plan"]
+        assert query == {"row_count": 1, "truncated": False, "rows": [[2]]}
+        assert self.db.connect() is connection
+        assert getattr(connection, "_physical_generation", None) == generation
+        assert len(cursors) == 3, "trace, trace cleanup and query each own one cursor"
+        for cursor in cursors:
+            with pytest.raises(pycubrid.InterfaceError):
+                cursor.fetchone()
 
     def test_list_serials_tool(self) -> None:
         from cubrid_mcp_server import server
