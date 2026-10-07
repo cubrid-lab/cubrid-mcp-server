@@ -10,31 +10,68 @@ permissions:
   contents: read
 
 jobs:
-  # Docs-only / metadata-only PRs skip the live integration matrix; anything
-  # touching the server, tests, deps, or CI runs it.
-  detect-changes:
-    name: Detect changed paths
+  # Tiered validation (#223). `classify` turns the event and the changed paths
+  # into explicit scopes (scripts/ci_scope.py); every lane below runs only when
+  # its scope is selected, and `ci-gate` requires each selected lane to succeed.
+  #   docs  docs/metadata-only PR: changelog lint only, no unit job, no CUBRID
+  #   pr    ordinary PR: Python 3.12 unit lane + risk-selected lanes (one default
+  #         live CUBRID 11.4 lane for runtime/test changes, lowest-direct for
+  #         dependency metadata, Python/CUBRID endpoints for compatibility changes)
+  #   full  push to main, dispatch, or a CI-policy change: Python 3.11/3.12/3.14,
+  #         CUBRID 11.2 + 11.4 and lowest-direct
+  # The full Python x CUBRID matrix runs in integration-full.yml (weekly + release).
+  classify:
+    name: Classify changes
     runs-on: ubuntu-latest
     outputs:
-      code: ${{ steps.filter.outputs.code }}
+      tier: ${{ steps.scope.outputs.tier }}
+      unit: ${{ steps.scope.outputs.unit }}
+      python: ${{ steps.scope.outputs.python }}
+      lowest: ${{ steps.scope.outputs.lowest }}
+      live: ${{ steps.scope.outputs.live }}
+      cubrid: ${{ steps.scope.outputs.cubrid }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
-        id: filter
         with:
-          filters: |
-            code:
-              - 'cubrid_mcp_server/**'
-              - 'tests/**'
-              - 'pyproject.toml'
-              - '.github/workflows/**'
+          # A PR checks out its merge commit; its first parent is the base tip.
+          fetch-depth: 2
+          persist-credentials: false
+
+      - name: Classify validation scopes
+        id: scope
+        env:
+          EVENT: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT" = "pull_request" ]; then
+            # Diff the tested merge tree against its base. --no-renames lists both
+            # sides of a move so a file leaving the runtime tree still counts;
+            # core.quotePath=false keeps non-ASCII paths unquoted for matching.
+            git rev-parse --verify HEAD^2 >/dev/null
+            git -c core.quotePath=false diff --no-renames --name-only HEAD^1 HEAD > "$RUNNER_TEMP/changed.txt"
+            echo "Changed paths:"
+            cat "$RUNNER_TEMP/changed.txt"
+          else
+            : > "$RUNNER_TEMP/changed.txt"
+          fi
+          python3 scripts/ci_scope.py --event "$EVENT" < "$RUNNER_TEMP/changed.txt" > "$RUNNER_TEMP/scope.txt"
+          cat "$RUNNER_TEMP/scope.txt"
+          cat "$RUNNER_TEMP/scope.txt" >> "$GITHUB_OUTPUT"
+          {
+            echo "### CI validation scope"
+            echo '```'
+            cat "$RUNNER_TEMP/scope.txt"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
   lint-and-test:
     runs-on: ubuntu-latest
+    needs: [classify]
+    if: needs.classify.outputs.unit == 'true'
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.11", "3.12", "3.13", "3.14"]
+        python-version: ${{ fromJSON(needs.classify.outputs.python) }}
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -68,7 +105,7 @@ jobs:
           --cov-report=xml
 
       - name: Upload coverage to Codecov
-        if: matrix.python-version == '3.11' && github.actor != 'dependabot[bot]'
+        if: matrix.python-version == '3.12' && github.actor != 'dependabot[bot]'
         uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
@@ -80,8 +117,11 @@ jobs:
 
   lowest-direct:
     # Verify the project works against the lowest versions of its direct
-    # dependencies allowed by the version specifiers in pyproject.toml.
+    # dependencies allowed by the version specifiers in pyproject.toml. Runs on
+    # dependency-metadata PRs and on every push to main.
     runs-on: ubuntu-latest
+    needs: [classify]
+    if: needs.classify.outputs.lowest == 'true'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -101,12 +141,12 @@ jobs:
 
   integration:
     runs-on: ubuntu-latest
-    needs: [detect-changes]
-    if: needs.detect-changes.outputs.code == 'true'
+    needs: [classify]
+    if: needs.classify.outputs.live == 'true'
     strategy:
       fail-fast: false
       matrix:
-        cubrid: ["11.2", "11.4"]
+        cubrid: ${{ fromJSON(needs.classify.outputs.cubrid) }}
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -176,13 +216,45 @@ jobs:
     # Single required status check that aggregates every CI job so branch
     # protection can gate merges (including Dependabot auto-merge) on one
     # stable context instead of brittle matrix-specific job names.
+    #
+    # Fail-closed: `classify` and `changelog-lint` must succeed, and every lane
+    # must succeed unless `classify` explicitly marked it not applicable
+    # (output exactly "false"). A failed, cancelled or unexpectedly skipped job,
+    # or a missing classification, fails the gate.
     if: always()
-    needs: [lint-and-test, lowest-direct, integration, changelog-lint]
+    needs: [classify, lint-and-test, lowest-direct, integration, changelog-lint]
     runs-on: ubuntu-latest
     steps:
       - name: Verify all required jobs succeeded
+        env:
+          TIER: ${{ needs.classify.outputs.tier }}
+          CLASSIFY_RESULT: ${{ needs.classify.result }}
+          UNIT_RESULT: ${{ needs.lint-and-test.result }}
+          UNIT_WANTED: ${{ needs.classify.outputs.unit }}
+          LOWEST_RESULT: ${{ needs.lowest-direct.result }}
+          LOWEST_WANTED: ${{ needs.classify.outputs.lowest }}
+          LIVE_RESULT: ${{ needs.integration.result }}
+          LIVE_WANTED: ${{ needs.classify.outputs.live }}
+          CHANGELOG_RESULT: ${{ needs.changelog-lint.result }}
         run: |
-          if [ "${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}" = "true" ]; then
+          fail=0
+          check() {
+            # $1 job, $2 result, $3 "false" only when classification skips it
+            if [ "$2" = "success" ]; then
+              echo "ok      $1"
+            elif [ "$2" = "skipped" ] && [ "$3" = "false" ]; then
+              echo "skipped $1 (not applicable for tier '$TIER')"
+            else
+              echo "::error::$1 result '$2' (required: '$3')"
+              fail=1
+            fi
+          }
+          check classify "$CLASSIFY_RESULT" required
+          check lint-and-test "$UNIT_RESULT" "$UNIT_WANTED"
+          check lowest-direct "$LOWEST_RESULT" "$LOWEST_WANTED"
+          check integration "$LIVE_RESULT" "$LIVE_WANTED"
+          check changelog-lint "$CHANGELOG_RESULT" required
+          if [ "$fail" -ne 0 ]; then
             echo "One or more required CI jobs failed."
             exit 1
           fi
