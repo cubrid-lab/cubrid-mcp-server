@@ -73,9 +73,9 @@ lanes run:
 | Change | Unit lane (ruff, mypy, pytest + coverage) | `lowest-direct` | Live CUBRID integration |
 |---|---|---|---|
 | Docs/metadata only (`*.md`, `docs/`, `LICENSE`, `NOTICE`, `llms.txt`, `mkdocs.yml`) | — | — | — |
-| Tooling (`scripts/`, `Makefile`, `codecov.yml`, `.mcpb/`, `glama.json`, `.github/dependabot.yml`, issue templates, `demos/`) | Python 3.12 | — | — |
+| Tooling (`scripts/`, `Makefile`, `codecov.yml`, `.gitignore`, `.mcpb/`, `glama.json`, `.github/dependabot.yml`, issue templates, `demos/`) | Python 3.12 | — | — |
 | Runtime or tests (`cubrid_mcp_server/`, `tests/`) | Python 3.12 | — | CUBRID 11.4 |
-| Connection / catalog SQL (`database.py`, `context.py`, `tests/test_integration.py`) | Python 3.12 | — | CUBRID 11.2 + 11.4 |
+| Connection / catalog SQL (`database.py`, `context.py`, `tests/conftest.py`, `tests/test_integration.py`) | Python 3.12 | — | CUBRID 11.2 + 11.4 |
 | Other workflows (`.github/workflows/*` except `ci.yml`) | Python 3.11, 3.12, 3.14 | — | CUBRID 11.2 + 11.4 |
 | Dependency metadata (`pyproject.toml`) | Python 3.11, 3.12, 3.14 | yes | CUBRID 11.2 + 11.4 |
 | CI policy (`ci.yml`, `scripts/ci_scope.py`, `tests/test_ci_scope.py`), push to `main`, manual dispatch | Python 3.11, 3.12, 3.14 | yes | CUBRID 11.2 + 11.4 |

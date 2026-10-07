@@ -81,6 +81,7 @@ def test_ordinary_runtime_pr_gets_one_python_and_one_cubrid(path: str) -> None:
     [
         "cubrid_mcp_server/database.py",
         "cubrid_mcp_server/context.py",
+        "tests/conftest.py",
         "tests/test_integration.py",
     ],
 )
@@ -360,3 +361,21 @@ def test_release_still_gates_on_the_full_matrix() -> None:
     release = load("release.yml")
     assert release["jobs"]["matrix"]["uses"] == "./.github/workflows/integration-full.yml"
     assert "matrix" in release["jobs"]["build"]["needs"]
+
+
+def test_classify_lists_unquoted_paths_on_both_sides_of_a_rename() -> None:
+    run = CI["jobs"]["classify"]["steps"][1]["run"]
+    assert "git -c core.quotePath=false diff --no-renames --name-only HEAD^1 HEAD" in run
+    assert pr("docs/한국어.md")["tier"] == "docs"
+    assert pr("cubrid_mcp_server/한국어.py")["live"] is True
+
+
+def test_cli_works_without_docstrings() -> None:
+    result = subprocess.run(
+        [sys.executable, "-OO", str(SCRIPT), "--event", "push"],
+        input="",
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert result.stdout.splitlines()[0] == "tier=full"

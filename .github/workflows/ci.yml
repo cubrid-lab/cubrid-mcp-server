@@ -45,9 +45,10 @@ jobs:
           set -euo pipefail
           if [ "$EVENT" = "pull_request" ]; then
             # Diff the tested merge tree against its base. --no-renames lists both
-            # sides of a move so a file leaving the runtime tree still counts.
+            # sides of a move so a file leaving the runtime tree still counts;
+            # core.quotePath=false keeps non-ASCII paths unquoted for matching.
             git rev-parse --verify HEAD^2 >/dev/null
-            git diff --no-renames --name-only HEAD^1 HEAD > "$RUNNER_TEMP/changed.txt"
+            git -c core.quotePath=false diff --no-renames --name-only HEAD^1 HEAD > "$RUNNER_TEMP/changed.txt"
             echo "Changed paths:"
             cat "$RUNNER_TEMP/changed.txt"
           else

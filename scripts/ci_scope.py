@@ -39,6 +39,7 @@ COMPAT = (".github/workflows/*",)
 LIVE_ENDPOINTS = (
     "cubrid_mcp_server/database.py",
     "cubrid_mcp_server/context.py",
+    "tests/conftest.py",
     "tests/test_integration.py",
 )
 # Runtime and tests: unit plus one default live CUBRID lane.
@@ -126,7 +127,7 @@ def render(scope: dict[str, object]) -> str:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = argparse.ArgumentParser(description="Classify CI validation scopes (#223)")
     parser.add_argument("--event", required=True, help="github.event_name")
     args = parser.parse_args(argv)
     sys.stdout.write(render(classify(args.event, sys.stdin.read().splitlines())))
