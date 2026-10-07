@@ -4,7 +4,7 @@
 
 ## Key facts
 
-- Requires Python 3.10 or newer and uses the MCP stdio transport.
+- Requires Python 3.11 or newer and uses the MCP stdio transport.
 - Connects to CUBRID through `pycubrid`; connection settings come from `CUBRID_HOST`, `CUBRID_PORT`, `CUBRID_USER`, `CUBRID_PASSWORD`, and `CUBRID_DATABASE`.
 - Exposes schema inspection, index and serial discovery, class hierarchy, query planning, row counts, and bounded SQL query execution.
 - Supports Claude Desktop, Claude Code, Cursor, and other MCP clients that can launch a local stdio server.

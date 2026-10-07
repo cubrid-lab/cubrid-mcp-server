@@ -11,7 +11,7 @@ This document only adds what is repo-specific; it does not repeat the org guide.
 
 ## Prerequisites
 
-- Python 3.10 or later
+- Python 3.11 or later
 - Git
 - Docker (only needed for the integration tests)
 

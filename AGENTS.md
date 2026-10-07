@@ -24,7 +24,7 @@ cubrid_mcp_server/
 
 ## Code Conventions
 
-- Python 3.10+, fully typed (`py.typed`); keep `mypy` and `ruff` clean.
+- Python 3.11+, fully typed (`py.typed`); keep `mypy` and `ruff` clean.
 - **All logging MUST be routed to stderr.** stdout is reserved for the MCP protocol stream — never print to stdout.
 - Read-only safety is a core invariant: any change touching `safety.py` / query execution must preserve read-only enforcement and ship tests.
 

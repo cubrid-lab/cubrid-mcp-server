@@ -38,7 +38,7 @@ for the v0.3.x tracking epic. Items under consideration:
 
 ## Compatibility
 
-Python 3.10+, CUBRID 11.2 (exercised in the integration CI job).
+Python 3.11+, CUBRID 11.2 (exercised in the integration CI job).
 
 ## Completed
 
