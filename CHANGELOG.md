@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Python 3.11 is now the minimum supported version (#221)** — `requires-python` is `>=3.11` (Python 3.10 reached upstream end of life on 2026-10-01); the 3.10 classifier is removed, Ruff targets `py311` and mypy `3.11`. Python 3.14 is added to the classifiers and the unit/full-integration matrices after the offline suite (459 tests), Ruff and mypy passed on 3.14. The `lowest-direct` job and Codecov upload moved to 3.11; lowest-direct resolves FastMCP 3.0.0, pycubrid 1.4.0 and sqlparse 0.5.0 and passes. No MCP, SQL-safety, timeout or audit behavior changes; direct dependency floors are unchanged.
+
+### Upgrade notes
+- **Python 3.10 users** must either upgrade to Python 3.11 or later, or stay on the last cubrid-mcp-server release that supports 3.10 together with a driver release compatible with 3.10. Newer pycubrid lines (1.10+) do not support Python 3.10, and this project does not imply otherwise.
+
 ### Tests
 - **Live shared-session concurrency regression (#211)** — two simultaneous in-process tool calls now verify that `execute_query` waits while `explain_query` owns the real `SET TRACE` context on the cached Database connection. The test checks distinct responses, connection reuse and closure of every real cursor, including trace cleanup. It exercises the existing serialized RLock model, not MCP stdio concurrency, a connection pool or per-request transaction isolation. No runtime change.
 
