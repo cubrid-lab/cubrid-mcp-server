@@ -61,13 +61,58 @@ All non-trivial work MUST follow this cycle:
 
 Trivial changes (typos, single-line fixes) may skip phases 1 and 4.
 
+Maintainers coordinate Oracle/Codex/agent tooling, integration evidence, release
+classification, labels and the final review record. Outside contributors provide
+ordinary motivation, code, tests and affected docs; internal Oracle/agent setup or
+access is not a prerequisite for proposing a contribution.
+
+## Issue specification and ownership
+
+An issue body is the current work specification, not a session transcript. Before
+implementing a non-trivial issue, ensure it states the problem and impact, evidence
+with a revision/environment, reproduction steps or the investigation question,
+expected behavior, scope/non-goals, relevant files, verifiable completion criteria,
+validation method and real dependencies. Say "not verified" when evidence is missing;
+never invent a reproduction, result, release availability or test command. Small
+docs tasks need only the applicable fields.
+
+- Put dated progress, pause/resume notes and review outcomes in comments. Keep
+  historical evidence in the body with its original revision/date and evidence limits.
+- Set the actual implementer in GitHub Assignees before implementation. Comments
+  alone do not replace assignment. On handoff, update Assignees and preserve the
+  contributor's evidence and open PRs; agree the handoff before changing ownership.
+- Reconcile stale dependencies and checklists before closing. A merged child or
+  upstream PR is not proof of integrated acceptance or of a released dependency.
+- This server has SQL-safety, write-mode, audit and MCP protocol invariants: stdout
+  is reserved for the MCP protocol (logs go to stderr), read-only is the default with
+  opt-in write safety, audit output stays redacted, timeout/cancellation and
+  connection cleanup are preserved, and releases follow the guarded flow. Changes
+  must not weaken them.
+
+## Agent PR scope and review guardrails
+
+- Before editing, record one acceptance contract, affected files, non-goals and the
+  validation plan. Keep each PR to one independently reviewable change.
+- AI severity is not authority to expand scope. Out-of-scope findings become
+  separate issues unless the maintainer explicitly expands the contract.
+- Default to two published AI review rounds per scoped PR/task (initial review plus
+  one corrective re-review). Further rounds or scope expansion require explicit
+  maintainer direction.
+- Never merge with unresolved critical/security defects or failed required CI. Keep
+  incomplete work Draft and report blockers and a proposed split.
+- Preserve contributor history. Do not repeatedly re-review an external PR until its
+  author updates the head.
+
 ## Issue Labeling (cubrid-lab org standard)
 
-When creating an issue in **any cubrid-lab repository**, assign exactly one
-`priority: <value>` label and exactly one `size: <value>` label at creation time,
-alongside a type label (`bug`/`enhancement`/`documentation`/`chore`/`ci`/…) and an
+Maintainers and triagers own the canonical priority/size policy. When creating or
+triaging an issue in **any cubrid-lab repository** (including authorized agents acting
+for maintainers), assign exactly one `priority: <value>` label and exactly one
+`size: <value>` label, alongside a type label (`bug`/`enhancement`/`documentation`/`chore`/`ci`/…) and an
 `area:` label when applicable. These must be GitHub labels, not just text in the
-issue title or body.
+issue title or body. Outside reporters only describe urgency and effort and do not
+need label-write permission; maintainer-created issues are labeled at creation and
+permissionless reports during initial maintainer triage.
 
 Issue titles use the same `type(scope): description` format as pull request
 titles (see [CONTRIBUTING.md](CONTRIBUTING.md#pull-request-and-commit-titles)).
@@ -104,6 +149,19 @@ Rules:
 3. **`good first issue` should be `size: XS` or `size: S`.** If a good-first-issue grows
    past `size: S`, re-scope it or drop the `good first issue` label.
 4. **`size: XL` is a signal to split**, not a green light to start a sprawling change.
+
+### Good first issue lifecycle
+
+- Do not implement a `good first issue` unless a maintainer authorizes that specific
+  issue; broad backlog or release requests are not authorization.
+- Unclaimed: `good first issue`. A PR is opened for it: remove `good first issue`,
+  add `status: in progress`. PR merged: the issue closes.
+- PR closed without merging: restore `good first issue` (and drop
+  `status: in progress`) only if no other open PR owns the issue.
+- Keep at least 3 genuinely unclaimed good first issues, each XS/S with a small
+  blast radius and a reference pattern to follow.
+- A release-blocker handoff requires an explicit maintainer decision after checking
+  assignment, comments and open PRs.
 
 ## Documentation definition of done
 
