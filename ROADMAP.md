@@ -11,11 +11,18 @@
 - 🗂️ [Org Project Board](https://github.com/orgs/cubrid-lab/projects/2)
 - 🌐 [Ecosystem Roadmap](https://github.com/cubrid-lab/.github/blob/main/ROADMAP.md)
 
-## Current Baseline — v0.2.1
+## Current Baseline
+
+The latest published release is listed on
+[PyPI](https://pypi.org/project/cubrid-mcp-server/) and in the
+[CHANGELOG](CHANGELOG.md); the baseline below summarizes current behavior.
 
 - MCP server (stdio transport) exposing eleven read-only tools for schema
   inspection and query execution over the pure-Python
-  [pycubrid](https://pypi.org/project/pycubrid/) driver.
+  [pycubrid](https://pypi.org/project/pycubrid/) driver, with named multiple
+  connections ([MULTI_CONNECTION](docs/MULTI_CONNECTION.md)).
+- Opt-in write mode: `execute_write` is registered only when write mode is
+  enabled, every write is audited, and per-connection audit logging is available.
 - Read-only by default: a code-level SQL whitelist allows only `SELECT`, `SHOW`,
   `DESC`, `DESCRIBE`, `EXPLAIN`, and `WITH`, rejects multi-statement input, and
   is backed by a database user with `SELECT`-only grants.
@@ -24,23 +31,26 @@
 - All logging is routed to `stderr` so it cannot corrupt the stdio protocol
   stream on `stdout`.
 
-_See **Completed** for the per-release history._
+_See the [CHANGELOG](CHANGELOG.md) for the per-release history; **Completed** below
+covers the early releases._
 
 ## Future
 
 Direction is set by the maintainers ([@paikend](https://github.com/paikend),
-[@yeongseon](https://github.com/yeongseon)); see [issue #23](https://github.com/cubrid-lab/cubrid-mcp-server/issues/23)
-for the v0.3.x tracking epic. Items under consideration:
+[@yeongseon](https://github.com/yeongseon)); see the [milestones](https://github.com/cubrid-lab/cubrid-mcp-server/milestones)
+for current tracking. Items under consideration:
 
-- First PyPI release so the server can be run with `uvx` / `pipx`.
 - Additional read-only introspection tools (constraints, triggers, statistics).
-- Optional per-request connection context / multi-database support.
 
 ## Compatibility
 
-Python 3.11+, CUBRID 11.2 (exercised in the integration CI job).
+Python 3.11+. CI exercises Python 3.11–3.14 against CUBRID 10.2, 11.0, 11.2 and 11.4;
+see [`CONTRIBUTING.md`](CONTRIBUTING.md) for the per-change validation scope and
+`.github/workflows/integration-full.yml` for the full matrix.
 
 ## Completed
+
+Releases after v0.2.1 are recorded in the [CHANGELOG](CHANGELOG.md).
 
 ### v0.2.1
 - Read-only checker scans the full token stream and rejects allowed keywords
