@@ -112,4 +112,4 @@ You should receive an acknowledgement within three business days. Coordinated di
 
 ## Supported versions
 
-The project is in early development (`0.2.x`). Only the latest tagged release receives security fixes until the API stabilises.
+Only the latest published release receives security fixes. Upgrade to the latest release before reporting an issue, or state the exact version you reproduced it on.

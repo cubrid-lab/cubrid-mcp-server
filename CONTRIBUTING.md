@@ -11,7 +11,7 @@ This document only adds what is repo-specific; it does not repeat the org guide.
 
 ## Prerequisites
 
-- Python 3.10 or later
+- Python 3.11 or later
 - Git
 - Docker (only needed for the integration tests)
 
@@ -50,8 +50,9 @@ make integration  # integration tests — requires a live CUBRID (see below)
 ### Running the Integration Suite
 
 The integration tests need a running CUBRID with the `demodb` database. CI
-starts `cubrid/cubrid:11.2` in Docker and waits for `demodb` to be ready; you
-can do the same locally, then point the tests at it:
+starts `cubrid/cubrid:<version>` (11.4 by default, see the tiers below) in
+Docker and waits for `demodb` to be ready; you can do the same locally, then
+point the tests at it:
 
 ```bash
 export CUBRID_HOST=localhost
@@ -63,8 +64,31 @@ make integration
 
 ## What CI Enforces
 
-A PR has to clear all of the following (see `.github/workflows/ci.yml`). None of
-them are optional — the final `ci-gate` job requires every one to pass:
+CI is tiered (#223): every PR gets fast required feedback, and the expensive
+compatibility evidence runs where it adds value. The `classify` job in
+`.github/workflows/ci.yml` turns the event and the changed paths into explicit
+scopes ([`scripts/ci_scope.py`](scripts/ci_scope.py)), and only the selected
+lanes run:
+
+| Change | Unit lane (ruff, mypy, pytest + coverage) | `lowest-direct` | Live CUBRID integration |
+|---|---|---|---|
+| Docs/metadata only (`*.md`, `docs/`, `LICENSE`, `NOTICE`, `llms.txt`, `mkdocs.yml`) | — | — | — |
+| Tooling (`scripts/`, `Makefile`, `codecov.yml`, `.gitignore`, `.mcpb/`, `glama.json`, `.github/dependabot.yml`, issue templates, `demos/`) | Python 3.12 | — | — |
+| Runtime or tests (`cubrid_mcp_server/`, `tests/`) | Python 3.12 | — | CUBRID 11.4 |
+| Connection / catalog SQL (`database.py`, `context.py`, `tests/conftest.py`, `tests/test_integration.py`) | Python 3.12 | — | CUBRID 11.2 + 11.4 |
+| Other workflows (`.github/workflows/*` except `ci.yml`) | Python 3.11, 3.12, 3.14 | — | CUBRID 11.2 + 11.4 |
+| Dependency metadata (`pyproject.toml`) | Python 3.11, 3.12, 3.14 | yes | CUBRID 11.2 + 11.4 |
+| CI policy (`ci.yml`, `scripts/ci_scope.py`, `tests/test_ci_scope.py`), push to `main`, manual dispatch | Python 3.11, 3.12, 3.14 | yes | CUBRID 11.2 + 11.4 |
+| Any other path (fail-closed) | Python 3.12 | — | CUBRID 11.4 |
+
+A PR takes the union of the rows its files match. `changelog-lint` runs on every
+PR. The final `ci-gate` job is the one required check: it fails unless
+`classify` and `changelog-lint` succeeded and every lane that `classify`
+selected succeeded. A failed, cancelled or unexpectedly skipped lane, or a
+failed classification, fails the gate; a lane may be skipped only when the
+classification explicitly says it does not apply.
+
+The lanes check:
 
 - **`ruff check .`** — linting.
 - **`ruff format --check .`** — formatting (run `make format` to fix).
@@ -74,8 +98,31 @@ them are optional — the final `ci-gate` job requires every one to pass:
 - **`lowest-direct` job** — reinstalls with the lowest allowed direct
   dependency versions (`uv pip install --resolution lowest-direct`) and re-runs
   the unit tests, catching accidental use of newer-than-declared APIs.
+- **`integration`** — `pytest -m integration` against a live CUBRID container.
 - **`python scripts/lint_changelog.py`** — checks `CHANGELOG.md` structure and
   version ordering.
+
+Every executing job sets an integer `timeout-minutes` instead of GitHub's
+360-minute default (#228): 2–5 minutes for gates and small jobs, 10–15 for
+docs/release helpers, live lanes, `lowest-direct` and the upstream canaries, and 30
+for the unit lane (observed maximum 8.6).
+Jobs that call a reusable workflow cannot set a timeout; the repo-local callee
+(`release.yml` → `integration-full.yml`) is covered through its own jobs, and the
+externally owned callees (the org CodeQL workflow and the cookbook smoke test) are
+an explicit allowlist. `tests/test_workflow_timeouts.py` parses every workflow and
+fails when an executing job lacks a bounded timeout, when a new external caller is
+not allowlisted, or when a gate (`ci-gate`, `full-matrix-result`) loses
+`if: always()` or its short timeout; it also runs the `full-matrix-result` script and
+requires it to fail on any non-success planning or matrix result.
+
+The full Python {3.11–3.14} × CUBRID {10.2, 11.0, 11.2, 11.4} matrix lives in
+`.github/workflows/integration-full.yml`. It runs weekly (Sunday 03:00 UTC), on
+manual dispatch (`scope` = `full` or `corners`), and always in full as the
+release gate (`release.yml` calls it at the release commit; a release run that
+is not full or not fully green blocks publication). Monday–Saturday it runs only
+the corners — Python 3.11 × CUBRID 10.2 and Python 3.14 × CUBRID 11.4 — to
+catch compatibility drift between weekly runs. The advisory upstream canaries
+(`upstream-canary.yml`, pycubrid@main and latest FastMCP) run weekly on Monday.
 
 ## CHANGELOG
 

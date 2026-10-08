@@ -1,14 +1,31 @@
 name: Integration Full Matrix
 
-# Full Python × CUBRID compatibility matrix. Runs nightly, on demand, and as the
-# release gate: release.yml calls it through workflow_call with the release
-# commit SHA. PR CI only runs a reduced integration matrix, so this is the
-# authoritative full-compatibility check gating a release.
+# Python × CUBRID compatibility matrix (#223).
+#
+#   release   release.yml calls it through workflow_call with the release commit
+#             SHA: always the full 4 × 4 matrix, fail-closed. PR and main CI only
+#             run reduced lanes, so this is the authoritative full-compatibility
+#             check gating a release.
+#   weekly    Sunday 03:00 UTC: the full 4 × 4 matrix.
+#   corners   Monday-Saturday 03:00 UTC: oldest Python × oldest CUBRID and newest
+#             Python × newest CUBRID, to catch compatibility drift between the
+#             weekly runs without a daily 16-job Cartesian run.
+#   dispatch  manual: `scope` = full (default) or corners.
 
 on:
   schedule:
-    - cron: "0 3 * * *"
+    - cron: "0 3 * * 0" # weekly full matrix
+    - cron: "0 3 * * 1-6" # corners
   workflow_dispatch:
+    inputs:
+      scope:
+        description: "Matrix scope"
+        required: false
+        default: full
+        type: choice
+        options:
+          - full
+          - corners
   workflow_call:
     inputs:
       sha:
@@ -26,13 +43,50 @@ permissions:
   contents: read
 
 jobs:
+  plan:
+    name: Plan matrix scope
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      scope: ${{ steps.plan.outputs.scope }}
+      matrix: ${{ steps.plan.outputs.matrix }}
+    steps:
+      - name: Select full matrix or corners
+        id: plan
+        env:
+          RELEASE_SHA: ${{ inputs.sha }}
+          EVENT: ${{ github.event_name }}
+          CRON: ${{ github.event.schedule }}
+          DISPATCH_SCOPE: ${{ github.event.inputs.scope }}
+        run: |
+          set -euo pipefail
+          # Anything that is not explicitly a corners run gets the full matrix;
+          # a release call (inputs.sha set) is always full.
+          scope=full
+          if [ -z "$RELEASE_SHA" ]; then
+            if [ "$EVENT" = "schedule" ] && [ "$CRON" = "0 3 * * 1-6" ]; then
+              scope=corners
+            elif [ "$EVENT" = "workflow_dispatch" ] && [ "$DISPATCH_SCOPE" = "corners" ]; then
+              scope=corners
+            fi
+          fi
+          if [ "$scope" = "full" ]; then
+            matrix='{"python-version":["3.11","3.12","3.13","3.14"],"cubrid":["10.2","11.0","11.2","11.4"]}'
+          else
+            matrix='{"include":[{"python-version":"3.11","cubrid":"10.2"},{"python-version":"3.14","cubrid":"11.4"}]}'
+          fi
+          echo "scope=$scope" >> "$GITHUB_OUTPUT"
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+          echo "Matrix scope: $scope"
+          echo "$matrix"
+
   integration-full:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: [plan]
     strategy:
       fail-fast: false
-      matrix:
-        python-version: ["3.10", "3.11", "3.12", "3.13"]
-        cubrid: ["10.2", "11.0", "11.2", "11.4"]
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -91,13 +145,27 @@ jobs:
   full-matrix-result:
     name: Full compatibility matrix result
     runs-on: ubuntu-latest
-    needs: [integration-full]
+    timeout-minutes: 5
+    needs: [plan, integration-full]
     if: always()
     steps:
       - name: Require all matrix cells to pass
+        env:
+          PLAN_RESULT: ${{ needs.plan.result }}
+          SCOPE: ${{ needs.plan.outputs.scope }}
+          MATRIX_RESULT: ${{ needs.integration-full.result }}
+          RELEASE_SHA: ${{ inputs.sha }}
         run: |
-          if [ "${{ needs.integration-full.result }}" != "success" ]; then
-            echo "::error::Full compatibility matrix failed: ${{ needs.integration-full.result }}"
+          if [ "$PLAN_RESULT" != "success" ]; then
+            echo "::error::Matrix planning failed: $PLAN_RESULT"
             exit 1
           fi
-          echo "Full compatibility matrix passed."
+          if [ -n "$RELEASE_SHA" ] && [ "$SCOPE" != "full" ]; then
+            echo "::error::A release call must run the full matrix, got scope '$SCOPE'"
+            exit 1
+          fi
+          if [ "$MATRIX_RESULT" != "success" ]; then
+            echo "::error::Compatibility matrix ($SCOPE) failed: $MATRIX_RESULT"
+            exit 1
+          fi
+          echo "Compatibility matrix ($SCOPE) passed."

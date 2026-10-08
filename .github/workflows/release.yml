@@ -68,6 +68,7 @@ jobs:
   detect:
     name: Detect release
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     permissions:
       contents: read
     outputs:
@@ -119,6 +120,7 @@ jobs:
     needs: [detect]
     if: needs.detect.outputs.build == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: read
     steps:
@@ -154,6 +156,7 @@ jobs:
     needs: [detect, matrix]
     if: needs.detect.outputs.build == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: read
     outputs:
@@ -179,7 +182,7 @@ jobs:
           mv RELEASE_NOTES.md release-meta/RELEASE_NOTES.md
 
       - name: Generate SBOM
-        uses: anchore/sbom-action@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
+        uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
         with:
           format: spdx-json
           output-file: release-meta/sbom.spdx.json
@@ -256,6 +259,7 @@ jobs:
     needs: [detect, consistency, matrix, build]
     if: needs.detect.outputs.publish == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     environment:
       name: pypi
       url: https://pypi.org/project/${{ env.PACKAGE }}/${{ needs.detect.outputs.version }}/
@@ -393,6 +397,7 @@ jobs:
     needs: [detect, verify-cookbook]
     if: always() && needs.verify-cookbook.result != 'skipped'
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     permissions: {}
     steps:
       - name: Require status success and installed == requested
@@ -418,6 +423,7 @@ jobs:
     needs: [detect, consistency, matrix, build, publish, verify-cookbook, require-cookbook]
     if: always()
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     permissions:
       contents: read # sparse checkout of the summary script
     steps:
