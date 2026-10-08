@@ -101,12 +101,21 @@ def test_every_declared_dependency_is_inventoried_within_its_range(scope: str) -
         )
 
 
-def test_direct_runtime_dependencies_are_attributed_to_the_project() -> None:
-    runtime = table("runtime")
-    for req in requirements("runtime"):
-        assert "cubrid-mcp-server" in runtime[canonicalize_name(req.name)]["required_by"]
-    unattributed = [name for name, row in runtime.items() if row["required_by"] == "-"]
+def test_declared_dependencies_are_attributed_to_the_project() -> None:
+    for scope in SECTIONS:
+        rows = {**table("runtime"), **table(scope)}
+        for req in requirements(scope):
+            assert "cubrid-mcp-server" in rows[canonicalize_name(req.name)]["required_by"], req
+
+
+@pytest.mark.parametrize("scope", sorted(SECTIONS))
+def test_every_row_has_a_parent(scope: str) -> None:
+    unattributed = [name for name, row in table(scope).items() if row["required_by"] == "-"]
     assert not unattributed, unattributed
+
+
+def test_dev_table_lists_only_additions_to_runtime() -> None:
+    assert not set(table("runtime")) & set(table("dev"))
 
 
 @pytest.mark.parametrize("scope", sorted(SECTIONS))
