@@ -97,8 +97,10 @@ for the recorded interpreter and follows only the extras actually requested
 requirement that applies only to another Python version, platform or unused
 extra is not counted.
 
-`scripts/generate_third_party_licenses.py` uses only the standard library and is
-shared with pycubrid and sqlalchemy-cubrid. It reads the PEP 639
+`scripts/generate_third_party_licenses.py` is shared with pycubrid,
+sqlalchemy-cubrid and cubrid-cookbook-python. Its default output uses only the
+standard library; `--required-by` additionally needs `packaging`, which the
+runtime tree already contains, so running it adds nothing to the inventory. It reads the PEP 639
 `License-Expression` field, then `License ::` classifiers, then a short
 `License` field, and never guesses a license. `tests/test_third_party_licenses.py`
 fails when a dependency declared in `pyproject.toml` is missing from its table,
