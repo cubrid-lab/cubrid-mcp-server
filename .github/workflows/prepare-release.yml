@@ -40,6 +40,7 @@ jobs:
   prepare:
     name: Open the release PR
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: write # push the release/vX.Y.Z branch
       pull-requests: write # open the PR
