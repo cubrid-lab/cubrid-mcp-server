@@ -383,7 +383,7 @@ jobs:
       (needs.detect.outputs.mode == 'verify-only' || needs.build.result == 'success')))
     permissions:
       contents: read # all the called workflow needs
-    uses: cubrid-lab/cubrid-cookbook-python/.github/workflows/smoke-test.yml@f208e8e98ea590146704bd7555b70888dce179cc # main
+    uses: cubrid-lab/cubrid-cookbook-python/.github/workflows/smoke-test.yml@fe01e716bf3ebc117a41f207aba0ca70c07fc2b0 # main
     with:
       package: cubrid-mcp-server
       version: ${{ needs.detect.outputs.version }}
