@@ -103,15 +103,17 @@ The lanes check:
   version ordering.
 
 Every executing job sets an integer `timeout-minutes` instead of GitHub's
-360-minute default (#228): 5 minutes for gates and small jobs, 10–15 for
-docs/release helpers and live lanes, 30 for the unit lane (observed maximum 8.6).
+360-minute default (#228): 2–5 minutes for gates and small jobs, 10–15 for
+docs/release helpers, live lanes, `lowest-direct` and the upstream canaries, and 30
+for the unit lane (observed maximum 8.6).
 Jobs that call a reusable workflow cannot set a timeout; the repo-local callee
 (`release.yml` → `integration-full.yml`) is covered through its own jobs, and the
 externally owned callees (the org CodeQL workflow and the cookbook smoke test) are
 an explicit allowlist. `tests/test_workflow_timeouts.py` parses every workflow and
 fails when an executing job lacks a bounded timeout, when a new external caller is
 not allowlisted, or when a gate (`ci-gate`, `full-matrix-result`) loses
-`if: always()` or its short timeout.
+`if: always()` or its short timeout; it also runs the `full-matrix-result` script and
+requires it to fail on any non-success planning or matrix result.
 
 The full Python {3.11–3.14} × CUBRID {10.2, 11.0, 11.2, 11.4} matrix lives in
 `.github/workflows/integration-full.yml`. It runs weekly (Sunday 03:00 UTC), on

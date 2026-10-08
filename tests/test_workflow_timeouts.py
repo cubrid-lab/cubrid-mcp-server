@@ -8,6 +8,8 @@ own executing jobs, and externally owned callees are an explicit allowlist.
 
 from __future__ import annotations
 
+import shutil
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -101,5 +103,37 @@ def test_aggregate_gates_have_short_timeouts(wf: str, name: str) -> None:
     timeout = job.get("timeout-minutes")
     assert isinstance(timeout, int) and 1 <= timeout <= GATE_MAX_TIMEOUT_MINUTES
     # A timed-out dependency reports a non-success result; the gate must still run.
-    # tests/test_ci_policy.py proves both gates fail on `cancelled` and `failure`.
+    # tests/test_ci_scope.py runs ci-gate with cancelled results; the release gate is
+    # run below.
     assert str(job.get("if", "")).strip() in {"always()", "${{ always() }}"}
+
+
+def _run_release_gate(**overrides: str) -> subprocess.CompletedProcess:
+    if shutil.which("bash") is None:
+        pytest.skip("workflow shell requires bash")
+    job = yaml.safe_load((WORKFLOWS / "integration-full.yml").read_text())["jobs"][
+        "full-matrix-result"
+    ]
+    env = {"PLAN_RESULT": "success", "MATRIX_RESULT": "success", "SCOPE": "full"}
+    env.update({"RELEASE_SHA": "", **overrides})
+    return subprocess.run(
+        ["bash", "-eo", "pipefail", "-c", job["steps"][0]["run"]],
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+        timeout=5,
+    )
+
+
+def test_release_gate_passes_when_planning_and_matrix_succeed() -> None:
+    completed = _run_release_gate()
+    assert completed.returncode == 0, completed.stdout + completed.stderr
+
+
+@pytest.mark.parametrize("result", ["failure", "cancelled", "skipped"])
+@pytest.mark.parametrize("variable", ["PLAN_RESULT", "MATRIX_RESULT"])
+def test_release_gate_fails_on_any_non_success_dependency(variable: str, result: str) -> None:
+    completed = _run_release_gate(**{variable: result})
+    assert completed.returncode != 0
+    assert result in completed.stdout
