@@ -16,6 +16,36 @@ See CONTRIBUTING.md#pull-request-and-commit-titles.
 
 -
 
+## Scope
+
+<!-- Linked issue and the one acceptance contract this PR addresses; list non-goals. -->
+
+## Validation
+
+<!-- Commands actually executed and their results. List checks NOT run and why. -->
+
+- Executed:
+- Not run (and why):
+- CUBRID version / integration evidence (when applicable):
+
+## Safety Impact
+
+<!-- Check all that apply; describe how the invariant is preserved. -->
+
+- [ ] None (docs/tooling only)
+- [ ] Read-only enforcement
+- [ ] Write mode
+- [ ] Audit logging
+- [ ] MCP protocol (stdout reserved for protocol, logs to stderr)
+
+## Docs Decision
+
+<!-- Docs updated (list), or `Docs: not needed - <reason>`. -->
+
+## Optional: AI / tool review
+
+<!-- Optional evidence only; never a prerequisite for contributing. -->
+
 ## Type of Change
 
 <!-- Check the relevant option -->

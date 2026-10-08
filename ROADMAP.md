@@ -11,7 +11,11 @@
 - 🗂️ [Org Project Board](https://github.com/orgs/cubrid-lab/projects/2)
 - 🌐 [Ecosystem Roadmap](https://github.com/cubrid-lab/.github/blob/main/ROADMAP.md)
 
-## Current Baseline — v0.2.1
+## Current Baseline
+
+The latest published release is listed on
+[PyPI](https://pypi.org/project/cubrid-mcp-server/) and in the
+[CHANGELOG](CHANGELOG.md); the baseline below is durable behavior, not a version snapshot.
 
 - MCP server (stdio transport) exposing eleven read-only tools for schema
   inspection and query execution over the pure-Python
@@ -38,7 +42,9 @@ for the v0.3.x tracking epic. Items under consideration:
 
 ## Compatibility
 
-Python 3.11+, CUBRID 11.2 (exercised in the integration CI job).
+Python 3.11+. CI exercises Python 3.11–3.14 against CUBRID 10.2, 11.0, 11.2 and 11.4;
+see [`CONTRIBUTING.md`](CONTRIBUTING.md) for the per-change validation scope and
+`.github/workflows/integration-full.yml` for the full matrix.
 
 ## Completed
 
