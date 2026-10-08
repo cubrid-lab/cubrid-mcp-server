@@ -32,6 +32,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - README gains a **Related Projects** section linking pycubrid, sqlalchemy-cubrid, and cubrid-cookbook-python, matching the sibling packages' READMEs — every cubrid-lab PyPI page now leads to the runnable examples.
 
 ### Fixed
+- **Accept leading comments in `explain_query` (#178)** — SELECT/WITH statements now use the same comment normalization as the read-only safety checker before the leading-token gate.
 - **Blank required connection values are rejected (#177)** — an empty or whitespace-only `CUBRID_HOST`, `CUBRID_USER`, or `CUBRID_DATABASE` (and the `CUBRID_<NAME>_*` equivalents) now raises `ConfigError` at configuration time, like a missing variable, instead of producing a broken connection config. An empty `CUBRID_PASSWORD` remains allowed.
 - **Port range validation (#176)** — `CUBRID_PORT` (and `CUBRID_<NAME>_PORT`) must now be an integer in the TCP port range `1..65535`; out-of-range values such as `0` or `65536` raise `ConfigError` at configuration time instead of failing later at connect time.
 - **`db_serial` column probe is reset on reconnect (#181)** — the cached `att_name`/`attr_name` probe result used by `list_serials` is now cleared whenever the connection is discarded or closed, so a reconnect that lands on a different CUBRID version (e.g. 11.2 → 11.4 after a broker failover) re-probes instead of reusing the stale column name.
