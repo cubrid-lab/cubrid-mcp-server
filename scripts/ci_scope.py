@@ -55,6 +55,8 @@ TOOLING = (
     ".github/dependabot.yml",
     ".github/ISSUE_TEMPLATE/*",
     "demos/*",
+    # Checked against pyproject.toml by tests/test_third_party_licenses.py (#218).
+    "THIRD_PARTY_LICENSES.md",
 )
 # Docs-only: no unit job, no CUBRID.
 DOCS = ("*.md", "docs/*", "LICENSE", "NOTICE", "llms.txt", "mkdocs.yml")

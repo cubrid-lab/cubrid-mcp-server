@@ -109,7 +109,13 @@ def test_other_workflow_changes_run_endpoints_without_lowest_direct() -> None:
 
 @pytest.mark.parametrize(
     "path",
-    ["scripts/lint_changelog.py", "Makefile", ".mcpb/server.json", ".github/dependabot.yml"],
+    [
+        "scripts/lint_changelog.py",
+        "Makefile",
+        ".mcpb/server.json",
+        ".github/dependabot.yml",
+        "THIRD_PARTY_LICENSES.md",
+    ],
 )
 def test_tooling_and_metadata_run_unit_but_never_cubrid(path: str) -> None:
     scope = pr(path)
