@@ -46,6 +46,7 @@ jobs:
   plan:
     name: Plan matrix scope
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     outputs:
       scope: ${{ steps.plan.outputs.scope }}
       matrix: ${{ steps.plan.outputs.matrix }}
@@ -81,6 +82,7 @@ jobs:
 
   integration-full:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     needs: [plan]
     strategy:
       fail-fast: false
@@ -143,6 +145,7 @@ jobs:
   full-matrix-result:
     name: Full compatibility matrix result
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     needs: [plan, integration-full]
     if: always()
     steps:
