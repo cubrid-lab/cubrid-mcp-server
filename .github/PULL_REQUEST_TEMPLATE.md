@@ -63,7 +63,7 @@ See CONTRIBUTING.md#pull-request-and-commit-titles.
 - [ ] I have run `make check` (lint + typecheck)
 - [ ] I have run `make test` and all tests pass
 - [ ] I have added tests for new functionality (if applicable)
-- [ ] I have updated documentation for any tool/behavior/config change (or set `Docs: not needed - <reason>` / applied the `docs-not-needed` label)
+- [ ] I have filled in the Docs Decision section above (or applied the `docs-not-needed` label)
 - [ ] My changes do not introduce new warnings
 
 ## Related Issues

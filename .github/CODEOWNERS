@@ -14,6 +14,9 @@
 /scripts/pypi_duplicate_guard.py  @yeongseon @paikend
 /scripts/extract_release_notes.py @yeongseon @paikend
 /.mcpb/                           @yeongseon @paikend
+/scripts/ci_scope.py              @yeongseon @paikend
+/scripts/lint_changelog.py        @yeongseon @paikend
+/scripts/check_translation_sync.py @yeongseon @paikend
 /pyproject.toml                   @yeongseon @paikend
 /RELEASING.md                     @yeongseon @paikend
 /SECURITY.md                      @yeongseon @paikend
@@ -24,3 +27,5 @@
 /cubrid_mcp_server/database.py  @yeongseon @paikend
 /cubrid_mcp_server/server.py    @yeongseon @paikend
 /cubrid_mcp_server/__main__.py  @yeongseon @paikend
+/cubrid_mcp_server/config.py    @yeongseon @paikend
+/cubrid_mcp_server/context.py   @yeongseon @paikend
