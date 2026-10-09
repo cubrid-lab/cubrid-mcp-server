@@ -371,7 +371,7 @@ def test_health_check_reports_failure_and_discards(monkeypatch: pytest.MonkeyPat
     db = Database(_TEST_CONFIG)
     status = db.health_check()
     assert status["ok"] is False
-    assert "stale connection" in status["error"]
+    assert status["error"] == "RuntimeError"
     # A failed ping discards the connection for lazy recovery.
     assert conn.closed is True
     assert db._connection is None
@@ -381,10 +381,28 @@ def test_exclusive_discards_connection_on_error(monkeypatch: pytest.MonkeyPatch)
     conn = FakeConnection()
     monkeypatch.setattr(pycubrid, "connect", lambda **_k: conn)
     db = Database(_TEST_CONFIG)
-    with pytest.raises(ValueError, match="boom"):
+    with pytest.raises(DatabaseError, match="query failed: ValueError") as info:
         with db.exclusive():
             _raise(ValueError("boom"))
+    assert "boom" not in str(info.value)
     # Lazy recovery (#106): a non-timeout error drops the connection too.
+    assert conn.closed is True
+    assert db._connection is None
+
+
+def test_exclusive_database_error_passes_through_unchanged(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    conn = FakeConnection()
+    monkeypatch.setattr(pycubrid, "connect", lambda **_k: conn)
+    db = Database(_TEST_CONFIG)
+    original = DatabaseError("x")
+    with pytest.raises(DatabaseError) as info:
+        with db.exclusive():
+            _raise(original)
+    # Already-sanitized DatabaseErrors are re-raised as the same instance.
+    assert info.value is original
+    assert str(info.value) == "x"
     assert conn.closed is True
     assert db._connection is None
 
@@ -789,3 +807,106 @@ def test_cursor_creation_server_error_discards_connection(
     assert conn.rollbacks == 0
     assert conn.closed is True
     assert db._connection is None
+
+
+_LEAKY_CONFIG = Config(
+    host="db.internal",
+    port=33000,
+    user="app_user",
+    password="hunter2-secret",
+    database="secretdb",
+    readonly=True,
+    max_chars=4000,
+    max_rows=1000,
+)
+_LEAKY_MESSAGE = (
+    "cannot reach db.internal:33000 db=secretdb user=app_user "
+    "password=hunter2-secret while running SELECT ssn FROM payroll"
+)
+_SECRETS = ("db.internal", "secretdb", "hunter2-secret", "app_user", "payroll")
+
+
+def _assert_no_secrets(text: str) -> None:
+    for secret in _SECRETS:
+        assert secret not in text
+
+
+def _connect_raises(**_k: Any) -> Any:
+    raise pycubrid.OperationalError(_LEAKY_MESSAGE)
+
+
+def test_connect_failure_is_sanitized_and_logged(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    monkeypatch.setattr(pycubrid, "connect", _connect_raises)
+    db = Database(_LEAKY_CONFIG)
+    with caplog.at_level("ERROR", logger="cubrid_mcp_server.database"):
+        with pytest.raises(DatabaseError) as info:
+            db.connect()
+    assert str(info.value) == "failed to connect to CUBRID"
+    assert "db.internal" in caplog.text
+    assert "secretdb" in caplog.text
+    assert "hunter2-secret" in caplog.text  # cause preserved via exc_info
+
+
+@pytest.mark.parametrize("entry", ["fetch_all", "execute_write", "exclusive"])
+def test_connect_failure_sanitized_on_every_entry_point(
+    monkeypatch: pytest.MonkeyPatch, entry: str
+) -> None:
+    monkeypatch.setattr(pycubrid, "connect", _connect_raises)
+    db = Database(_LEAKY_CONFIG)
+    with pytest.raises(DatabaseError) as info:
+        if entry == "fetch_all":
+            db.fetch_all("SELECT 1")
+        elif entry == "execute_write":
+            db.execute_write("DELETE FROM t")
+        else:
+            with db.exclusive():
+                pass
+    _assert_no_secrets(str(info.value))
+
+
+def test_health_check_connect_failure_is_sanitized_and_logged(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    monkeypatch.setattr(pycubrid, "connect", _connect_raises)
+    db = Database(_LEAKY_CONFIG)
+    with caplog.at_level("ERROR", logger="cubrid_mcp_server.database"):
+        status = db.health_check()
+    assert status == {"ok": False, "error": "DatabaseError"}
+    _assert_no_secrets(str(status))
+    assert "db.internal" in caplog.text
+    assert "hunter2-secret" in caplog.text
+
+
+def test_health_check_ping_failure_is_sanitized_and_logged(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    conn = FakeConnection()
+
+    def _boom() -> str:
+        raise pycubrid.OperationalError(_LEAKY_MESSAGE)
+
+    conn.get_server_version = _boom  # type: ignore[method-assign]
+    monkeypatch.setattr(pycubrid, "connect", lambda **_k: conn)
+    db = Database(_LEAKY_CONFIG)
+    with caplog.at_level("ERROR", logger="cubrid_mcp_server.database"):
+        status = db.health_check()
+    assert status == {"ok": False, "error": "OperationalError"}
+    _assert_no_secrets(str(status))
+    assert "db.internal" in caplog.text
+    assert "hunter2-secret" in caplog.text
+    assert "payroll" in caplog.text
+
+
+def test_exclusive_driver_error_is_sanitized_and_logged(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    monkeypatch.setattr(pycubrid, "connect", lambda **_k: FakeConnection())
+    db = Database(_LEAKY_CONFIG)
+    with caplog.at_level("ERROR", logger="cubrid_mcp_server.database"):
+        with pytest.raises(DatabaseError) as info:
+            with db.exclusive():
+                _raise(pycubrid.ProgrammingError(_LEAKY_MESSAGE))
+    _assert_no_secrets(str(info.value))
+    assert "payroll" in caplog.text

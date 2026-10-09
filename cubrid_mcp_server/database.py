@@ -149,11 +149,17 @@ class Database:
                 # now-unusable connection. See CUBRID_MCP_QUERY_TIMEOUT.
                 read_timeout=self._config.query_timeout,
             )
-        except Exception as exc:  # pragma: no cover - driver-specific
-            raise DatabaseError(
-                f"failed to connect to CUBRID host={self._config.host} "
-                f"database={self._config.database}"
-            ) from exc
+        except Exception as exc:
+            # Host, database and the driver's cause (which may embed the user or
+            # password) go to the stderr log only; clients get a fixed message.
+            logger.error(
+                "failed to connect to CUBRID host=%s port=%s database=%s",
+                self._config.host,
+                self._config.port,
+                self._config.database,
+                exc_info=exc,
+            )
+            raise DatabaseError("failed to connect to CUBRID") from exc
         return self._connection
 
     def _discard_connection(self) -> None:
@@ -295,7 +301,11 @@ class Database:
                     raise self._timeout_error(exc) from exc
                 # Lazy recovery on non-timeout failure, mirroring ``cursor``.
                 self._discard_connection()
-                raise
+                if isinstance(exc, DatabaseError):
+                    raise
+                # Raw driver errors can embed SQL, schema or host details.
+                logger.error("query failed", exc_info=exc)
+                raise DatabaseError(f"query failed: {sanitize_error(exc)}") from exc
 
     @contextmanager
     def trace_enabled(self) -> Iterator[Any]:
@@ -352,7 +362,8 @@ class Database:
                 version = connection.get_server_version()
             except Exception as exc:
                 self._discard_connection()
-                return {"ok": False, "error": str(exc)}
+                logger.error("health check failed", exc_info=exc)
+                return {"ok": False, "error": sanitize_error(exc)}
             return {"ok": True, "server_version": str(version)}
 
     def _end_read_transaction(self) -> None:

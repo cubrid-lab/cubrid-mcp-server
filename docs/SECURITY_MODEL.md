@@ -63,4 +63,4 @@ The **raw SQL text, bound parameters, and literal values are never logged**, so 
 
 ## Logging discipline
 
-The server speaks MCP stdio: `stdout` carries the JSON-RPC protocol stream, so **all logging is routed to stderr**. Errors surfaced to the LLM client are sanitized — only the exception category (e.g. `query failed: OperationalError`) is returned, while full detail goes to stderr for operators. This keeps schema details, hostnames, SQL fragments, and configuration values out of client-visible messages.
+The server speaks MCP stdio: `stdout` carries the JSON-RPC protocol stream, so **all logging is routed to stderr**. Errors surfaced to the LLM client are sanitized — only the exception category (e.g. `query failed: OperationalError`) is returned, while full detail goes to stderr for operators. Connection failures return the fixed message `failed to connect to CUBRID`, and `health_check` returns only the exception class name; the host, port, database and driver cause are logged to stderr only. This keeps schema details, hostnames, SQL fragments, and configuration values out of client-visible messages.

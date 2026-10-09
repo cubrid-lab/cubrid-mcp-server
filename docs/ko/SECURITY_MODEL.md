@@ -65,4 +65,4 @@ GRANT SELECT ON orders TO mcp_reader;
 
 ## 로깅 규율
 
-서버는 MCP stdio를 사용합니다: `stdout`은 JSON-RPC 프로토콜 스트림으로 예약되어 있어 **모든 로그는 `stderr`로** 출력됩니다(기본 레벨 `INFO`). LLM 클라이언트에 반환되는 오류는 **재던션 처리**됩니다 — 예외 카테고리(예: `query failed: OperationalError`)만 반환되고 전체 세부 정보는 운영자를 위해 stderr에 기록됩니다. 스키마 세부 사항, 호스트명, SQL 조각, 설정 값이 클라이언트에 노출되지 않습니다.
+서버는 MCP stdio를 사용합니다: `stdout`은 JSON-RPC 프로토콜 스트림으로 예약되어 있어 **모든 로그는 `stderr`로** 출력됩니다(기본 레벨 `INFO`). LLM 클라이언트에 반환되는 오류는 **재던션 처리**됩니다 — 예외 카테고리(예: `query failed: OperationalError`)만 반환되고 전체 세부 정보는 운영자를 위해 stderr에 기록됩니다. 연결 실패는 고정 메시지 `failed to connect to CUBRID`만 반환하고 `health_check`는 예외 클래스 이름만 반환하며, 호스트, 포트, 데이터베이스, 드라이버 원인은 stderr에만 기록됩니다. 스키마 세부 사항, 호스트명, SQL 조각, 설정 값이 클라이언트에 노출되지 않습니다.
