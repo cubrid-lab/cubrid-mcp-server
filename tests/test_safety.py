@@ -17,7 +17,6 @@ from cubrid_mcp_server.safety import (
         "SHOW TABLES",
         "DESC users",
         "DESCRIBE users",
-        "EXPLAIN SELECT * FROM users",
         "WITH recent AS (SELECT * FROM users) SELECT * FROM recent",
         "  SELECT 1  ",
         "SELECT 1;",
@@ -25,6 +24,14 @@ from cubrid_mcp_server.safety import (
 )
 def test_ensure_read_only_allows_read_statements(sql: str) -> None:
     ensure_read_only(sql)
+
+
+@pytest.mark.parametrize("sql", ["EXPLAIN SELECT * FROM users", "explain select 1"])
+def test_ensure_read_only_rejects_explain(sql: str) -> None:
+    # CUBRID 11.4 has no EXPLAIN statement (it is a syntax error at the server);
+    # plans come from the explain_query tool (SET TRACE / SHOW TRACE) instead.
+    with pytest.raises(UnsafeSQLError):
+        ensure_read_only(sql)
 
 
 @pytest.mark.parametrize(
@@ -157,7 +164,6 @@ def test_ensure_query_statement_rejects_write_ddl_and_tcl(sql: str) -> None:
         "WITH recent AS (SELECT * FROM users) SELECT * FROM recent",
         "SHOW TABLES",
         "DESC users",
-        "EXPLAIN SELECT * FROM users",
         "CALL my_proc()",
         "SELECT * FROM users FOR UPDATE",
     ],

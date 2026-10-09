@@ -28,9 +28,9 @@ Full metadata for one table in a single call — columns, primary key, and index
 
 Indexes defined on a table, with the indexed key columns and flags (unique, reverse).
 
-#### `list_class_hierarchy(connection=None, ...)`
+#### `list_class_hierarchy(table_name=None, connection=None)`
 
-CUBRID `CLASS` inheritance relationships — which tables inherit from which.
+CUBRID `CLASS` inheritance relationships — which tables inherit from which. Omit `table_name` for every class, or pass one to get only that table's direct super classes. `table_name` is resolved like the other schema tools: matched case-insensitively against user tables, and an unknown table (including system classes and views) raises `unknown table` instead of returning an empty list.
 
 ### Querying
 
@@ -55,7 +55,11 @@ Returns the execution plan/trace for a `SELECT` or `WITH` statement via CUBRID `
 
 #### `table_row_counts(table_names=None, connection=None)`
 
-`COUNT(*)` for one table or many — cheaper than sampling rows to estimate size. Defaults to all user tables when omitted or `None`; passing an empty list (`[]`) returns an empty result.
+`COUNT(*)` for one table or many — cheaper than sampling rows to estimate size. Returns `{"tables": [{"table", "row_count"}, …], "truncated": bool, "total_tables": int}`, where `total_tables` is the number of user tables in the database; a table that is unknown or fails to count has `"row_count": null` and an `error`.
+
+- Omitted or `None`: counts the first 50 user tables in name order. If the database has more, `truncated` is `true`; pass the remaining names (from `all_table_names`) in batches of up to 50.
+- Explicit list: counts those tables; more than 50 names raises `too many tables requested (N); limit is 50 per call`.
+- Empty list (`[]`): counts nothing and returns `"tables": []`.
 
 ### CUBRID specifics
 

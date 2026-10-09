@@ -29,7 +29,7 @@ The CUBRID user lacks grants. CUBRID grants privileges **per table** — there i
 
 **Symptom:** `execute_query` rejects a statement.
 
-By design. The whitelist allows only `SELECT`, `SHOW`, `DESC`, `DESCRIBE`, `EXPLAIN`, and `WITH`; multi-statement input is always rejected. If you truly need other statements, first put a read-only DB user in place, then consider `CUBRID_MCP_READONLY=0` — and for writes, use opt-in write mode instead of disabling the whitelist.
+By design. The whitelist allows only `SELECT`, `SHOW`, `DESC`, `DESCRIBE`, and `WITH`; multi-statement input is always rejected. CUBRID has no `EXPLAIN` statement; use the `explain_query` tool for execution plans. If you truly need other statements, first put a read-only DB user in place, then consider `CUBRID_MCP_READONLY=0` — and for writes, use opt-in write mode instead of disabling the whitelist.
 
 ## Output looks cut off
 

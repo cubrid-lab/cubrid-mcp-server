@@ -151,7 +151,53 @@ def test_table_row_counts_reports_per_table_error(monkeypatch: pytest.MonkeyPatc
     monkeypatch.setattr(server, "_db", lambda connection=None: _RowCountErrorDB())
     result = server.table_row_counts(["users"])
     # The raw driver message is sanitized to the exception category only.
-    assert result == [{"table": "users", "row_count": None, "error": "RuntimeError"}]
+    assert result["tables"] == [{"table": "users", "row_count": None, "error": "RuntimeError"}]
+
+
+class _ManyTablesDB:
+    """Reports ``count`` user tables and returns 1 for every COUNT(*)."""
+
+    def __init__(self, count: int) -> None:
+        self.names = [f"t{i:03d}" for i in range(count)]
+        self.counted: list[str] = []
+
+    def fetch_all(self, sql: str, params: tuple[Any, ...] | None = None) -> list[tuple[Any, ...]]:
+        if "db_class" in sql:
+            # Deliberately unordered: the tool must sort before capping.
+            return [(name,) for name in reversed(self.names)]
+        self.counted.append(sql)
+        return [(1,)]
+
+
+def test_table_row_counts_default_caps_beyond_limit(monkeypatch: pytest.MonkeyPatch) -> None:
+    db = _ManyTablesDB(server._MAX_ROW_COUNT_TABLES + 1)
+    monkeypatch.setattr(server, "_db", lambda connection=None: db)
+    result = server.table_row_counts()
+    assert result["truncated"] is True
+    assert result["total_tables"] == 51
+    assert [r["table"] for r in result["tables"]] == db.names[:50]
+    assert len(db.counted) == 50
+
+
+def test_table_row_counts_default_at_limit_not_truncated(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    db = _ManyTablesDB(server._MAX_ROW_COUNT_TABLES)
+    monkeypatch.setattr(server, "_db", lambda connection=None: db)
+    result = server.table_row_counts()
+    assert result["truncated"] is False
+    assert result["total_tables"] == 50
+    assert len(result["tables"]) == 50
+
+
+def test_table_row_counts_explicit_list_over_limit_still_errors(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    db = _ManyTablesDB(server._MAX_ROW_COUNT_TABLES + 1)
+    monkeypatch.setattr(server, "_db", lambda connection=None: db)
+    with pytest.raises(ValueError, match="too many tables requested \\(51\\)"):
+        server.table_row_counts(list(db.names))
+    assert db.counted == []
 
 
 # ---------------------------------------------------------------------------

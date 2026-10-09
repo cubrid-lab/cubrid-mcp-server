@@ -8,7 +8,7 @@ uvx cubrid-mcp-server
 
 ## Why this server
 
-- **Read-only by default.** A code-level SQL whitelist allows only `SELECT`, `SHOW`, `DESC`, `DESCRIBE`, `EXPLAIN`, and `WITH` statements; multi-statement input is rejected. Write access is a separate, opt-in tool.
+- **Read-only by default.** A code-level SQL whitelist allows only `SELECT`, `SHOW`, `DESC`, `DESCRIBE`, and `WITH` statements; multi-statement input is rejected; execution plans come from the `explain_query` tool. Write access is a separate, opt-in tool.
 - **Schema-aware.** Twelve tools cover table discovery, column metadata, indexes, serials, class hierarchy, row counts, execution plans, and health checks — plus the same metadata as MCP Resources.
 - **Multi-database.** One server process can serve several CUBRID databases, each with independent read-only, write, and audit settings.
 - **Operations-friendly.** All logging goes to stderr (stdout is reserved for the MCP protocol stream), errors returned to the client are sanitized, and an opt-in audit log records every executed statement without ever logging raw SQL.

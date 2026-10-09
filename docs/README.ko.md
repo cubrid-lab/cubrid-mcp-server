@@ -193,7 +193,7 @@ cubrid-mcp-server
 
 ## 보안
 
-서버는 기본적으로 **읽기 전용**입니다. 코드 수준의 SQL 화이트리스트는 `SELECT`, `SHOW`, `DESC`, `DESCRIBE`, `EXPLAIN`, `WITH` 문만 허용하며, 다중 문장 쿼리는 거부됩니다.
+서버는 기본적으로 **읽기 전용**입니다. 코드 수준의 SQL 화이트리스트는 `SELECT`, `SHOW`, `DESC`, `DESCRIBE`, `WITH` 문만 허용하며, 다중 문장 쿼리는 거부됩니다. CUBRID에는 `EXPLAIN` 문이 없으므로 실행 계획은 `explain_query` 도구를 사용하세요.
 
 > **SQL 화이트리스트는 심층 방어이지 보안 경계가 아닙니다.** 명백한 실수를 막는 파서 기반 가드레일일 뿐, 실제 강제 계층은 데이터베이스 자체입니다. 모델이 읽을 수 있는 테이블에 **SELECT 권한만 가진 CUBRID 사용자**로 서버를 실행하세요. 자세한 내용은 [`SECURITY.md`](https://github.com/cubrid-lab/cubrid-mcp-server/blob/main/SECURITY.md)를 참고하세요.
 

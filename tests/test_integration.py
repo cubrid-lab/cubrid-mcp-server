@@ -147,7 +147,29 @@ class TestCubridIntegration:
         if not tables:
             pytest.skip("no user tables")
         counts = server.table_row_counts([tables[0]])
-        assert counts[0]["table"] == tables[0]
+        assert counts["tables"][0]["table"] == tables[0]
+        assert counts["truncated"] is False
+
+    def test_table_row_counts_default_caps_beyond_limit(self) -> None:
+        """With no table_names on a >50-table database, count the first 50 (#239)."""
+        from cubrid_mcp_server import server
+
+        created = [f"mcp_it_rc_{i:02d}" for i in range(server._MAX_ROW_COUNT_TABLES + 1)]
+        try:
+            for table in created:
+                self.db.execute_write(f"DROP TABLE IF EXISTS {table}")
+                self.db.execute_write(f"CREATE TABLE {table} (id INT)")
+            every = server.all_table_names()
+            result = server.table_row_counts()
+            assert result["truncated"] is True
+            assert result["total_tables"] == len(every)
+            assert [r["table"] for r in result["tables"]] == sorted(every)[:50]
+            assert all(r.get("error") is None for r in result["tables"])
+            with pytest.raises(ValueError, match="too many tables requested"):
+                server.table_row_counts(created)
+        finally:
+            for table in created:
+                self.db.execute_write(f"DROP TABLE IF EXISTS {table}")
 
     def test_explain_query_tool(self) -> None:
         from cubrid_mcp_server import server
@@ -340,6 +362,38 @@ class TestCubridIntegration:
 
         hierarchy = server.list_class_hierarchy()
         assert isinstance(hierarchy, list)
+
+    def test_list_class_hierarchy_resolves_table_name(self) -> None:
+        """Mixed-case names resolve like other schema tools; unknown names raise (#240)."""
+        from cubrid_mcp_server import server
+
+        parent, child = "mcp_it_hier_parent", "mcp_it_hier_child"
+        self.db.execute_write(f"DROP TABLE IF EXISTS {child}")
+        self.db.execute_write(f"DROP TABLE IF EXISTS {parent}")
+        try:
+            self.db.execute_write(f"CREATE TABLE {parent} (id INT)")
+            self.db.execute_write(f"CREATE TABLE {child} UNDER {parent} (extra INT)")
+            result = server.list_class_hierarchy(child.upper())
+            assert result == [{"class_name": child, "super_classes": [parent]}]
+            with pytest.raises(ValueError, match="unknown table"):
+                server.list_class_hierarchy("mcp_it_hier_missing")
+        finally:
+            self.db.execute_write(f"DROP TABLE IF EXISTS {child}")
+            self.db.execute_write(f"DROP TABLE IF EXISTS {parent}")
+
+    def test_explain_statement_rejected(self) -> None:
+        """CUBRID has no EXPLAIN statement; execute_query rejects it up front (#250)."""
+        from cubrid_mcp_server import server
+        from cubrid_mcp_server.database import DatabaseError
+        from cubrid_mcp_server.safety import UnsafeSQLError
+
+        # The server itself rejects EXPLAIN as a syntax error...
+        with pytest.raises(DatabaseError, match="ProgrammingError"):
+            self.db.fetch_all("EXPLAIN SELECT 1")
+        # ...so the read-only whitelist no longer admits it; plans come from explain_query.
+        with pytest.raises(UnsafeSQLError):
+            server.execute_query("EXPLAIN SELECT 1")
+        assert "plan" in server.explain_query("SELECT 1")
 
     def test_safety_blocks_write(self) -> None:
         from cubrid_mcp_server.safety import UnsafeSQLError, ensure_read_only

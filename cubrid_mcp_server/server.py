@@ -272,18 +272,29 @@ def explain_query(sql: str, connection: str | None = None) -> dict[str, Any]:
 @mcp.tool
 def table_row_counts(
     table_names: list[str] | None = None, connection: str | None = None
-) -> list[dict[str, Any]]:
-    """Return ``COUNT(*)`` for each table (all user tables by default when omitted/None, capped).
+) -> dict[str, Any]:
+    """Return ``COUNT(*)`` per table as ``{"tables": [...], "truncated", "total_tables"}``.
 
-    Passing an empty list (``table_names=[]``) requests zero tables and returns an empty list.
+    When ``table_names`` is omitted or ``None``, counts the first 50 user tables in
+    name order; ``truncated`` is true when the database has more, and ``total_tables``
+    is the number of user tables. An explicit list of more than 50 names is rejected.
+    Passing an empty list (``table_names=[]``) requests zero tables.
     """
     known = _all_table_names(connection)
     known_lower = {name.lower(): name for name in known}
-    targets = sorted(known) if table_names is None else table_names
-    if len(targets) > _MAX_ROW_COUNT_TABLES:
-        raise ValueError(
-            f"too many tables requested ({len(targets)}); limit is {_MAX_ROW_COUNT_TABLES} per call"
-        )
+    truncated = False
+    if table_names is None:
+        targets = sorted(known)
+        if len(targets) > _MAX_ROW_COUNT_TABLES:
+            targets = targets[:_MAX_ROW_COUNT_TABLES]
+            truncated = True
+    else:
+        targets = table_names
+        if len(targets) > _MAX_ROW_COUNT_TABLES:
+            raise ValueError(
+                f"too many tables requested ({len(targets)}); "
+                f"limit is {_MAX_ROW_COUNT_TABLES} per call"
+            )
     results: list[dict[str, Any]] = []
     for name in targets:
         resolved = known_lower.get(name.strip().lower())
@@ -296,7 +307,7 @@ def table_row_counts(
         except Exception as exc:
             logger.error("row count failed for table %s", resolved, exc_info=exc)
             results.append({"table": resolved, "row_count": None, "error": sanitize_error(exc)})
-    return results
+    return {"tables": results, "truncated": truncated, "total_tables": len(known)}
 
 
 def _quote_ident(name: str) -> str:
@@ -342,12 +353,17 @@ def list_serials(connection: str | None = None) -> list[dict[str, Any]]:
 def list_class_hierarchy(
     table_name: str | None = None, connection: str | None = None
 ) -> list[dict[str, Any]]:
-    """Return CUBRID CLASS inheritance relationships (all classes or one class)."""
+    """Return CUBRID CLASS inheritance relationships (all classes or one class).
+
+    ``table_name`` is resolved like the other schema tools: matched
+    case-insensitively against user tables, and an unknown name raises an error.
+    """
     if table_name:
+        resolved = _resolve_table(table_name, connection)
         rows = _db(connection).fetch_all(
             "SELECT class_name, super_class_name FROM db_direct_super_class "
             "WHERE class_name = ? ORDER BY super_class_name",
-            (table_name,),
+            (resolved,),
         )
     else:
         rows = _db(connection).fetch_all(
@@ -367,7 +383,8 @@ def execute_query(sql: str, connection: str | None = None) -> dict[str, Any]:
     Only statements that return a result set are run, and the read is always
     rolled back. Write, DDL and transaction-control statements, and
     multi-statement input, are rejected even when CUBRID_MCP_READONLY=0; use
-    execute_write for INSERT/UPDATE/DELETE.
+    execute_write for INSERT/UPDATE/DELETE. CUBRID has no EXPLAIN statement;
+    use explain_query for execution plans.
 
     CUBRID SQL notes: prefer LIMIT n OFFSET m (comma form also works);
     no RETURNING clause; collection types (SET, MULTISET, SEQUENCE)
@@ -613,7 +630,8 @@ or joining on collection columns, you may need to unnest them.
 ## Query Safety
 
 - The server enforces a read-only whitelist: `SELECT`, `SHOW`, `DESC`,
-  `DESCRIBE`, `EXPLAIN`, `WITH` (CTE)
+  `DESCRIBE`, `WITH` (CTE)
+- CUBRID has no `EXPLAIN` statement; use the `explain_query` tool for plans
 - Multi-statement input is rejected
 - Write access requires explicit opt-in (`CUBRID_MCP_WRITE=1`)
 - DDL statements auto-commit in CUBRID — cannot be rolled back
@@ -1043,7 +1061,7 @@ def optimize_query(sql: str) -> str:
     """Analyze a query's execution plan and suggest CUBRID-specific optimizations."""
     return (
         "You are a CUBRID query optimization expert. Analyze this query and suggest optimizations.\n\n"
-        f"Query to optimize:\n```sql\n{sql}\n```\n\n"
+        f"{_as_untrusted('Query to optimize', sql)}\n\n"
         "Steps:\n"
         "1. Use the `explain_query` tool to get the execution trace\n"
         "2. Check for SEQ SCAN (full table scan) in the output\n"
@@ -1064,7 +1082,7 @@ def migrate_from_mysql(sql: str) -> str:
     """Convert a MySQL query to valid CUBRID SQL."""
     return (
         "You are migrating SQL from MySQL to CUBRID. Convert this query:\n\n"
-        f"MySQL query:\n```sql\n{sql}\n```\n\n"
+        f"{_as_untrusted('MySQL query', sql)}\n\n"
         "Key CUBRID differences to fix:\n"
         "- `LIMIT offset, count` → `LIMIT count OFFSET offset`\n"
         "- `NOW()` works but `SYS_DATETIME()` is CUBRID-native\n"
@@ -1088,7 +1106,8 @@ def explore_unknown_db() -> str:
         "You are exploring an unfamiliar CUBRID database. Follow this systematic approach:\n\n"
         "Phase 1 — Discovery:\n"
         "1. Use `all_table_names` to get a complete table inventory\n"
-        "2. Use `table_row_counts` to understand data volume\n"
+        "2. Use `table_row_counts` to understand data volume (with no arguments it counts\n"
+        "   the first 50 tables; if `truncated` is true, pass the remaining names in batches)\n"
         "3. Use `list_class_hierarchy` to find table inheritance\n\n"
         "Phase 2 — Structure:\n"
         "4. For each important table, use `describe_table` to see columns, PK, and indexes\n"
@@ -1110,7 +1129,8 @@ def safe_data_analysis(question: str) -> str:
     """Answer a data question using only read-only queries."""
     return (
         "You are a data analyst working with CUBRID in read-only mode. "
-        f"Answer this question safely:\n\nQuestion: {question}\n\n"
+        "Answer this question safely:\n\n"
+        f"{_as_untrusted('Question', question)}\n\n"
         "Guidelines:\n"
         "- Only use SELECT, SHOW, DESC, WITH queries (the server enforces this)\n"
         "- Use `describe_table` first to understand column types\n"
@@ -1127,7 +1147,7 @@ def write_cubrid_sql(natural_language: str) -> str:
     """Generate valid CUBRID SQL from a natural language request."""
     return (
         "You are a CUBRID SQL expert. Convert this request to valid CUBRID SQL:\n\n"
-        f"Request: {natural_language}\n\n"
+        f"{_as_untrusted('Request', natural_language)}\n\n"
         "Before writing SQL, review these CUBRID-specific rules:\n"
         "- Use LIMIT n OFFSET m (not LIMIT offset, count)\n"
         "- Current timestamp is SYS_DATETIME() (not NOW())\n"
