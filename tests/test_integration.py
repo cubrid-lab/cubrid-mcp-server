@@ -296,6 +296,39 @@ class TestCubridIntegration:
         assert server.execute_query("SELECT 1 + 1")["rows"] == [[2]]
         assert self.db.connect() is connection
 
+    def test_execute_query_rejects_insert_with_whitelist_off(self) -> None:
+        """With CUBRID_MCP_READONLY=0, execute_query still refuses writes (#235)."""
+        from dataclasses import replace
+
+        from cubrid_mcp_server import server
+        from cubrid_mcp_server.context import AppContext
+        from cubrid_mcp_server.safety import UnsafeSQLError
+
+        table = "mcp_it_query_readonly"
+        self.db.execute_write(f"DROP TABLE IF EXISTS {table}")
+        self.db.execute_write(f"CREATE TABLE {table} (id INT PRIMARY KEY)")
+        self.db.execute_write(f"INSERT INTO {table} VALUES (1)")
+        server._context = AppContext.single(
+            config=replace(self.config, readonly=False), database=self.db
+        )
+        other = self._second_session()
+        try:
+            connection = self.db.connect()
+            with pytest.raises(UnsafeSQLError, match="execute_write"):
+                server.execute_query(f"INSERT INTO {table} VALUES (2)")
+            cursor = other.cursor()
+            cursor.execute(f"SELECT COUNT(*) FROM {table}")
+            assert cursor.fetchall() == [(1,)]
+            cursor.close()
+            other.rollback()
+            # Result-set reads still work, on the same shared session.
+            count_sql = f"SELECT COUNT(*) FROM {table}"
+            assert server.execute_query(count_sql)["rows"] == [[1]]
+            assert self.db.connect() is connection
+        finally:
+            other.close()
+            self.db.execute_write(f"DROP TABLE IF EXISTS {table}")
+
     def test_list_serials_tool(self) -> None:
         from cubrid_mcp_server import server
 

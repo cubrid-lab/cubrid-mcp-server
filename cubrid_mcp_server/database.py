@@ -24,6 +24,16 @@ class QueryTimeoutError(DatabaseError):
     """Raised when a statement exceeds the configured read timeout."""
 
 
+class NoResultSetError(ValueError):
+    """Raised when a read statement produced no result set.
+
+    The read path (``fetch_all``/``fetch_many``) only serves statements that
+    return rows. One that does not (a write or DDL statement that slipped past
+    the SQL checks) is rolled back and reported with this error; the session is
+    intact, so the connection is kept.
+    """
+
+
 def _is_timeout_error(exc: BaseException | None) -> bool:
     """Return ``True`` if ``exc`` (or any error in its chain) is a socket timeout.
 
@@ -265,6 +275,11 @@ class Database:
                 # same sanitize + discard recovery path as a failed query.
                 cursor = connection.cursor()
                 yield cursor
+            except NoResultSetError:
+                # The statement ran to completion, so the session is in sync:
+                # roll back whatever it did and keep the connection.
+                self._rollback_or_discard(connection)
+                raise
             except Exception as exc:
                 if _is_timeout_error(exc):
                     timed_out = True
@@ -378,10 +393,24 @@ class Database:
         if self._connection is not None:
             self._rollback_or_discard(self._connection)
 
+    @staticmethod
+    def _require_result_set(cursor: Any) -> None:
+        """Raise :class:`NoResultSetError` if the executed statement has no result set.
+
+        Raised inside ``cursor()``, which rolls the statement back and keeps the
+        connection.
+        """
+        if cursor.description is None:
+            raise NoResultSetError(
+                "statement produced no result set; execute_query is read-only, "
+                "use execute_write for INSERT/UPDATE/DELETE"
+            )
+
     def fetch_all(self, sql: str, params: tuple[Any, ...] | None = None) -> list[tuple[Any, ...]]:
         with self._lock:
             with self.cursor() as cursor:
                 cursor.execute(sql, params or ())
+                self._require_result_set(cursor)
                 rows = list(cursor.fetchall())
             self._end_read_transaction()
             return rows
@@ -402,6 +431,7 @@ class Database:
         with self._lock:
             with self.cursor() as cursor:
                 cursor.execute(sql, params or ())
+                self._require_result_set(cursor)
                 rows: list[tuple[Any, ...]] = []
                 truncated = False
                 while not truncated:

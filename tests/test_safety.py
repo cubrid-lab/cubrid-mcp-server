@@ -1,6 +1,12 @@
 import pytest
 
-from cubrid_mcp_server.safety import UnsafeSQLError, ensure_read_only
+from cubrid_mcp_server.safety import (
+    QUERY_REJECTED_KEYWORDS,
+    WRITE_KEYWORDS,
+    UnsafeSQLError,
+    ensure_query_statement,
+    ensure_read_only,
+)
 
 
 @pytest.mark.parametrize(
@@ -105,3 +111,63 @@ def test_ensure_read_only_allows_safe_edge_cases(sql: str) -> None:
 def test_ensure_read_only_rejects_hidden_writes(sql: str) -> None:
     with pytest.raises(UnsafeSQLError):
         ensure_read_only(sql)
+
+
+# --- ensure_query_statement: execute_query with the whitelist disabled (#235) ---
+
+
+@pytest.mark.parametrize(
+    "sql",
+    [
+        "INSERT INTO users VALUES (1)",
+        "insert into users values (1)",
+        "UPDATE users SET name='x'",
+        "DELETE FROM users",
+        "REPLACE INTO users VALUES (1)",
+        "MERGE INTO users USING src ON (1=1) WHEN MATCHED THEN UPDATE SET a=1",
+        "CREATE TABLE x (a INT)",
+        "ALTER TABLE users ADD COLUMN b INT",
+        "DROP TABLE users",
+        "TRUNCATE users",
+        "RENAME TABLE users AS people",
+        "GRANT SELECT ON users TO u",
+        "REVOKE SELECT ON users FROM u",
+        "COMMIT",
+        "COMMIT WORK",
+        "ROLLBACK",
+        "SAVEPOINT s1",
+        "SET TRANSACTION ISOLATION LEVEL 4",
+        "/* note */ INSERT INTO users VALUES (1)",
+        "-- note\nDELETE FROM users",
+        "SELECT 1; DELETE FROM users",
+    ],
+)
+def test_ensure_query_statement_rejects_write_ddl_and_tcl(sql: str) -> None:
+    with pytest.raises(UnsafeSQLError, match="not permitted in execute_query.*execute_write"):
+        ensure_query_statement(sql)
+
+
+@pytest.mark.parametrize(
+    "sql",
+    [
+        "SELECT 1",
+        "WITH recent AS (SELECT * FROM users) SELECT * FROM recent",
+        "SHOW TABLES",
+        "DESC users",
+        "EXPLAIN SELECT * FROM users",
+        "CALL my_proc()",
+        "SELECT * FROM users FOR UPDATE",
+    ],
+)
+def test_ensure_query_statement_allows_result_set_statements(sql: str) -> None:
+    ensure_query_statement(sql)
+
+
+@pytest.mark.parametrize("sql", ["", "   "])
+def test_ensure_query_statement_rejects_empty(sql: str) -> None:
+    with pytest.raises(UnsafeSQLError, match="empty"):
+        ensure_query_statement(sql)
+
+
+def test_query_rejected_keywords_cover_write_keywords() -> None:
+    assert WRITE_KEYWORDS <= QUERY_REJECTED_KEYWORDS

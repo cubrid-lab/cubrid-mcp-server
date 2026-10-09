@@ -899,3 +899,124 @@ def test_tools_hide_connection_details_when_connect_fails(
     for secret in _SECRETS:
         assert secret not in str(info.value)
     assert "db.internal" in caplog.text
+
+
+# --- execute_query stays read-only when CUBRID_MCP_READONLY=0 (#235) ---
+
+_WHITELIST_OFF_CONFIG = replace(_TEST_CONFIG, readonly=False)
+
+
+class _RecordingCursor:
+    """pycubrid-like cursor that records execute calls."""
+
+    def __init__(self, conn: "_RecordingConnection") -> None:
+        self._conn = conn
+        self.description: tuple[Any, ...] | None = None
+        self.closed = False
+        self._rows: list[tuple[Any, ...]] = []
+
+    def execute(self, sql: str, params: tuple[Any, ...] = ()) -> None:
+        self._conn.executed.append(sql)
+        if self._conn.returns_result_set:
+            self.description = (("x",),)
+            self._rows = [(1,)]
+
+    def fetchmany(self, size: int) -> list[tuple[Any, ...]]:
+        rows, self._rows = self._rows, []
+        return rows
+
+    def close(self) -> None:
+        self.closed = True
+
+
+class _RecordingConnection:
+    def __init__(self, returns_result_set: bool = True) -> None:
+        self.returns_result_set = returns_result_set
+        self.executed: list[str] = []
+        self.rollbacks = 0
+        self.commits = 0
+        self.closed = False
+
+    def cursor(self) -> _RecordingCursor:
+        return _RecordingCursor(self)
+
+    def rollback(self) -> None:
+        self.rollbacks += 1
+
+    def commit(self) -> None:
+        self.commits += 1
+
+    def close(self) -> None:
+        self.closed = True
+
+
+def _whitelist_off_db(
+    monkeypatch: pytest.MonkeyPatch, returns_result_set: bool = True
+) -> tuple[Database, _RecordingConnection]:
+    import pycubrid
+
+    conn = _RecordingConnection(returns_result_set)
+    monkeypatch.setattr(pycubrid, "connect", lambda **_kwargs: conn)
+    db = Database(_WHITELIST_OFF_CONFIG)
+    monkeypatch.setattr(
+        server, "_context", AppContext.single(config=_WHITELIST_OFF_CONFIG, database=db)
+    )
+    return db, conn
+
+
+@pytest.mark.parametrize(
+    "sql",
+    [
+        "INSERT INTO t VALUES (1)",
+        "UPDATE t SET a = 1",
+        "DELETE FROM t",
+        "CREATE TABLE t2 (a INT)",
+        "ALTER TABLE t ADD COLUMN b INT",
+        "DROP TABLE t",
+        "TRUNCATE t",
+        "COMMIT",
+        "ROLLBACK",
+        "SET TRANSACTION ISOLATION LEVEL 4",
+        "/* c */ insert into t values (1)",
+        "SELECT 1; DELETE FROM t",
+    ],
+)
+def test_execute_query_rejects_writes_when_whitelist_off(
+    monkeypatch: pytest.MonkeyPatch, sql: str
+) -> None:
+    _db, conn = _whitelist_off_db(monkeypatch)
+    with pytest.raises(UnsafeSQLError, match="execute_write"):
+        server.execute_query(sql)
+    # Rejected before cursor.execute: nothing reached the database.
+    assert conn.executed == []
+    assert conn.commits == 0
+
+
+def test_execute_query_select_works_when_whitelist_off(monkeypatch: pytest.MonkeyPatch) -> None:
+    db, conn = _whitelist_off_db(monkeypatch)
+    result = server.execute_query("SELECT 1")
+    assert result["rows"] == [[1]]
+    assert conn.executed == ["SELECT 1"]
+    assert conn.rollbacks == 1
+    assert conn.commits == 0
+    assert db._connection is conn
+
+
+def test_execute_query_no_result_set_rolls_back_and_keeps_connection(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # A statement the keyword check lets through but that returns no result set.
+    db, conn = _whitelist_off_db(monkeypatch, returns_result_set=False)
+    with pytest.raises(ValueError, match="no result set; execute_query is read-only"):
+        server.execute_query("CALL my_proc()")
+    assert conn.executed == ["CALL my_proc()"]
+    assert conn.rollbacks == 1
+    assert conn.commits == 0
+    assert conn.closed is False
+    assert db._connection is conn
+
+
+def test_execute_query_readonly_whitelist_error_unchanged(fake_db: FakeDatabase) -> None:
+    with pytest.raises(UnsafeSQLError, match="INSERT is not permitted in read-only mode"):
+        server.execute_query("INSERT INTO t VALUES (1)")
+    assert fake_db.calls == []

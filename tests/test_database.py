@@ -16,6 +16,7 @@ from cubrid_mcp_server.config import Config
 from cubrid_mcp_server.database import (
     Database,
     DatabaseError,
+    NoResultSetError,
     QueryTimeoutError,
     _is_timeout_error,
     sanitize_error,
@@ -45,6 +46,8 @@ def _raise(exc: BaseException) -> None:
 class FakeCursor:
     def __init__(self, rows: list[tuple[Any, ...]] | None = None) -> None:
         self._rows = list(rows or [])
+        # Non-None like pycubrid after a statement that returns a result set.
+        self.description: tuple[Any, ...] | None = (("x",),)
         self.executed: list[tuple[str, tuple[Any, ...]]] = []
         self.closed = False
         self._fetch_offset = 0
@@ -533,8 +536,10 @@ class CountingConnection(FakeConnection):
         rollback_error: BaseException | None = None,
         fetch_error: BaseException | None = None,
         cursor_error: BaseException | None = None,
+        no_result_set: bool = False,
     ) -> None:
         super().__init__(rows)
+        self._no_result_set = no_result_set
         self.rollbacks = 0
         self.lock_owned_at_rollback: list[bool] = []
         self.cursors_closed_at_rollback: list[bool] = []
@@ -550,6 +555,8 @@ class CountingConnection(FakeConnection):
             raise self._cursor_error
         cursor = super().cursor()
         cursor.rowcount = 1  # type: ignore[attr-defined]
+        if self._no_result_set:
+            cursor.description = None
         fetch_error = self._fetch_error
         if fetch_error is not None:
 
@@ -910,3 +917,39 @@ def test_exclusive_driver_error_is_sanitized_and_logged(
                 _raise(pycubrid.ProgrammingError(_LEAKY_MESSAGE))
     _assert_no_secrets(str(info.value))
     assert "payroll" in caplog.text
+
+
+# --- execute_query is result-set reads only (#235) ---
+
+
+@pytest.mark.parametrize("method", ["fetch_all", "fetch_many"])
+def test_no_result_set_rolls_back_and_keeps_connection(
+    monkeypatch: pytest.MonkeyPatch, method: str
+) -> None:
+    db, created = _counting_db(monkeypatch, no_result_set=True)
+    with pytest.raises(NoResultSetError, match="no result set.*use execute_write"):
+        getattr(db, method)("INSERT INTO t VALUES (1)")
+    conn = created[0]
+    # Rolled back exactly once (no extra read-transaction rollback), never committed.
+    assert conn.rollbacks == 1
+    assert conn.commits == 0
+    assert conn.cursors[0].fetchmany_calls == 0
+    assert conn.cursors[0].closed is True
+    # The session is intact, so the connection is kept.
+    assert conn.closed is False
+    assert db._connection is conn
+    assert db.connect() is conn
+
+
+def test_no_result_set_error_is_a_value_error() -> None:
+    assert issubclass(NoResultSetError, ValueError)
+    assert not issubclass(NoResultSetError, DatabaseError)
+
+
+def test_no_result_set_with_failed_rollback_discards(monkeypatch: pytest.MonkeyPatch) -> None:
+    db, created = _counting_db(monkeypatch, no_result_set=True, rollback_error=RuntimeError("gone"))
+    with pytest.raises(NoResultSetError):
+        db.fetch_many("DELETE FROM t", None, 10)
+    assert created[0].rollbacks == 1
+    assert created[0].closed is True
+    assert db._connection is None
