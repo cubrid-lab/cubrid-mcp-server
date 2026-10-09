@@ -118,6 +118,9 @@ def main() -> int:
                 )
                 return 1
             seen_subsections.add(key)
+    if in_fence:
+        print("ERROR: Unclosed code fence in CHANGELOG.md", file=sys.stderr)
+        return 1
 
     # Rule 6: standard ### sections in [Unreleased] and releases after the cutoff.
     for name, sections in releases:
