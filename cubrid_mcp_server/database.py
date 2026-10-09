@@ -149,7 +149,7 @@ class Database:
                 # now-unusable connection. See CUBRID_MCP_QUERY_TIMEOUT.
                 read_timeout=self._config.query_timeout,
             )
-        except Exception as exc:  # pragma: no cover - driver-specific
+        except Exception as exc:
             # Host, database and the driver's cause (which may embed the user or
             # password) go to the stderr log only; clients get a fixed message.
             logger.error(

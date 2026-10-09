@@ -390,6 +390,23 @@ def test_exclusive_discards_connection_on_error(monkeypatch: pytest.MonkeyPatch)
     assert db._connection is None
 
 
+def test_exclusive_database_error_passes_through_unchanged(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    conn = FakeConnection()
+    monkeypatch.setattr(pycubrid, "connect", lambda **_k: conn)
+    db = Database(_TEST_CONFIG)
+    original = DatabaseError("x")
+    with pytest.raises(DatabaseError) as info:
+        with db.exclusive():
+            _raise(original)
+    # Already-sanitized DatabaseErrors are re-raised as the same instance.
+    assert info.value is original
+    assert str(info.value) == "x"
+    assert conn.closed is True
+    assert db._connection is None
+
+
 def test_cursor_close_error_is_swallowed(monkeypatch: pytest.MonkeyPatch) -> None:
     conn = FakeConnection(rows=[(1,)])
     monkeypatch.setattr(pycubrid, "connect", lambda **_k: conn)
