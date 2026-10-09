@@ -82,9 +82,9 @@ def test_cutoff_and_older_releases_keep_historical_sections(tmp_path: Path, rele
     assert result.returncode == 0, result.stderr
 
 
-@pytest.mark.parametrize("release", ["Unreleased", "0.4.1", "0.4.0", "0.1.0"])
+@pytest.mark.parametrize("release", ["Unreleased", "0.4.1"])
 @pytest.mark.parametrize("heading", ["Fixed", "Documentation"])
-def test_duplicate_section_is_rejected_in_every_release(
+def test_duplicate_section_is_rejected_after_the_cutoff(
     tmp_path: Path, release: str, heading: str
 ) -> None:
     prefix = "## [Unreleased]\n" if release != "Unreleased" else ""
@@ -92,8 +92,42 @@ def test_duplicate_section_is_rejected_in_every_release(
         tmp_path, prefix + f"## [{release}]\n### {heading}\n- First\n### {heading}\n- Second\n"
     )
     assert result.returncode == 1
-    # The duplicate-heading check of #241 runs first and covers every version.
     assert f"Duplicate subsection heading '### {heading}' in [{release}]" in result.stderr
+
+
+@pytest.mark.parametrize("release", ["Unreleased", "0.4.1"])
+def test_non_adjacent_duplicate_section_is_rejected_after_the_cutoff(
+    tmp_path: Path, release: str
+) -> None:
+    prefix = "## [Unreleased]\n" if release != "Unreleased" else ""
+    result = run_lint(
+        tmp_path,
+        prefix + f"## [{release}]\n### Changed\n- A\n### Documentation\n- B\n### Changed\n- C\n",
+    )
+    assert result.returncode == 1
+    assert f"Duplicate subsection heading '### Changed' in [{release}]" in result.stderr
+
+
+@pytest.mark.parametrize("release", ["0.4.0", "0.3.1", "0.1.0"])
+@pytest.mark.parametrize("heading", ["Changed", "Documentation", "Docs"])
+def test_duplicate_section_in_released_history_is_accepted(
+    tmp_path: Path, release: str, heading: str
+) -> None:
+    # Rule 5 is gated by SECTION_POLICY_CUTOFF: released notes up to the cutoff are
+    # never rewritten.
+    result = run_lint(
+        tmp_path,
+        f"## [Unreleased]\n## [{release}]\n### {heading}\n- A\n### Fixed\n- B\n"
+        f"### {heading}\n- C\n",
+    )
+    assert result.returncode == 0, result.stderr
+
+
+def test_duplicate_heading_before_the_first_release_is_rejected(tmp_path: Path) -> None:
+    # Only rule 5 sees ### lines before the first "## [" header (rule 6 starts at a release).
+    result = run_lint(tmp_path, "# C\n### Foo\n### Foo\n## [Unreleased]\n### Added\n- a\n")
+    assert result.returncode == 1
+    assert "Duplicate subsection heading '### Foo' in []" in result.stderr
 
 
 def test_duplicate_section_with_other_spacing_is_rejected(tmp_path: Path) -> None:
