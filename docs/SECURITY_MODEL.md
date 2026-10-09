@@ -27,7 +27,7 @@ The server is **read-only by default**. When `CUBRID_MCP_READONLY=1` (the defaul
 
 > The whitelist is defense-in-depth, not a security boundary. It is a parser-based guardrail against obvious mistakes; the real enforcement layer is the database itself (Layer 1).
 
-`CUBRID_MCP_READONLY=0` disables this layer — only do so when the DB user is already read-only and you need statements the parser misclassifies. `explain_query` is **always** read-only regardless of this flag; only `execute_query` honors disabling it. Even then `execute_query` never commits: every read is rolled back once its rows are collected, so DML sent through it is discarded (DDL is still auto-committed by CUBRID). Use opt-in write mode for writes.
+`CUBRID_MCP_READONLY=0` disables this layer — only do so when the DB user is already read-only and you need statements the parser misclassifies. `explain_query` is **always** read-only regardless of this flag; only `execute_query` honors disabling it. Even then `execute_query` never commits: a statement that returns no result set fails and its session is discarded, and every successful read is rolled back. Use `execute_write` (opt-in write mode) for writes.
 
 ## Layer 2b — opt-in write mode (`CUBRID_MCP_WRITE`)
 

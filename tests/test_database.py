@@ -48,6 +48,7 @@ class FakeCursor:
         self.executed: list[tuple[str, tuple[Any, ...]]] = []
         self.closed = False
         self._fetch_offset = 0
+        self.fetchmany_calls = 0
 
     def execute(self, sql: str, params: tuple[Any, ...] = ()) -> None:
         self.executed.append((sql, params))
@@ -56,6 +57,7 @@ class FakeCursor:
         return list(self._rows)
 
     def fetchmany(self, size: int) -> list[tuple[Any, ...]]:
+        self.fetchmany_calls += 1
         chunk = self._rows[self._fetch_offset : self._fetch_offset + size]
         self._fetch_offset += size
         return chunk
@@ -511,16 +513,32 @@ class CountingConnection(FakeConnection):
         rows: list[tuple[Any, ...]] | None = None,
         execute_error: BaseException | None = None,
         rollback_error: BaseException | None = None,
+        fetch_error: BaseException | None = None,
+        cursor_error: BaseException | None = None,
     ) -> None:
         super().__init__(rows)
         self.rollbacks = 0
+        self.lock_owned_at_rollback: list[bool] = []
+        self.cursors_closed_at_rollback: list[bool] = []
+        self.lock_probe: Any = None
+        self._fetch_error = fetch_error
+        self._cursor_error = cursor_error
         self.commits = 0
         self._execute_error = execute_error
         self._rollback_error = rollback_error
 
     def cursor(self) -> FakeCursor:
+        if self._cursor_error is not None:
+            raise self._cursor_error
         cursor = super().cursor()
         cursor.rowcount = 1  # type: ignore[attr-defined]
+        fetch_error = self._fetch_error
+        if fetch_error is not None:
+
+            def _fetchmany(size: int) -> list[tuple[Any, ...]]:
+                raise fetch_error
+
+            cursor.fetchmany = _fetchmany  # type: ignore[method-assign]
         error = self._execute_error
         if error is not None:
 
@@ -532,6 +550,10 @@ class CountingConnection(FakeConnection):
 
     def rollback(self) -> None:
         self.rollbacks += 1
+        # Every rollback must happen under the Database lock.
+        assert self.lock_probe is not None and self.lock_probe()
+        self.lock_owned_at_rollback.append(True)
+        self.cursors_closed_at_rollback.append(all(c.closed for c in self.cursors))
         if self._rollback_error is not None:
             raise self._rollback_error
 
@@ -548,7 +570,16 @@ def _counting_db(monkeypatch: pytest.MonkeyPatch, **kwargs: Any) -> tuple[Databa
         return conn
 
     monkeypatch.setattr(pycubrid, "connect", _connect)
-    return Database(_TEST_CONFIG), created
+    db = Database(_TEST_CONFIG)
+    _orig = _connect
+
+    def _connect_probed(**k: Any) -> CountingConnection:
+        conn = _orig(**k)
+        conn.lock_probe = db._lock._is_owned  # type: ignore[attr-defined]
+        return conn
+
+    monkeypatch.setattr(pycubrid, "connect", _connect_probed)
+    return db, created
 
 
 def test_fetch_all_rolls_back_exactly_once(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -557,6 +588,7 @@ def test_fetch_all_rolls_back_exactly_once(monkeypatch: pytest.MonkeyPatch) -> N
     conn = created[0]
     assert conn.rollbacks == 1
     assert conn.commits == 0
+    assert conn.cursors_closed_at_rollback == [True]
     # The cursor is closed and the connection is kept for the next call.
     assert conn.cursors[0].closed is True
     assert db._connection is conn
@@ -585,8 +617,21 @@ def test_fetch_many_rolls_back_exactly_once(
     assert result == rows[: max_rows if max_rows is not None else row_count]
     conn = created[0]
     assert conn.rollbacks == 1
+    assert conn.cursors_closed_at_rollback == [True]
     assert conn.cursors[0].closed is True
     assert db._connection is conn
+
+
+@pytest.mark.parametrize(
+    ("row_count", "max_rows", "expected_calls"),
+    [(250, 150, 2), (250, 200, 3), (50, None, 2), (0, 10, 1)],
+)
+def test_fetch_many_stops_fetching_once_truncated(
+    monkeypatch: pytest.MonkeyPatch, row_count: int, max_rows: int | None, expected_calls: int
+) -> None:
+    db, created = _counting_db(monkeypatch, rows=[(i,) for i in range(row_count)])
+    db.fetch_many("SELECT x FROM t", None, max_rows)
+    assert created[0].cursors[0].fetchmany_calls == expected_calls
 
 
 def test_each_read_ends_its_own_transaction(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -717,3 +762,30 @@ def test_trace_cleanup_rolls_back_once(monkeypatch: pytest.MonkeyPatch) -> None:
         cursor.execute("SELECT 1", ())
     assert created[0].rollbacks == 1
     assert db._connection is created[0]
+
+
+def test_data_error_from_fetchmany_rolls_back_and_keeps_connection(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    error = pycubrid.DataError("type conversion", code=-8, errno=-8)
+    db, created = _counting_db(monkeypatch, rows=[(1,)], fetch_error=error)
+    with pytest.raises(DatabaseError, match="query failed: DataError"):
+        db.fetch_many("SELECT x FROM t", None, 10)
+    conn = created[0]
+    assert conn.rollbacks == 1
+    assert conn.closed is False
+    assert db._connection is conn
+
+
+def test_cursor_creation_server_error_discards_connection(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    error = pycubrid.ProgrammingError("cannot open cursor", code=-493, errno=-493)
+    db, created = _counting_db(monkeypatch, cursor_error=error)
+    with pytest.raises(DatabaseError, match="query failed: ProgrammingError"):
+        db.fetch_all("SELECT 1")
+    conn = created[0]
+    # No cursor exists, so the session state is unknown: no rollback, just discard.
+    assert conn.rollbacks == 0
+    assert conn.closed is True
+    assert db._connection is None

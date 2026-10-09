@@ -361,7 +361,8 @@ class Database:
         The connection runs with pycubrid's default ``autocommit=False``, so a
         SELECT opens a transaction that would otherwise stay open across tool
         calls, holding locks and pinning the snapshot. Called with the lock held,
-        after the cursor is closed.
+        after the cursor is closed. Calling ``fetch_*`` inside ``exclusive()``
+        ends the outer transaction.
         """
         if self._connection is not None:
             self._rollback_or_discard(self._connection)
