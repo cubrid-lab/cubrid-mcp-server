@@ -71,7 +71,7 @@ export CUBRID_DATABASE=mydb
 
 | 변수 | 기본값 | 설명 |
 |------|--------|------|
-| `CUBRID_MCP_READONLY` | `1` | 읽기 전용 SQL 화이트리스트 강제 |
+| `CUBRID_MCP_READONLY` | `1` | 읽기 전용 SQL 화이트리스트 강제. `0`은 화이트리스트만 완화하며, `execute_query`는 여전히 쓰기·DDL·트랜잭션 제어 문장을 거부합니다(`execute_write` 사용) |
 | `CUBRID_MCP_MAX_CHARS` | `4000` | 쿼리 출력 최대 글자 수 |
 | `CUBRID_MCP_MAX_ROWS` | `1000` | `execute_query` 최대 행 수 (초과 시 잘림) |
 | `CUBRID_MCP_MAX_SQL_LENGTH` | `65536` | 제출 가능한 SQL 최대 길이 (글자 수) |
@@ -206,7 +206,7 @@ cubrid-mcp-server
 - **단일 DML 문만 허용.** 독립 실행형 읽기, DDL(`CREATE`/`ALTER`/`DROP`/`TRUNCATE`), 트랜잭션 제어, 다중 문장 입력은 거부됩니다. (단일 DML 안의 서브쿼리는 합법적으로 허용됩니다.)
 - **DDL은 의도적으로 미지원.** CUBRID는 DDL을 자동 커밋하므로 롤백 보장이 무의미해집니다.
 - **쓰기 모드는 연결 단위.** 읽기 도구와 동일한 `connection` 인자를 받으며, 대상 연결의 설정으로 강제됩니다.
-- `execute_query`는 쓰기 모드 플래그와 무관하게 **항상 읽기 전용**입니다.
+- `execute_query`는 쓰기 모드 플래그 및 `CUBRID_MCP_READONLY`와 무관하게 **항상 읽기 전용**입니다. `CUBRID_MCP_READONLY=0`이어도 쓰기·DDL·트랜잭션 제어 문장은 실행 전에 거부되고, 결과 집합을 반환하지 않는 문장은 롤백됩니다. `CUBRID_MCP_READONLY=0`으로 `execute_query`를 통해 쓰기를 보내던 클라이언트는 `execute_write`로 전환해야 합니다.
 
 ## 로깅
 

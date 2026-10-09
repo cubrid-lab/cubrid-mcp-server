@@ -38,16 +38,18 @@ CUBRID `CLASS` 상속 관계 — 어느 테이블이 어느 테이블을 상속�
 
 #### `execute_query(sql, connection=None)`
 
-**읽기 전용** SQL(`SELECT`, `SHOW`, `DESC`, `DESCRIBE`, `EXPLAIN`, `WITH`)을 실행합니다. 출력은 모델의 컨텍스트 창을 보호하도록 자동 잘림됩니다:
+**읽기 전용** SQL(`SELECT`, `SHOW`, `DESC`, `DESCRIBE`, `WITH`) 중 결과 집합을 반환하는 문장만 실행합니다. 쿼리 계획은 `explain_query`를 사용하세요. 출력은 모델의 컨텍스트 창을 보호하도록 자동 잘림됩니다:
 
 - 최대 `CUBRID_MCP_MAX_ROWS`행 (기본 1000)
 - 렌더링된 출력은 `CUBRID_MCP_MAX_CHARS`자로 제한 (기본 4000)
 - 문장 길이는 `CUBRID_MCP_MAX_SQL_LENGTH`로 제한 (기본 65536)
 - 문장별 소켓 읽기 타임아웃 `CUBRID_MCP_QUERY_TIMEOUT`초 (기본 30)
 
-다중 문장 입력은 거부됩니다. 바이너리 값은 작으면 base64로 인코딩되고 크면 요약됩니다(`<binary N bytes>`).
+다중 문장 입력과 빈 입력(주석만 있거나 `;`만 있는 입력)은 `CUBRID_MCP_READONLY=0`에서도 거부됩니다. 바이너리 값은 작으면 base64로 인코딩되고 크면 요약됩니다(`<binary N bytes>`).
 
-모든 읽기는 자체 트랜잭션을 종료합니다. 서버는 행을 수집한 뒤(잘림 여부와 무관하게) 롤백하므로 도구 호출 사이에 잠금이나 스냅샷이 유지되지 않으며, 다음 호출은 다른 세션이 커밋한 행을 봅니다. `execute_query`는 절대 커밋하지 않습니다. 결과 집합을 반환하지 않는 문장은 실패하고 해당 세션은 폐기되며, 성공한 모든 읽기는 롤백됩니다. 쓰기에는 `execute_write`를 사용하세요.
+모든 읽기는 자체 트랜잭션을 종료합니다. 서버는 행을 수집한 뒤(잘림 여부와 무관하게) 롤백하므로 도구 호출 사이에 잠금이나 스냅샷이 유지되지 않으며, 다음 호출은 다른 세션이 커밋한 행을 봅니다. `execute_query`는 절대 커밋하지 않으며, 화이트리스트만 완화하는 `CUBRID_MCP_READONLY=0`에서도 읽기 전용입니다. 쓰기·DDL·트랜잭션 제어 키워드(`INSERT`, `UPDATE`, `DELETE`, `REPLACE`, `MERGE`, `CREATE`, `ALTER`, `DROP`, `TRUNCATE`, `RENAME`, `GRANT`, `REVOKE`, `COMMIT`, `ROLLBACK`, `SAVEPOINT`, `SET`, `PREPARE`, `EXECUTE`, `DEALLOCATE`, `DO`)로 시작하는 문장은 데이터베이스에 도달하기 전에 거부되며, 오류 메시지가 `execute_write`를 안내합니다. 선두 키워드의 첫 단어를 비교하므로 `CREATE OR REPLACE …`도 `CREATE`와 같이 거부됩니다. 이 키워드 검사는 보안 경계가 아니라 가드레일이며, 보안 경계는 여전히 읽기 전용 데이터베이스 계정입니다. 그래도 결과 집합을 반환하지 않는 문장은 롤백되고 `statement produced no result set; execute_query is read-only, use execute_write …` 오류로 실패하며, 연결은 유지됩니다. 쓰기에는 `execute_write`를 사용하세요.
+
+> **마이그레이션:** `CUBRID_MCP_READONLY=0`으로 `execute_query`를 통해 `INSERT`/`UPDATE`/`DELETE`를 보내던 클라이언트는 대신 `execute_write`(`CUBRID_MCP_WRITE=1`)를 사용해야 합니다.
 
 #### `explain_query(sql, connection=None)`
 

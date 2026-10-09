@@ -3,7 +3,9 @@
 When the server runs in read-only mode (the default), every statement passed
 to ``execute_query`` is inspected by :func:`ensure_read_only` before reaching
 the database. Only the minimal set of statements needed to inspect data and
-schemas is allowed, and multi-statement input is rejected outright.
+schemas is allowed, and multi-statement input is rejected outright. With the
+whitelist disabled, :func:`ensure_query_statement` still rejects write, DDL and
+transaction-control statements.
 
 The checker is a defence-in-depth layer. Operators are still expected to
 configure CUBRID with a read-only user account for production use. See
@@ -28,6 +30,32 @@ READ_ONLY_KEYWORDS: frozenset[str] = frozenset(
 # only ever consulted on the explicitly-gated write path; the read-only default
 # path (:func:`ensure_read_only`) is untouched.
 WRITE_KEYWORDS: frozenset[str] = frozenset({"INSERT", "UPDATE", "DELETE"})
+
+# Leading keywords that ``execute_query`` rejects even when the read-only whitelist
+# is disabled (CUBRID_MCP_READONLY=0): writes, DDL and transaction control. The
+# tool only serves result-set reads; writes go through ``execute_write``. Consulted
+# by :func:`ensure_query_statement`; the read-only default path is unchanged.
+QUERY_REJECTED_KEYWORDS: frozenset[str] = WRITE_KEYWORDS | frozenset(
+    {
+        "REPLACE",
+        "MERGE",
+        "CREATE",
+        "ALTER",
+        "DROP",
+        "TRUNCATE",
+        "RENAME",
+        "GRANT",
+        "REVOKE",
+        "COMMIT",
+        "ROLLBACK",
+        "SAVEPOINT",
+        "SET",
+        "PREPARE",
+        "EXECUTE",
+        "DEALLOCATE",
+        "DO",
+    }
+)
 
 # Keywords that mutate data/schema or otherwise escape read-only mode. Even when a
 # statement begins with an allowed keyword (e.g. a CTE ``WITH ... AS (...) DELETE`` or
@@ -99,6 +127,43 @@ def ensure_read_only(sql: str) -> None:
     forbidden = _forbidden_keywords(statement)
     if forbidden:
         raise UnsafeSQLError(f"{sorted(forbidden)[0]} is not permitted in read-only mode")
+
+
+def ensure_query_statement(sql: str) -> None:
+    """Raise :class:`UnsafeSQLError` unless ``sql`` is a single non-write statement.
+
+    Consulted by ``execute_query`` when the read-only whitelist is disabled
+    (``CUBRID_MCP_READONLY=0``): that flag relaxes the whitelist for result-set
+    reads but never turns ``execute_query`` into a write path. Empty and
+    multi-statement input are rejected, as in :func:`ensure_read_only`. The
+    first word of the leading keyword is matched against
+    :data:`QUERY_REJECTED_KEYWORDS`, so ``CREATE OR REPLACE ...`` is rejected
+    like ``CREATE``. Other statements pass; the database read path still
+    rejects any that return no result set.
+    """
+    if not sql or not sql.strip():
+        raise UnsafeSQLError("empty SQL statement")
+
+    # Strip comments for parity with ensure_read_only: a leading comment must
+    # not hide the real leading keyword, and comment-only input counts as empty.
+    sql = strip_comments(sql)
+
+    statements = [stmt for stmt in sqlparse.parse(sql) if _is_non_empty(stmt)]
+    if len(statements) == 0:
+        raise UnsafeSQLError("empty SQL statement")
+    if len(statements) > 1:
+        raise UnsafeSQLError("multi-statement SQL is not allowed in execute_query")
+
+    keyword = _leading_keyword(statements[0])
+    if keyword is None:
+        return
+    first_word = keyword.split()[0].upper()
+    if first_word in QUERY_REJECTED_KEYWORDS:
+        raise UnsafeSQLError(
+            f"{first_word} is not permitted in execute_query, which only runs "
+            "statements that return a result set; use execute_write for "
+            "INSERT/UPDATE/DELETE (requires CUBRID_MCP_WRITE=1)"
+        )
 
 
 def ensure_write_allowed(sql: str) -> None:

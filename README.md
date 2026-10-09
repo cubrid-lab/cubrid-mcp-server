@@ -74,7 +74,7 @@ Optional settings:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `CUBRID_MCP_READONLY` | `1` | Enforce read-only SQL whitelist |
+| `CUBRID_MCP_READONLY` | `1` | Enforce read-only SQL whitelist. `0` relaxes the whitelist only; `execute_query` still rejects write, DDL and transaction-control statements (use `execute_write`) |
 | `CUBRID_MCP_MAX_CHARS` | `4000` | Max characters in query output |
 | `CUBRID_MCP_MAX_ROWS` | `1000` | Max rows returned by `execute_query` before truncation |
 | `CUBRID_MCP_MAX_SQL_LENGTH` | `65536` | Max length (characters) of a submitted SQL statement |
@@ -233,7 +233,7 @@ Constraints and rationale:
 - **Single-statement DML only.** Standalone reads, DDL (`CREATE`/`ALTER`/`DROP`/`TRUNCATE`), transaction-control, and multi-statement input are rejected. (A single DML statement may still legally contain subqueries, e.g. `INSERT ... SELECT`.)
 - **DDL is intentionally unsupported.** CUBRID auto-commits DDL, which defeats the rollback guarantee, so it is excluded from write mode.
 - **Write mode is per-connection.** `execute_write` accepts the same optional `connection` argument as the read tools and runs against that connection; a connection whose `CUBRID_<NAME>_MCP_WRITE` is off refuses the write even when another connection enables it.
-- `execute_query` remains **read-only regardless** of the write-mode flag.
+- `execute_query` remains **read-only regardless** of the write-mode flag and of `CUBRID_MCP_READONLY`: with `CUBRID_MCP_READONLY=0` it still rejects write, DDL and transaction-control statements before they run, and rolls back any statement that returns no result set. Clients that sent writes through `execute_query` with `CUBRID_MCP_READONLY=0` must switch to `execute_write`.
 - Enforcement is defense-in-depth; still run the server as a CUBRID user granted only the privileges it needs. See [`SECURITY.md`](./SECURITY.md).
 
 ## Logging

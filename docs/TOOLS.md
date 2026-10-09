@@ -36,16 +36,18 @@ CUBRID `CLASS` inheritance relationships — which tables inherit from which.
 
 #### `execute_query(sql, connection=None)`
 
-Runs **read-only** SQL (`SELECT`, `SHOW`, `DESC`, `DESCRIBE`, `EXPLAIN`, `WITH`). Output is automatically truncated to respect the model's context window:
+Runs **read-only** SQL (`SELECT`, `SHOW`, `DESC`, `DESCRIBE`, `WITH`) and only statements that return a result set. Use `explain_query` for query plans. Output is automatically truncated to respect the model's context window:
 
 - at most `CUBRID_MCP_MAX_ROWS` rows (default 1000),
 - rendered output capped at `CUBRID_MCP_MAX_CHARS` characters (default 4000),
 - statement length capped at `CUBRID_MCP_MAX_SQL_LENGTH` (default 65536),
 - per-statement socket read timeout of `CUBRID_MCP_QUERY_TIMEOUT` seconds (default 30).
 
-Multi-statement input is rejected. Binary values are base64-encoded when small and summarized (`<binary N bytes>`) when large.
+Multi-statement and empty (comment-only or `;`-only) input is rejected, also with `CUBRID_MCP_READONLY=0`. Binary values are base64-encoded when small and summarized (`<binary N bytes>`) when large.
 
-Every read ends its own transaction: the server rolls back after the rows are collected (truncated or not), so no locks or snapshot are held between tool calls and the next call sees rows other sessions have committed. `execute_query` never commits: a statement that returns no result set fails and its session is discarded, and every successful read is rolled back. Use `execute_write` for writes.
+Every read ends its own transaction: the server rolls back after the rows are collected (truncated or not), so no locks or snapshot are held between tool calls and the next call sees rows other sessions have committed. `execute_query` never commits and is read-only even with `CUBRID_MCP_READONLY=0`, which only relaxes the whitelist: statements that lead with a write, DDL or transaction-control keyword (`INSERT`, `UPDATE`, `DELETE`, `REPLACE`, `MERGE`, `CREATE`, `ALTER`, `DROP`, `TRUNCATE`, `RENAME`, `GRANT`, `REVOKE`, `COMMIT`, `ROLLBACK`, `SAVEPOINT`, `SET`, `PREPARE`, `EXECUTE`, `DEALLOCATE`, `DO`) are rejected before they reach the database, with an error pointing to `execute_write`; the first word of the leading keyword is matched, so `CREATE OR REPLACE …` is rejected like `CREATE`. This keyword check is a guardrail, not a security boundary: the read-only database account remains the boundary. A statement that still returns no result set is rolled back and fails with `statement produced no result set; execute_query is read-only, use execute_write …`; the connection is kept. Use `execute_write` for writes.
+
+> **Migration:** clients that sent `INSERT`/`UPDATE`/`DELETE` through `execute_query` with `CUBRID_MCP_READONLY=0` must use `execute_write` (`CUBRID_MCP_WRITE=1`) instead.
 
 #### `explain_query(sql, connection=None)`
 

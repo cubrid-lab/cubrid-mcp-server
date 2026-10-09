@@ -17,7 +17,12 @@ from cubrid_mcp_server.audit import AuditLogger
 from cubrid_mcp_server.config import Config, ConfigError, _parse_bool
 from cubrid_mcp_server.context import AppContext
 from cubrid_mcp_server.database import Database, sanitize_error
-from cubrid_mcp_server.safety import ensure_read_only, ensure_write_allowed, strip_comments
+from cubrid_mcp_server.safety import (
+    ensure_query_statement,
+    ensure_read_only,
+    ensure_write_allowed,
+    strip_comments,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -359,6 +364,11 @@ def list_class_hierarchy(
 def execute_query(sql: str, connection: str | None = None) -> dict[str, Any]:
     """Execute a read-only SQL statement and return rows, truncated if large.
 
+    Only statements that return a result set are run, and the read is always
+    rolled back. Write, DDL and transaction-control statements, and
+    multi-statement input, are rejected even when CUBRID_MCP_READONLY=0; use
+    execute_write for INSERT/UPDATE/DELETE.
+
     CUBRID SQL notes: prefer LIMIT n OFFSET m (comma form also works);
     no RETURNING clause; collection types (SET, MULTISET, SEQUENCE)
     may appear in results — see cubrid://guide/types for interpretation.
@@ -373,6 +383,9 @@ def execute_query(sql: str, connection: str | None = None) -> dict[str, Any]:
             )
         if config.readonly:
             ensure_read_only(sql)
+        else:
+            # READONLY=0 relaxes the whitelist, never the read-only contract.
+            ensure_query_statement(sql)
 
         rows, row_truncated = db.fetch_many(sql, None, config.max_rows)
         rendered = _render_rows(rows, config.max_chars)
