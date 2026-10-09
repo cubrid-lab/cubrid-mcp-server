@@ -28,14 +28,14 @@
 
 스키마 메타데이터는 읽기 전용 [MCP Resources](https://modelcontextprotocol.io/docs/concepts/resources)로도 노출됩니다. 리소스는 도구와 동일한 읽기 전용 카탈로그 쿼리를 재사용하므로 데이터 접근 범위는 늘어나지 않습니다.
 
-| 리소스 URI | 설명 |
-|--------------|------|
-| `cubrid://agent-guide` | CUBRID 에이전트 가이드: 구문·타입·성능 |
-| `cubrid://guide/*` | 4개 주제별 가이드: sql-dialect, types, performance, collections |
-| `cubrid://schema` | 전체 스키마 인덱스 (모든 사용자 테이블과 개별 리소스 URI) |
-| `cubrid://schema/{table}` | 테이블별 메타데이터 (컬럼, 기본 키, 인덱스) — `describe_table`과 동일 |
+| 리소스 URI | MIME 타입 | 설명 |
+|--------------|-----------|------|
+| `cubrid://agent-guide` | `text/markdown` | CUBRID 에이전트 가이드: 구문·타입·성능 |
+| `cubrid://guide/*` | `text/markdown` | 4개 주제별 가이드: sql-dialect, types, performance, collections |
+| `cubrid://schema` | `application/json` | 전체 스키마 인덱스 (모든 사용자 테이블과 개별 리소스 URI) |
+| `cubrid://schema/{table}` | `application/json` | 테이블별 메타데이터 (컬럼, 기본 키, 인덱스) — `describe_table`과 동일 |
 
-모두 `application/json`을 반환합니다.
+스키마 리소스는 항상 `default` 연결을 읽습니다([멀티커넥션](ko/MULTI_CONNECTION.md) 참고). 가이드는 정적 Markdown입니다.
 
 ### 프롬프트 (Prompts, 9개)
 
@@ -193,9 +193,9 @@ cubrid-mcp-server
 
 ## 보안
 
-서버는 기본적으로 **읽기 전용**입니다. 코드 수준의 SQL 화이트리스트는 `SELECT`, `SHOW`, `DESC`, `DESCRIBE`, `WITH` 문만 허용하며, 다중 문장 쿼리는 거부됩니다. CUBRID에는 `EXPLAIN` 문이 없으므로 실행 계획은 `explain_query` 도구를 사용하세요.
+서버는 기본적으로 **읽기 전용**입니다. 코드 수준의 SQL 화이트리스트는 `SELECT`, `SHOW`, `DESC`, `DESCRIBE`, `WITH` 문만 허용하며, 다중 문장 쿼리는 거부됩니다. CUBRID에는 `EXPLAIN` 문이 없으므로 실행 계획은 `explain_query` 도구를 사용하세요(`SET TRACE ON` 아래에서 문장을 실행한 뒤 롤백합니다).
 
-> **SQL 화이트리스트는 심층 방어이지 보안 경계가 아닙니다.** 명백한 실수를 막는 파서 기반 가드레일일 뿐, 실제 강제 계층은 데이터베이스 자체입니다. 모델이 읽을 수 있는 테이블에 **SELECT 권한만 가진 CUBRID 사용자**로 서버를 실행하세요. 자세한 내용은 [`SECURITY.md`](https://github.com/cubrid-lab/cubrid-mcp-server/blob/main/SECURITY.md)를 참고하세요.
+> **SQL 키워드 검사는 가드레일이자 심층 방어이며 보안 경계가 아닙니다.** 주된 통제는 전용 최소 권한 데이터베이스 계정입니다: 모델에 필요한 테이블에만 **SELECT 권한을 가진 CUBRID 사용자**로 서버를 실행하고, `dba`나 소유자 계정을 재사용하지 말며, 이 계정이 자신의 스키마에서 가진 객체 생성 권한을 검토하세요. 자세한 내용은 [`SECURITY.md`](https://github.com/cubrid-lab/cubrid-mcp-server/blob/main/SECURITY.md)를 참고하세요.
 
 ### 쓰기 모드 (옵트인)
 
@@ -204,7 +204,7 @@ cubrid-mcp-server
 제약 사항:
 
 - **단일 DML 문만 허용.** 독립 실행형 읽기, DDL(`CREATE`/`ALTER`/`DROP`/`TRUNCATE`), 트랜잭션 제어, 다중 문장 입력은 거부됩니다. (단일 DML 안의 서브쿼리는 합법적으로 허용됩니다.)
-- **DDL은 의도적으로 미지원.** CUBRID는 DDL을 자동 커밋하므로 롤백 보장이 무의미해집니다.
+- **DDL은 의도적으로 미지원.** `execute_write`는 DML 도구(`INSERT`/`UPDATE`/`DELETE`)이고 `execute_query`는 읽기 전용이므로 `CREATE`/`ALTER`/`DROP`/`TRUNCATE`는 어느 쪽으로도 허용되지 않습니다. (서버는 autocommit을 끈 pycubrid를 사용하며, 테스트한 CUBRID 버전(10.2, 11.2, 11.4)에서 DDL은 트랜잭션에 속해 커밋하지 않으면 롤백됩니다. 따라서 이 제외는 DDL 자동 커밋이 아니라 도구 계약에 근거합니다.)
 - **쓰기 모드는 연결 단위.** 읽기 도구와 동일한 `connection` 인자를 받으며, 대상 연결의 설정으로 강제됩니다.
 - `execute_query`는 쓰기 모드 플래그 및 `CUBRID_MCP_READONLY`와 무관하게 **항상 읽기 전용**입니다. `CUBRID_MCP_READONLY=0`이어도 쓰기·DDL·트랜잭션 제어 문장은 실행 전에 거부되고, 결과 집합을 반환하지 않는 문장은 롤백됩니다. `CUBRID_MCP_READONLY=0`으로 `execute_query`를 통해 쓰기를 보내던 클라이언트는 `execute_write`로 전환해야 합니다.
 

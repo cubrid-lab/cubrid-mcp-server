@@ -4,7 +4,7 @@
 
 ## Layer 1 — database permissions (required)
 
-Run the server as a dedicated CUBRID user that has **only the privileges you want the model to use**. The code-level safety checker is not a substitute for this.
+Run the server as a dedicated, least-privilege CUBRID user that has **only the privileges you want the model to use**. This account is the primary security control; the code-level safety checker is a guardrail and is not a substitute for it. Do not reuse `dba` or the owner account of the schema.
 
 ```sql
 -- 1. Create the user
@@ -19,15 +19,17 @@ GRANT SELECT ON orders TO mcp_reader;
 -- 3. Do NOT grant CREATE, ALTER, DROP, INSERT, UPDATE, DELETE, GRANT, or any DBA role.
 ```
 
+Grant `SELECT` only on the tables the model needs, and review which object-creation rights the account has in its own schema.
+
 Additional hardening: use a long random password from a secret manager, rotate it on your normal cadence, grant per-table rather than schema-wide, and keep CUBRID on a network only the MCP-server host can reach. See [`SECURITY.md`](https://github.com/cubrid-lab/cubrid-mcp-server/blob/main/SECURITY.md) for the full policy.
 
 ## Layer 2 — read-only SQL whitelist
 
-The server is **read-only by default**. When `CUBRID_MCP_READONLY=1` (the default), every statement is parsed with `sqlparse` and rejected unless it is `SELECT`, `SHOW`, `DESC`, `DESCRIBE`, or `WITH` (CTE). CUBRID has no `EXPLAIN` statement; use the `explain_query` tool for execution plans. Multi-statement input is rejected outright, so a trailing `; DROP TABLE …` cannot slip through.
+The server is **read-only by default**. When `CUBRID_MCP_READONLY=1` (the default), every statement is parsed with `sqlparse` and rejected unless it is `SELECT`, `SHOW`, `DESC`, `DESCRIBE`, or `WITH` (CTE). CUBRID has no `EXPLAIN` statement; use the `explain_query` tool for execution plans. Multi-statement input is rejected.
 
-> The whitelist is defense-in-depth, not a security boundary. It is a parser-based guardrail against obvious mistakes; the real enforcement layer is the database itself (Layer 1).
+> The SQL keyword checks are a guardrail and defense-in-depth, not a security boundary. They are a best-effort client-side filter against obvious mistakes; the primary control is the dedicated least-privilege database account (Layer 1), which should have `SELECT` only on the tables the model needs.
 
-`CUBRID_MCP_READONLY=0` relaxes this whitelist — only do so when the DB user is already read-only and you need result-set statements the parser misclassifies. It does **not** make `execute_query` a write path: `execute_query` still rejects statements that lead with a write, DDL or transaction-control keyword (`INSERT`, `UPDATE`, `DELETE`, `REPLACE`, `MERGE`, `CREATE`, `ALTER`, `DROP`, `TRUNCATE`, `RENAME`, `GRANT`, `REVOKE`, `COMMIT`, `ROLLBACK`, `SAVEPOINT`, `SET`, `PREPARE`, `EXECUTE`, `DEALLOCATE`, `DO`) (matching the first word of the leading keyword) and rejects multi-statement and empty input before they reach the database, never commits, and rolls back any statement that returns no result set (keeping the connection) as well as every successful read. `explain_query` is **always** read-only regardless of this flag. This keyword check is a guardrail, not a security boundary: the read-only database account remains the security boundary. Use `execute_write` (opt-in write mode) for writes; clients that sent writes through `execute_query` with `CUBRID_MCP_READONLY=0` must switch to it.
+`CUBRID_MCP_READONLY=0` relaxes this whitelist — only do so when the DB user is already read-only and you need result-set statements the parser misclassifies. It does **not** make `execute_query` a write path: `execute_query` still rejects statements that lead with a write, DDL or transaction-control keyword (`INSERT`, `UPDATE`, `DELETE`, `REPLACE`, `MERGE`, `CREATE`, `ALTER`, `DROP`, `TRUNCATE`, `RENAME`, `GRANT`, `REVOKE`, `COMMIT`, `ROLLBACK`, `SAVEPOINT`, `SET`, `PREPARE`, `EXECUTE`, `DEALLOCATE`, `DO`) (matching the first word of the leading keyword) and rejects multi-statement and empty input before they reach the database, never commits, and rolls back any statement that returns no result set (keeping the connection) as well as every successful read. `explain_query` always applies the read-only checks regardless of this flag (see below). This keyword check is a guardrail, not a security boundary: the read-only database account remains the security boundary. Use `execute_write` (opt-in write mode) for writes; clients that sent writes through `execute_query` with `CUBRID_MCP_READONLY=0` must switch to it.
 
 ## Layer 2b — opt-in write mode (`CUBRID_MCP_WRITE`)
 
@@ -35,10 +37,14 @@ Write access is **off by default**. Setting `CUBRID_MCP_WRITE=1` registers a sep
 
 - **DML only.** A dedicated whitelist (`ensure_write_allowed`) accepts a **single** `INSERT`, `UPDATE`, or `DELETE` and rejects standalone reads, DDL, transaction control, and multi-statement input. (A single DML statement may still legally embed subqueries, e.g. `INSERT ... SELECT`.)
 - **Atomic transactions.** The statement runs in an explicit transaction — commit on success, rollback on any failure.
-- **DDL is intentionally unsupported.** CUBRID auto-commits DDL, which would defeat the rollback guarantee, so `CREATE`/`ALTER`/`DROP`/`TRUNCATE` are never permitted.
-- **Not registered when disabled.** With write mode off, `execute_write` is absent from MCP capability discovery — there is no reachable write path, not merely a guarded one.
+- **DDL is intentionally unsupported.** `execute_write` is a DML tool (`INSERT`/`UPDATE`/`DELETE`) and `execute_query` is read-only, so `CREATE`/`ALTER`/`DROP`/`TRUNCATE` are never permitted through either. (The server runs pycubrid with autocommit off; on the CUBRID versions tested (10.2, 11.2, 11.4) DDL is transactional and is rolled back if it is not committed, so the exclusion rests on the tool contracts, not on DDL auto-commit.)
+- **Not registered when disabled.** With write mode off, `execute_write` is absent from MCP capability discovery — the tool is simply not offered. Because the SQL checks are a guardrail, the database account remains what actually limits writes.
 - **Per-connection gating.** With multiple connections, the tool is registered when **any** connection enables writes, but each write is enforced against the **target** connection's setting — a connection with writes off refuses even when another enables them.
 - `execute_query` remains **read-only regardless** of the write flag.
+
+### `explain_query` executes the statement
+
+`explain_query` does not merely plan: it runs the `SELECT`/`WITH` statement under `SET TRACE ON`, reads `SHOW TRACE`, then turns tracing off and rolls the transaction back. The statement therefore consumes real database resources (and can take as long as the query itself), and it is subject to the same keyword checks and database privileges as `execute_query`. The rollback is the server's cleanup step, not a substitute for a least-privilege account.
 
 ## Layer 3 — output limits
 

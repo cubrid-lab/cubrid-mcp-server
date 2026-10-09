@@ -233,7 +233,8 @@ def list_indexes(table_name: str, connection: str | None = None) -> list[dict[st
 def explain_query(sql: str, connection: str | None = None) -> dict[str, Any]:
     """Return CUBRID's execution plan/trace for a ``SELECT`` or ``WITH`` statement.
 
-    CUBRID uses SHOW TRACE (not standard EXPLAIN). Look for SEQ SCAN
+    The statement is actually executed under SET TRACE ON, then the transaction
+    is rolled back. CUBRID uses SHOW TRACE (not standard EXPLAIN). Look for SEQ SCAN
     in the output — it indicates a full table scan that may benefit
     from an index. See cubrid://guide/performance for interpretation tips.
     """

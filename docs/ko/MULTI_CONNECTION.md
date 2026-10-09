@@ -65,3 +65,7 @@ export CUBRID_ANALYTICS_DATABASE=analytics
 각 연결은 자체 잠금·연결 수명 주기·끊어진 연결 복구를 가지므로, 한 데이터베이스에서 쿼리가 멈춰도 다른 연결을 막지 않습니다.
 
 쓰기 모드 등록의 미묘한 점: 어떤 연결이든 쓰기를 켜면 `execute_write`가 MCP 기능 탐색에 등장하지만, 매 호출은 **대상** 연결의 설정으로 강제됩니다 — 쓰기가 꺼진 연결은 다른 연결이 켜져 있어도 쓰기를 거부합니다. [보안 모델](SECURITY_MODEL.ko.md#계층-2b--옵트인-쓰기-모드-cubrid_mcp_write) 참고.
+
+## 리소스는 기본 연결을 사용합니다
+
+모든 **도구**는 `connection` 인자를 받지만 MCP **리소스**는 받지 않습니다: 리소스 URI에는 연결 선택자가 없으므로 `cubrid://schema`와 `cubrid://schema/{table}`은 항상 `default` 연결을 읽습니다. 이름 있는 연결의 스키마를 보려면 도구(`all_table_names`, `describe_table` 등)를 `connection="<name>"`과 함께 호출하세요.

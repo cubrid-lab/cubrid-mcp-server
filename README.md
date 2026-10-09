@@ -30,14 +30,14 @@ A [Model Context Protocol](https://modelcontextprotocol.io) server for [CUBRID](
 
 Schema metadata is also exposed as read-only [MCP Resources](https://modelcontextprotocol.io/docs/concepts/resources), so clients can discover and read schema context without a tool call. Resources reuse the same read-only catalog queries as the tools — no additional data access or write surface.
 
-| Resource URI | Description |
-|--------------|-------------|
-| `cubrid://agent-guide` | CUBRID agent guide: dialect, types, performance |
-| `cubrid://guide/*` | 4 topic guides: sql-dialect, types, performance, collections |
-| `cubrid://schema` | Whole-schema index: every user table with its per-table resource URI |
-| `cubrid://schema/{table}` | Per-table metadata (columns, primary key, indexes) — mirrors `describe_table` |
+| Resource URI | MIME type | Description |
+|--------------|-----------|-------------|
+| `cubrid://agent-guide` | `text/markdown` | CUBRID agent guide: dialect, types, performance |
+| `cubrid://guide/*` | `text/markdown` | 4 topic guides: sql-dialect, types, performance, collections |
+| `cubrid://schema` | `application/json` | Whole-schema index: every user table with its per-table resource URI |
+| `cubrid://schema/{table}` | `application/json` | Per-table metadata (columns, primary key, indexes) — mirrors `describe_table` |
 
-Both return `application/json`. Table names in `{table}` are percent-decoded by URI-template matching; an unknown or system table produces a resource-read error, matching the `describe_table` tool.
+Schema resources always read the `default` connection (see [Multi-Connection](docs/MULTI_CONNECTION.md)). The guides are static Markdown. Table names in `{table}` are percent-decoded by URI-template matching; an unknown or system table produces a resource-read error, matching the `describe_table` tool.
 
 ## Prompts
 
@@ -55,6 +55,11 @@ the underlying tools (`execute_query`/`explain_query` via `safety.py`).
 | `explain_query` | `sql` | Obtain and interpret a `SELECT`/`WITH` execution plan via `explain_query` |
 | `inspect_schema` | _(none)_ | Build a high-level overview of the whole schema from the read-only tools |
 | `find_index_candidates` | `table` | Review a table's index coverage for potential review areas |
+| `optimize_query` | `sql` | Analyze the execution plan and suggest CUBRID-specific optimizations |
+| `migrate_from_mysql` | `sql` | Convert MySQL query syntax to valid CUBRID SQL |
+| `explore_unknown_db` | _(none)_ | Systematically explore an unfamiliar database |
+| `safe_data_analysis` | `question` | Answer data questions using read-only queries |
+| `write_cubrid_sql` | `natural_language` | Generate valid CUBRID SQL from natural language |
 
 ## Quick Start
 
@@ -218,9 +223,9 @@ Add to `.cursor/mcp.json`:
 
 ## Security
 
-The server is **read-only by default**. A code-level SQL whitelist allows only `SELECT`, `SHOW`, `DESC`, `DESCRIBE`, and `WITH` statements. Multi-statement queries are rejected. CUBRID has no `EXPLAIN` statement; use the `explain_query` tool for execution plans.
+The server is **read-only by default**. A code-level SQL whitelist allows only `SELECT`, `SHOW`, `DESC`, `DESCRIBE`, and `WITH` statements. Multi-statement queries are rejected. CUBRID has no `EXPLAIN` statement; use the `explain_query` tool for execution plans (it executes the statement under `SET TRACE ON` and rolls back).
 
-> **The SQL whitelist is defense-in-depth, not a security boundary.** It is a non-validating parser-based guardrail against obvious mistakes. The real enforcement layer is the database itself: **always run the server as a CUBRID user that has only `SELECT` grants** on the tables the model may read. See [`SECURITY.md`](./SECURITY.md).
+> **The SQL keyword checks are a guardrail and defense-in-depth, not a security boundary.** The primary control is a dedicated least-privilege database account: **run the server as a CUBRID user that has `SELECT` only on the tables the model needs**, never reuse `dba` or the owner account, and review which object-creation rights the account has in its own schema. See [`SECURITY.md`](./SECURITY.md).
 
 For production use, also configure a read-only database user. See [`SECURITY.md`](./SECURITY.md) for the recommended setup.
 
@@ -231,7 +236,7 @@ Write access is **disabled by default**. Setting `CUBRID_MCP_WRITE=1` registers 
 Constraints and rationale:
 
 - **Single-statement DML only.** Standalone reads, DDL (`CREATE`/`ALTER`/`DROP`/`TRUNCATE`), transaction-control, and multi-statement input are rejected. (A single DML statement may still legally contain subqueries, e.g. `INSERT ... SELECT`.)
-- **DDL is intentionally unsupported.** CUBRID auto-commits DDL, which defeats the rollback guarantee, so it is excluded from write mode.
+- **DDL is intentionally unsupported.** `execute_write` is a DML tool (`INSERT`/`UPDATE`/`DELETE`) and `execute_query` is read-only, so `CREATE`/`ALTER`/`DROP`/`TRUNCATE` are never permitted through either. (The server runs pycubrid with autocommit off; on the CUBRID versions tested (10.2, 11.2, 11.4) DDL is transactional and is rolled back if it is not committed, so the exclusion rests on the tool contracts, not on DDL auto-commit.)
 - **Write mode is per-connection.** `execute_write` accepts the same optional `connection` argument as the read tools and runs against that connection; a connection whose `CUBRID_<NAME>_MCP_WRITE` is off refuses the write even when another connection enables it.
 - `execute_query` remains **read-only regardless** of the write-mode flag and of `CUBRID_MCP_READONLY`: with `CUBRID_MCP_READONLY=0` it still rejects write, DDL and transaction-control statements before they run, and rolls back any statement that returns no result set. Clients that sent writes through `execute_query` with `CUBRID_MCP_READONLY=0` must switch to `execute_write`.
 - Enforcement is defense-in-depth; still run the server as a CUBRID user granted only the privileges it needs. See [`SECURITY.md`](./SECURITY.md).

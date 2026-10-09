@@ -8,16 +8,23 @@
 - Connects to CUBRID through `pycubrid`; connection settings come from `CUBRID_HOST`, `CUBRID_PORT`, `CUBRID_USER`, `CUBRID_PASSWORD`, and `CUBRID_DATABASE`.
 - Exposes schema inspection, index and serial discovery, class hierarchy, query planning, row counts, and bounded SQL query execution.
 - Supports Claude Desktop, Claude Code, Cursor, and other MCP clients that can launch a local stdio server.
-- Enforces a read-only SQL whitelist by default with `CUBRID_MCP_READONLY=1`.
+- Applies a read-only SQL keyword whitelist by default with `CUBRID_MCP_READONLY=1`; this is a guardrail, and the primary control is a dedicated least-privilege (SELECT-only) database account.
 - Bounds work with `CUBRID_MCP_MAX_ROWS`, `CUBRID_MCP_MAX_CHARS`, `CUBRID_MCP_MAX_SQL_LENGTH`, and `CUBRID_MCP_QUERY_TIMEOUT`.
 
 ## Tools
 
 - `all_table_names`, `filter_table_names`, `schema_definitions`, and `describe_table` inspect database structure.
 - `list_indexes`, `list_serials`, and `list_class_hierarchy` expose CUBRID metadata.
-- `explain_query` returns the execution plan for a `SELECT` or `WITH` query.
+- `explain_query` returns the execution plan for a `SELECT` or `WITH` query by executing it under `SET TRACE ON` and rolling back.
 - `table_row_counts` returns bounded table counts.
-- `execute_query` runs SQL subject to the configured read-only and output limits.
+- `execute_query` runs SQL subject to the configured read-only and output limits; it is read-only even with `CUBRID_MCP_READONLY=0`.
+- `health_check` verifies connectivity on demand.
+- `execute_write` runs a single `INSERT`, `UPDATE`, or `DELETE` in a transaction; it is registered only when write mode (`CUBRID_MCP_WRITE=1`) is enabled.
+
+## Resources and prompts
+
+- Resources: `cubrid://agent-guide` and `cubrid://guide/{sql-dialect,types,performance,collections}` (`text/markdown`), plus `cubrid://schema` and `cubrid://schema/{table}` (`application/json`, default connection only).
+- Prompts: `summarize_table`, `explain_query`, `inspect_schema`, `find_index_candidates`, `optimize_query`, `migrate_from_mysql`, `explore_unknown_db`, `safe_data_analysis`, `write_cubrid_sql`.
 
 ## Docs
 

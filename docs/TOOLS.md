@@ -51,7 +51,7 @@ Every read ends its own transaction: the server rolls back after the rows are co
 
 #### `explain_query(sql, connection=None)`
 
-Returns the execution plan/trace for a `SELECT` or `WITH` statement via CUBRID `SHOW TRACE`. Always read-only, independent of the `CUBRID_MCP_READONLY` flag.
+Returns the execution plan/trace for a `SELECT` or `WITH` statement via CUBRID `SHOW TRACE`. The statement is **actually executed** under `SET TRACE ON` (it consumes real database resources and can run as long as the query itself); the trace is read, tracing is turned off and the transaction is rolled back. It applies the read-only checks independent of the `CUBRID_MCP_READONLY` flag, and the database account's privileges still apply. CUBRID has no `EXPLAIN` statement; this is the tool for execution plans.
 
 #### `table_row_counts(table_names=None, connection=None)`
 
@@ -77,23 +77,23 @@ Verifies database connectivity on demand and reports per-connection status. Usef
 
 Runs a **single** `INSERT`, `UPDATE`, or `DELETE` statement in an explicit transaction (commit on success, rollback on any failure). **Registered only when write mode is enabled** (`CUBRID_MCP_WRITE=1` or `CUBRID_<NAME>_MCP_WRITE=1` on any connection) — with write mode off, the tool does not exist in MCP capability discovery at all.
 
-Constraints: DDL (`CREATE`/`ALTER`/`DROP`/`TRUNCATE`), standalone reads, transaction control, and multi-statement input are rejected. See the [Security Model](SECURITY_MODEL.md).
+Constraints: DDL (`CREATE`/`ALTER`/`DROP`/`TRUNCATE`), standalone reads, transaction control, and multi-statement input are rejected. DDL is excluded because `execute_write` is a DML tool and `execute_query` is read-only, not because of DDL auto-commit. See the [Security Model](SECURITY_MODEL.md).
 
 ## Resources
 
 Schema metadata is also exposed as read-only [MCP Resources](https://modelcontextprotocol.io/docs/concepts/resources), so clients can discover schema context without a tool call. Resources reuse the same read-only catalog queries — no additional data-access surface.
 
-| Resource URI | Description |
-|--------------|-------------|
-| `cubrid://agent-guide` | Comprehensive CUBRID agent guide: SQL dialect, types, safety, performance, tool selection |
-| `cubrid://guide/sql-dialect` | CUBRID syntax differences from MySQL/PostgreSQL |
-| `cubrid://guide/types` | Data type guide: collections, ENUM, JSON, Python mapping |
-| `cubrid://guide/performance` | Performance optimization: SHOW TRACE, indexes, anti-patterns |
-| `cubrid://guide/collections` | Deep dive on SET, MULTISET, SEQUENCE types |
-| `cubrid://schema` | Whole-schema index: every user table with its per-table resource URI |
-| `cubrid://schema/{table}` | Per-table metadata (columns, primary key, indexes) — mirrors `describe_table` |
+| Resource URI | MIME type | Description |
+|--------------|-----------|-------------|
+| `cubrid://agent-guide` | `text/markdown` | Comprehensive CUBRID agent guide: SQL dialect, types, safety, performance, tool selection |
+| `cubrid://guide/sql-dialect` | `text/markdown` | CUBRID syntax differences from MySQL/PostgreSQL |
+| `cubrid://guide/types` | `text/markdown` | Data type guide: collections, ENUM, JSON, Python mapping |
+| `cubrid://guide/performance` | `text/markdown` | Performance optimization: SHOW TRACE, indexes, anti-patterns |
+| `cubrid://guide/collections` | `text/markdown` | Deep dive on SET, MULTISET, SEQUENCE types |
+| `cubrid://schema` | `application/json` | Whole-schema index: every user table with its per-table resource URI |
+| `cubrid://schema/{table}` | `application/json` | Per-table metadata (columns, primary key, indexes) — mirrors `describe_table` |
 
-Both return `application/json`. Table names in `{table}` are percent-decoded by URI-template matching; an unknown or system table produces a resource-read error, matching the `describe_table` tool.
+The `cubrid://guide/*` documents and the agent guide are static Markdown. The schema resources always read the `default` connection and take no `connection` argument (see [Multi-Connection](MULTI_CONNECTION.md)). Table names in `{table}` are percent-decoded by URI-template matching; an unknown or system table produces a resource-read error, matching the `describe_table` tool.
 
 ## Prompts
 
