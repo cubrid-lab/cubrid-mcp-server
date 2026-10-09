@@ -41,6 +41,28 @@ def _is_timeout_error(exc: BaseException | None) -> bool:
     return False
 
 
+# pycubrid errors that report a statement the server rejected (bad SQL, unknown
+# object, constraint or value error) rather than a broken session. Deliberately
+# an allowlist: ``OperationalError`` (communication failures, closed handles),
+# ``InterfaceError`` (closed connection), ``InternalError`` and the generic
+# ``DatabaseError`` (unmapped CAS codes) are all treated as possible transport
+# or session failures and still discard the connection.
+_SERVER_SQL_ERRORS: tuple[type[BaseException], ...] = (
+    pycubrid.ProgrammingError,
+    pycubrid.IntegrityError,
+    pycubrid.DataError,
+)
+
+
+def _is_server_sql_error(exc: BaseException) -> bool:
+    """Return ``True`` if ``exc`` is a statement-level SQL error, not a session failure.
+
+    Such an error arrives as a complete CAS error response, so the connection is
+    still in protocol sync and only the transaction needs to be ended.
+    """
+    return isinstance(exc, _SERVER_SQL_ERRORS) and not _is_timeout_error(exc)
+
+
 def sanitize_error(exc: BaseException) -> str:
     """Return a concise, non-sensitive description of an exception for clients.
 
@@ -241,9 +263,16 @@ class Database:
                 if _is_timeout_error(exc):
                     timed_out = True
                     raise self._timeout_error(exc) from exc
-                # Lazy recovery (#106): drop the possibly-dead connection so the
-                # next request reconnects instead of pre-pinging on acquisition.
-                self._discard_connection()
+                if cursor is not None and _is_server_sql_error(exc):
+                    # The server rejected the statement but the session is
+                    # intact: end the read transaction and keep the connection
+                    # (a failing rollback still discards it).
+                    self._rollback_or_discard(connection)
+                else:
+                    # Lazy recovery (#106): drop the possibly-dead connection so
+                    # the next request reconnects instead of pre-pinging on
+                    # acquisition.
+                    self._discard_connection()
                 # Full detail to stderr for operators; only the error category is
                 # surfaced to the client to avoid leaking schema/host/SQL/config.
                 logger.error("query failed", exc_info=exc)
@@ -326,10 +355,25 @@ class Database:
                 return {"ok": False, "error": str(exc)}
             return {"ok": True, "server_version": str(version)}
 
+    def _end_read_transaction(self) -> None:
+        """Roll back the read transaction a successful fetch left open.
+
+        The connection runs with pycubrid's default ``autocommit=False``, so a
+        SELECT opens a transaction that would otherwise stay open across tool
+        calls, holding locks and pinning the snapshot. Called with the lock held,
+        after the cursor is closed. Calling ``fetch_*`` inside ``exclusive()``
+        ends the outer transaction.
+        """
+        if self._connection is not None:
+            self._rollback_or_discard(self._connection)
+
     def fetch_all(self, sql: str, params: tuple[Any, ...] | None = None) -> list[tuple[Any, ...]]:
-        with self.cursor() as cursor:
-            cursor.execute(sql, params or ())
-            return list(cursor.fetchall())
+        with self._lock:
+            with self.cursor() as cursor:
+                cursor.execute(sql, params or ())
+                rows = list(cursor.fetchall())
+            self._end_read_transaction()
+            return rows
 
     def fetch_many(
         self,
@@ -341,19 +385,22 @@ class Database:
 
         At most ``max_rows`` rows are returned; ``truncated`` is ``True`` when the
         result set contained more rows than that. When ``max_rows`` is ``None`` all
-        rows are returned and ``truncated`` is always ``False``.
+        rows are returned and ``truncated`` is always ``False``. The read
+        transaction is rolled back before returning, truncated or not.
         """
-        with self.cursor() as cursor:
-            cursor.execute(sql, params or ())
-            rows: list[tuple[Any, ...]] = []
-            truncated = False
-            while True:
-                batch = cursor.fetchmany(100)
-                if not batch:
-                    break
-                for row in batch:
-                    if max_rows is not None and len(rows) >= max_rows:
-                        truncated = True
-                        return rows, truncated
-                    rows.append(row)
+        with self._lock:
+            with self.cursor() as cursor:
+                cursor.execute(sql, params or ())
+                rows: list[tuple[Any, ...]] = []
+                truncated = False
+                while not truncated:
+                    batch = cursor.fetchmany(100)
+                    if not batch:
+                        break
+                    for row in batch:
+                        if max_rows is not None and len(rows) >= max_rows:
+                            truncated = True
+                            break
+                        rows.append(row)
+            self._end_read_transaction()
             return rows, truncated
