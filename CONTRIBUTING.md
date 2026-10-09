@@ -96,9 +96,12 @@ reports the required `ci-gate` for the PR head.
 
 The documentation build tools (`mkdocs`, `mkdocs-material`, `pymdown-extensions`)
 are pinned in `docs-tools/requirements.txt`, installed by `docs.yml`, and updated
-by Dependabot. Dependabot groups dev tools (`ruff`, `mypy`, `pytest*`,
-`pre-commit`, `tox`, `build`, `twine`) and GitHub Actions minor/patch updates
-into one PR each; major updates and the runtime dependencies (`fastmcp`,
+by Dependabot. `docs.yml` also runs `mkdocs build --strict` (build only, no
+deploy, read-only permissions) on pull requests touching `docs-tools/`,
+`mkdocs.yml` or `docs/`. Dependabot groups dev tools (`pytest*`, `pre-commit`,
+`tox`, `build`, `twine`) and GitHub Actions minor/patch updates into one PR
+each; the exact-pinned `ruff` and `mypy` each get their own group so a breaking
+minor release of one never blocks the others; major updates and the runtime dependencies (`fastmcp`,
 `pycubrid`, `sqlparse`) stay as separate PRs.
 
 The lanes check:

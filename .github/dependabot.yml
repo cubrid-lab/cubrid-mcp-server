@@ -11,13 +11,25 @@ updates:
       - "dependencies"
     commit-message:
       prefix: "chore(deps)"
-    # Dev tools arrive as one PR. Runtime dependencies (fastmcp, pycubrid,
-    # sqlparse) are deliberately ungrouped, and major updates stay separate.
+    # Semver-safe dev tools arrive as one PR. ruff and mypy are exact-pinned and
+    # can break on a minor release, so each has its own group and a breaking
+    # bump of one never blocks the others. Runtime dependencies (fastmcp,
+    # pycubrid, sqlparse) are deliberately ungrouped; major updates stay separate.
     groups:
-      dev-tools:
+      ruff:
         patterns:
           - "ruff"
+        update-types:
+          - "minor"
+          - "patch"
+      mypy:
+        patterns:
           - "mypy"
+        update-types:
+          - "minor"
+          - "patch"
+      dev-tools:
+        patterns:
           - "pytest*"
           - "pre-commit"
           - "tox"

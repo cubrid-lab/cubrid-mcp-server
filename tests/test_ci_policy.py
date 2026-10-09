@@ -17,8 +17,14 @@ ROOT = Path(__file__).resolve().parents[1]
 WORKFLOWS = ROOT / ".github" / "workflows"
 
 CANCEL_ONLY_PR = "${{ github.event_name == 'pull_request' }}"
+# Non-PR runs get a unique group so a queued main/schedule run is never replaced.
+EXPECTED_GROUP = (
+    "${{ github.workflow }}-"
+    "${{ github.event_name == 'pull_request' && github.ref || github.run_id }}"
+)
 RUNTIME_DEPS = {"fastmcp", "pycubrid", "sqlparse"}
-DEV_TOOLS = {"ruff", "mypy", "pytest*", "pre-commit", "tox", "build", "twine"}
+DEV_TOOLS = {"pytest*", "pre-commit", "tox", "build", "twine"}
+ISOLATED_TOOLS = {"ruff", "mypy"}
 
 
 def _load(path: Path) -> dict[str, Any]:
@@ -34,11 +40,7 @@ def _updates() -> dict[tuple[str, str], dict[str, Any]]:
 def test_only_pull_request_runs_are_cancelled(name: str) -> None:
     block = _load(WORKFLOWS / name)["concurrency"]
     assert block["cancel-in-progress"] == CANCEL_ONLY_PR
-    group = block["group"]
-    assert "github.workflow" in group
-    # Non-PR runs get a unique group so a queued main/schedule run is never replaced.
-    assert "github.run_id" in group
-    assert "github.ref" in group
+    assert block["group"] == EXPECTED_GROUP
 
 
 @pytest.mark.parametrize("name", ["ci.yml", "codeql.yml"])
@@ -50,6 +52,9 @@ def test_dev_tools_and_actions_are_grouped_by_minor_and_patch() -> None:
     updates = _updates()
     pip = updates[("pip", "/")]["groups"]
     assert set(pip["dev-tools"]["patterns"]) == DEV_TOOLS
+    # Exact-pinned, non-semver-safe tools: one group each, never in dev-tools.
+    for tool in ISOLATED_TOOLS:
+        assert pip[tool]["patterns"] == [tool]
     actions = updates[("github-actions", "/")]["groups"]
     assert actions["github-actions"]["patterns"] == ["*"]
     for group in (*pip.values(), *actions.values()):
@@ -94,3 +99,20 @@ def test_every_docs_build_installs_from_the_pinned_file() -> None:
 def test_dependabot_updates_the_docs_pins() -> None:
     entry = _updates()[("pip", "/docs-tools")]
     assert entry["schedule"]["interval"] == "weekly"
+
+
+def test_docs_pull_request_builds_but_never_deploys() -> None:
+    wf = _load(WORKFLOWS / "docs.yml")
+    # PyYAML parses the bare `on` key as boolean True.
+    triggers = wf.get("on", wf.get(True))
+    assert triggers["pull_request"]["paths"] == ["docs-tools/**", "mkdocs.yml", "docs/**"]
+    # Workflow-level permissions stay read-only so PR runs cannot write pages.
+    assert wf["permissions"] == {"contents": "read"}
+    jobs = wf["jobs"]
+    assert jobs["deploy"]["if"] == "github.event_name != 'pull_request'"
+    assert jobs["deploy"]["permissions"]["pages"] == "write"
+    assert jobs["deploy"]["permissions"]["id-token"] == "write"
+    assert "permissions" not in jobs["build"]
+    for step in jobs["build"]["steps"]:
+        if "upload-pages-artifact" in step.get("uses", ""):
+            assert step["if"] == "github.event_name != 'pull_request'"

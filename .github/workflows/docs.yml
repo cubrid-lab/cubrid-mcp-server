@@ -4,15 +4,13 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+  # Build-only check (no deploy) so docs-tool pin bumps are validated by
+  # `mkdocs build --strict` before they are merged.
+  pull_request:
+    paths: [docs-tools/**, mkdocs.yml, docs/**]
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
-
-concurrency:
-  group: "pages"
-  cancel-in-progress: false
 
 jobs:
   build:
@@ -25,14 +23,23 @@ jobs:
           python-version: "3.12"
       - run: pip install -r docs-tools/requirements.txt
       - run: mkdocs build --strict
-      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+      - if: github.event_name != 'pull_request'
+        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
           path: site
 
   deploy:
+    if: github.event_name != 'pull_request'
     needs: build
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    concurrency:
+      group: "pages"
+      cancel-in-progress: false
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
