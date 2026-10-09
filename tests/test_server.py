@@ -835,3 +835,67 @@ class TestOracleReviewFixes:
 
         result = write_cubrid_sql("insert a user")
         assert "read-only" in result.lower() or "do not execute" in result.lower()
+
+
+_LEAKY_CONFIG = Config(
+    host="db.internal",
+    port=33000,
+    user="app_user",
+    password="hunter2-secret",
+    database="secretdb",
+    readonly=True,
+    max_chars=4000,
+    max_rows=1000,
+)
+_LEAKY_MESSAGE = (
+    "cannot reach db.internal:33000 db=secretdb user=app_user "
+    "password=hunter2-secret while running SELECT ssn FROM payroll"
+)
+_SECRETS = ("db.internal", "secretdb", "hunter2-secret", "app_user", "payroll")
+
+
+@pytest.fixture
+def leaky_db(monkeypatch: pytest.MonkeyPatch) -> Database:
+    import pycubrid
+
+    def _connect(**_k: Any) -> Any:
+        raise pycubrid.OperationalError(_LEAKY_MESSAGE)
+
+    monkeypatch.setattr(pycubrid, "connect", _connect)
+    database = Database(_LEAKY_CONFIG)
+    monkeypatch.setattr(
+        server, "_context", AppContext.single(config=_LEAKY_CONFIG, database=database)
+    )
+    return database
+
+
+def test_health_check_tool_hides_connection_details(
+    leaky_db: Database, caplog: pytest.LogCaptureFixture
+) -> None:
+    with caplog.at_level("ERROR", logger="cubrid_mcp_server.database"):
+        result = server.health_check()
+    assert result["ok"] is False
+    for secret in _SECRETS:
+        assert secret not in str(result)
+    assert "db.internal" in caplog.text
+    assert "hunter2-secret" in caplog.text
+
+
+@pytest.mark.parametrize(
+    "call",
+    [
+        lambda: server.execute_query("SELECT 1"),
+        lambda: server.explain_query("SELECT 1"),
+        lambda: server.table_row_counts(),
+    ],
+    ids=["execute_query", "explain_query", "table_row_counts"],
+)
+def test_tools_hide_connection_details_when_connect_fails(
+    leaky_db: Database, caplog: pytest.LogCaptureFixture, call: Any
+) -> None:
+    with caplog.at_level("ERROR", logger="cubrid_mcp_server.database"):
+        with pytest.raises(Exception) as info:
+            call()
+    for secret in _SECRETS:
+        assert secret not in str(info.value)
+    assert "db.internal" in caplog.text

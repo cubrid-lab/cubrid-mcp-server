@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+- **Connection errors no longer reveal host or database (#236)** — `Database.connect()` now raises the fixed `failed to connect to CUBRID` (previously it included `host=` and `database=`), and `health_check` returns only the exception class name instead of `str(exc)`. `exclusive()` (used by `explain_query`) now raises a sanitized `DatabaseError` for non-timeout driver errors instead of re-raising the raw driver exception, which could carry SQL or host text. Host, port, database and the driver cause are written to the stderr log with `exc_info` for operators. Operators who matched on the old message or the raw `health_check` text must read the server log instead. No tool signature, SQL-safety, timeout or audit change.
+
 ### Changed
 - **Python 3.11 is now the minimum supported version (#221)** — `requires-python` is `>=3.11` (Python 3.10 reached upstream end of life on 2026-10-01); the 3.10 classifier is removed, Ruff targets `py311` and mypy `3.11`. Python 3.14 is added to the classifiers and the unit/full-integration matrices after the offline suite (459 tests), Ruff and mypy passed on 3.14. The `lowest-direct` job and Codecov upload moved to 3.11; lowest-direct resolves FastMCP 3.0.0, pycubrid 1.4.0 and sqlparse 0.5.0 and passes. No MCP, SQL-safety, timeout or audit behavior changes; direct dependency floors are unchanged.
 
