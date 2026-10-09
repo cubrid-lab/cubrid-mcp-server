@@ -73,7 +73,7 @@ lanes run:
 | Change | Unit lane (ruff, mypy, pytest + coverage) | `lowest-direct` | Live CUBRID integration |
 |---|---|---|---|
 | Docs/metadata only (`*.md`, `docs/`, `LICENSE`, `NOTICE`, `llms.txt`, `mkdocs.yml`) | — | — | — |
-| Tooling (`scripts/`, `Makefile`, `codecov.yml`, `.gitignore`, `.mcpb/`, `glama.json`, `.github/dependabot.yml`, issue templates, `demos/`) | Python 3.12 | — | — |
+| Tooling (`scripts/`, `Makefile`, `codecov.yml`, `.gitignore`, `.mcpb/`, `glama.json`, `.github/dependabot.yml`, `docs-tools/`, issue templates, `demos/`) | Python 3.12 | — | — |
 | Runtime or tests (`cubrid_mcp_server/`, `tests/`) | Python 3.12 | — | CUBRID 11.4 |
 | Connection / catalog SQL (`database.py`, `context.py`, `tests/conftest.py`, `tests/test_integration.py`) | Python 3.12 | — | CUBRID 11.2 + 11.4 |
 | Other workflows (`.github/workflows/*` except `ci.yml`) | Python 3.11, 3.12, 3.14 | — | CUBRID 11.2 + 11.4 |
@@ -87,6 +87,19 @@ PR. The final `ci-gate` job is the one required check: it fails unless
 selected succeeded. A failed, cancelled or unexpectedly skipped lane, or a
 failed classification, fails the gate; a lane may be skipped only when the
 classification explicitly says it does not apply.
+
+`ci.yml` and `codeql.yml` share a `concurrency` group per workflow and ref, and
+only `pull_request` runs are cancelled: a newer push to a PR supersedes its older
+run, while `main`, release and scheduled runs each get their own group and are
+never cancelled. A cancelled superseded run cannot weaken the gate; the new run
+reports the required `ci-gate` for the PR head.
+
+The documentation build tools (`mkdocs`, `mkdocs-material`, `pymdown-extensions`)
+are pinned in `docs-tools/requirements.txt`, installed by `docs.yml`, and updated
+by Dependabot. Dependabot groups dev tools (`ruff`, `mypy`, `pytest*`,
+`pre-commit`, `tox`, `build`, `twine`) and GitHub Actions minor/patch updates
+into one PR each; major updates and the runtime dependencies (`fastmcp`,
+`pycubrid`, `sqlparse`) stay as separate PRs.
 
 The lanes check:
 

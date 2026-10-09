@@ -53,6 +53,8 @@ TOOLING = (
     ".mcpb/*",
     "glama.json",
     ".github/dependabot.yml",
+    # Pinned docs tooling, checked by tests/test_ci_policy.py (#244).
+    "docs-tools/*",
     ".github/ISSUE_TEMPLATE/*",
     "demos/*",
     # Checked against pyproject.toml by tests/test_third_party_licenses.py (#218).

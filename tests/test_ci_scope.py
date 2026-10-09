@@ -114,6 +114,7 @@ def test_other_workflow_changes_run_endpoints_without_lowest_direct() -> None:
         "Makefile",
         ".mcpb/server.json",
         ".github/dependabot.yml",
+        "docs-tools/requirements.txt",
         "THIRD_PARTY_LICENSES.md",
     ],
 )
