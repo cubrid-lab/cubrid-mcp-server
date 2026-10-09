@@ -11,6 +11,53 @@ updates:
       - "dependencies"
     commit-message:
       prefix: "chore(deps)"
+    # Semver-safe dev tools arrive as one PR. ruff and mypy are exact-pinned and
+    # can break on a minor release, so each has its own group and a breaking
+    # bump of one never blocks the others. Runtime dependencies (fastmcp,
+    # pycubrid, sqlparse) are deliberately ungrouped; major updates stay separate.
+    groups:
+      ruff:
+        patterns:
+          - "ruff"
+        update-types:
+          - "minor"
+          - "patch"
+      mypy:
+        patterns:
+          - "mypy"
+        update-types:
+          - "minor"
+          - "patch"
+      dev-tools:
+        patterns:
+          - "pytest*"
+          - "pre-commit"
+          - "tox"
+          - "build"
+          - "twine"
+        update-types:
+          - "minor"
+          - "patch"
+
+  # Pinned documentation build tools (docs-tools/requirements.txt)
+  - package-ecosystem: "pip"
+    directory: "/docs-tools"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "documentation"
+    commit-message:
+      prefix: "chore(deps)"
+    groups:
+      docs-tools:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
 
   # GitHub Actions versions
   - package-ecosystem: "github-actions"
@@ -24,3 +71,10 @@ updates:
       - "github-actions"
     commit-message:
       prefix: "chore(deps)"
+    groups:
+      github-actions:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
