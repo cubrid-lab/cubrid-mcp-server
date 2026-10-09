@@ -10,6 +10,9 @@ Checks:
     3. No duplicate version sections
     4. Released versions in descending semver order
     5. No duplicate ### subsection heading within one version section
+    6. In [Unreleased] and releases newer than SECTION_POLICY_CUTOFF, every
+       ``###`` heading is a standard section, appears once, has content and
+       follows the standard order (AGENTS.md "GitHub Release Policy")
 
 Exit codes:
     0 — changelog is valid
@@ -21,6 +24,55 @@ from __future__ import annotations
 import re
 import sys
 from pathlib import Path
+
+# Standard ``###`` headings, in order (AGENTS.md "GitHub Release Policy").
+ALLOWED_SECTIONS = (
+    "Upgrade notes",
+    "Added",
+    "Changed",
+    "Deprecated",
+    "Removed",
+    "Fixed",
+    "Security",
+    "Performance",
+    "Documentation",
+    "CI",
+    "Tests",
+)
+# Latest release when the section policy was adopted. This release and every
+# older one keep their historical headings; their notes are never rewritten.
+SECTION_POLICY_CUTOFF = (0, 4, 0)
+
+
+def section_policy_applies(name: str) -> bool:
+    """[Unreleased] and versions newer than the cutoff; unparsable names fail safe."""
+    match = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)", name)
+    if match is None:
+        return True
+    return tuple(int(n) for n in match.groups()) > SECTION_POLICY_CUTOFF
+
+
+def check_sections(name: str, sections: list[tuple[str, str]]) -> str | None:
+    """Return the first section-policy violation of one release, or None."""
+    last = -1
+    for title, body in sections:
+        if title not in ALLOWED_SECTIONS:
+            return (
+                f"Subsection '### {title}' in [{name}] is not a standard section "
+                f"(allowed, in order: {', '.join(ALLOWED_SECTIONS)})"
+            )
+        if not body.strip():
+            return f"Subsection '### {title}' in [{name}] is empty"
+        index = ALLOWED_SECTIONS.index(title)
+        if index == last:
+            return f"Duplicate subsection '### {title}' in [{name}]"
+        if index < last:
+            return (
+                f"Subsection '### {title}' in [{name}] must come before "
+                f"'### {ALLOWED_SECTIONS[last]}'"
+            )
+        last = index
+    return None
 
 
 def main() -> int:
@@ -34,18 +86,28 @@ def main() -> int:
 
     # Rule 5: No duplicate ### subsection heading within one version section
     # (fenced code blocks are ignored so example headings do not trip the check).
+    # The same pass collects each release's ### sections and their bodies for rule 6;
+    # fenced lines count as body content, never as headings.
     section = ""
     seen_subsections: set[tuple[str, str]] = set()
+    releases: list[tuple[str, list[tuple[str, str]]]] = []
     in_fence = False
     for line in content.splitlines():
+        section_match = None if in_fence else re.match(r"^## \[(\S+)\]", line)
+        if section_match:
+            section = section_match.group(1)
+            releases.append((section, []))
+            continue
+        heading = None if in_fence else re.match(r"^###\s+(.+)$", line)
+        if heading and releases:
+            releases[-1][1].append((heading.group(1).strip(), ""))
+        elif releases and releases[-1][1]:
+            title, body = releases[-1][1][-1]
+            releases[-1][1][-1] = (title, body + line + "\n")
         if line.startswith("```"):
             in_fence = not in_fence
             continue
         if in_fence:
-            continue
-        section_match = re.match(r"^## \[(\S+)\]", line)
-        if section_match:
-            section = section_match.group(1)
             continue
         if line.startswith("### "):
             key = (section, line.strip())
@@ -56,6 +118,12 @@ def main() -> int:
                 )
                 return 1
             seen_subsections.add(key)
+
+    # Rule 6: standard ### sections in [Unreleased] and releases after the cutoff.
+    for name, sections in releases:
+        if section_policy_applies(name) and (error := check_sections(name, sections)):
+            print(f"ERROR: {error}", file=sys.stderr)
+            return 1
 
     if not headers:
         print("ERROR: No version sections found (expected '## [X.Y.Z]')", file=sys.stderr)
