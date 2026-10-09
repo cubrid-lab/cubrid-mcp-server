@@ -2,7 +2,7 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.cubrid-lab/cubrid-mcp-server",
   "title": "CUBRID MCP Server",
-  "description": "MCP server for executing SQL queries and managing CUBRID database operations with 12 read-only and opt-in write tools",
+  "description": "MCP server for CUBRID: 11 read-only tools plus an opt-in execute_write tool, schema resources and prompt templates",
   "version": "0.4.0",
   "repository": {
     "url": "https://github.com/cubrid-lab/cubrid-mcp-server",
@@ -22,13 +22,12 @@
         {
           "name": "CUBRID_HOST",
           "description": "CUBRID database host address",
-          "isRequired": false,
-          "isSecret": false,
-          "default": "localhost"
+          "isRequired": true,
+          "isSecret": false
         },
         {
           "name": "CUBRID_PORT",
-          "description": "CUBRID database port number",
+          "description": "CUBRID broker port number",
           "isRequired": false,
           "isSecret": false,
           "default": "33000"
@@ -36,18 +35,73 @@
         {
           "name": "CUBRID_USER",
           "description": "CUBRID database username",
-          "isRequired": false,
+          "isRequired": true,
           "isSecret": false
         },
         {
           "name": "CUBRID_PASSWORD",
           "description": "CUBRID database password",
-          "isRequired": false,
+          "isRequired": true,
           "isSecret": true
         },
         {
           "name": "CUBRID_DATABASE",
           "description": "CUBRID database name",
+          "isRequired": true,
+          "isSecret": false
+        },
+        {
+          "name": "CUBRID_MCP_READONLY",
+          "description": "Enforce the read-only SQL whitelist (1). 0 relaxes the whitelist only; execute_query still rejects writes",
+          "isRequired": false,
+          "isSecret": false,
+          "default": "1"
+        },
+        {
+          "name": "CUBRID_MCP_WRITE",
+          "description": "Opt-in write mode: registers the execute_write tool (single INSERT/UPDATE/DELETE)",
+          "isRequired": false,
+          "isSecret": false,
+          "default": "0"
+        },
+        {
+          "name": "CUBRID_MCP_AUDIT_LOG",
+          "description": "Emit one redaction-safe JSON audit record per executed statement to stderr",
+          "isRequired": false,
+          "isSecret": false,
+          "default": "0"
+        },
+        {
+          "name": "CUBRID_MCP_MAX_ROWS",
+          "description": "Maximum rows returned by execute_query",
+          "isRequired": false,
+          "isSecret": false,
+          "default": "1000"
+        },
+        {
+          "name": "CUBRID_MCP_MAX_CHARS",
+          "description": "Maximum characters of rendered query output",
+          "isRequired": false,
+          "isSecret": false,
+          "default": "4000"
+        },
+        {
+          "name": "CUBRID_MCP_MAX_SQL_LENGTH",
+          "description": "Maximum length of a submitted SQL statement, in characters",
+          "isRequired": false,
+          "isSecret": false,
+          "default": "65536"
+        },
+        {
+          "name": "CUBRID_MCP_QUERY_TIMEOUT",
+          "description": "Per-statement socket read timeout in seconds",
+          "isRequired": false,
+          "isSecret": false,
+          "default": "30"
+        },
+        {
+          "name": "CUBRID_CONNECTIONS",
+          "description": "Comma-separated names of additional connections, configured with CUBRID_<NAME>_* variables",
           "isRequired": false,
           "isSecret": false
         }

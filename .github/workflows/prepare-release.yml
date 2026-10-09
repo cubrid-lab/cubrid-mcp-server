@@ -13,8 +13,8 @@
 # maintainer closes and reopens the PR (or pushes a commit to the branch) to
 # start CI; see RELEASING.md. No extra secret is required.
 #
-# Canonical cubrid-lab workflow, kept identical across pycubrid,
-# sqlalchemy-cubrid and cubrid-mcp-server except for the `env:` block.
+# Release flow shared with pycubrid and sqlalchemy-cubrid in intent, but the
+# copies are maintained per repository and are not guaranteed to be identical.
 name: Prepare release
 
 on:

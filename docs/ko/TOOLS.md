@@ -53,7 +53,7 @@ CUBRID `CLASS` 상속 관계 — 어느 테이블이 어느 테이블을 상속�
 
 #### `explain_query(sql, connection=None)`
 
-CUBRID `SHOW TRACE`를 통해 `SELECT`/`WITH` 문의 실행 계획/트레이스를 반환합니다. `CUBRID_MCP_READONLY` 플래그와 무관하게 항상 읽기 전용입니다.
+CUBRID `SHOW TRACE`를 통해 `SELECT`/`WITH` 문의 실행 계획/트레이스를 반환합니다. 문장은 `SET TRACE ON` 아래에서 **실제로 실행**됩니다(실제 데이터베이스 자원을 사용하며 쿼리 자체만큼 오래 걸릴 수 있음). 트레이스를 읽은 뒤 트레이스를 끄고 트랜잭션을 롤백합니다(최선 노력 방식의 정리). `CUBRID_MCP_READONLY` 플래그와 무관하게 읽기 전용 검사를 적용하며, 데이터베이스 계정의 권한도 그대로 적용됩니다. CUBRID에는 `EXPLAIN` 문이 없으므로 실행 계획에는 이 도구를 사용하세요.
 
 #### `table_row_counts(table_names=None, connection=None)`
 
@@ -79,18 +79,23 @@ CUBRID `SERIAL` 시퀀스와 현재값·최솟값·최댓값·증분. (`db_seria
 
 **단일** `INSERT`/`UPDATE`/`DELETE` 문을 명시적 트랜잭션(성공 시 커밋, 실패 시 롤백)으로 실행합니다. **쓰기 모드가 활성화된 경우에만 등록**됩니다(`CUBRID_MCP_WRITE=1` 또는 특정 연결의 `CUBRID_<NAME>_MCP_WRITE=1`) — 쓰기 모드가 꺼져 있으면 MCP 기능 탐색에 이 도구가 아예 존재하지 않습니다.
 
-제약: DDL(`CREATE`/`ALTER`/`DROP`/`TRUNCATE`), 독립 실행형 읽기, 트랜잭션 제어, 다중 문장 입력은 거부됩니다. [보안 모델](SECURITY_MODEL.ko.md) 참고.
+제약: DDL(`CREATE`/`ALTER`/`DROP`/`TRUNCATE`), 독립 실행형 읽기, 트랜잭션 제어, 다중 문장 입력은 거부됩니다. DDL이 제외되는 이유는 DDL 자동 커밋이 아니라, `execute_write`가 DML 도구이고 `execute_query`가 읽기 전용이기 때문입니다. [보안 모델](SECURITY_MODEL.ko.md) 참고.
 
 ## 리소스
 
 스키마 메타데이터는 읽기 전용 [MCP 리소스](https://modelcontextprotocol.io/docs/concepts/resources)로도 노출되어, 클라이언트가 도구 호출 없이 스키마 맥락을 발견할 수 있습니다. 리소스는 도구와 동일한 읽기 전용 카탈로그 쿼리를 재사용합니다 — 데이터 접근 범위는 늘어나지 않습니다.
 
-| 리소스 URI | 설명 |
-|--------------|------|
-| `cubrid://schema` | 전체 스키마 인덱스: 모든 사용자 테이블과 테이블별 리소스 URI |
-| `cubrid://schema/{table}` | 테이블별 메타데이터(컬럼, 기본 키, 인덱스) — `describe_table`과 동일 |
+| 리소스 URI | MIME 타입 | 설명 |
+|--------------|-----------|------|
+| `cubrid://agent-guide` | `text/markdown` | CUBRID 에이전트 종합 가이드: SQL 방언, 타입, 안전, 성능, 도구 선택 |
+| `cubrid://guide/sql-dialect` | `text/markdown` | MySQL/PostgreSQL과 다른 CUBRID 구문 |
+| `cubrid://guide/types` | `text/markdown` | 데이터 타입 가이드: 컬렉션, ENUM, JSON, Python 매핑 |
+| `cubrid://guide/performance` | `text/markdown` | 성능 최적화: SHOW TRACE, 인덱스, 안티패턴 |
+| `cubrid://guide/collections` | `text/markdown` | SET, MULTISET, SEQUENCE 타입 심층 설명 |
+| `cubrid://schema` | `application/json` | 전체 스키마 인덱스: 모든 사용자 테이블과 테이블별 리소스 URI |
+| `cubrid://schema/{table}` | `application/json` | 테이블별 메타데이터(컬럼, 기본 키, 인덱스) — `describe_table`과 동일 |
 
-둘 다 `application/json`을 반환합니다. `{table}`의 테이블 이름은 URI 템플릿 매칭으로 퍼센트 디코딩되며, 알 수 없거나 시스템 테이블이면 리소스 읽기 오류가 발생합니다(`describe_table` 도구와 동일한 동작).
+`cubrid://guide/*`와 에이전트 가이드는 정적 Markdown입니다. 스키마 리소스는 항상 `default` 연결을 읽으며 `connection` 인자를 받지 않습니다([멀티커넥션](MULTI_CONNECTION.ko.md) 참고). `{table}`의 테이블 이름은 URI 템플릿 매칭으로 퍼센트 디코딩되며, 알 수 없거나 시스템 테이블이면 리소스 읽기 오류가 발생합니다(`describe_table` 도구와 동일한 동작).
 
 ## 프롬프트
 
@@ -102,3 +107,8 @@ CUBRID `SERIAL` 시퀀스와 현재값·최솟값·최댓값·증분. (`db_seria
 | `explain_query` | `sql` | `SELECT`/`WITH`의 실행 계획을 얻고 해석 |
 | `inspect_schema` | (없음) | 읽기 전용 도구들로 전체 스키마 개요 작성 |
 | `find_index_candidates` | `table` | 테이블의 인덱스 커버리지 검토 |
+| `optimize_query` | `sql` | 실행 계획을 분석하고 CUBRID에 맞는 최적화 제안 |
+| `migrate_from_mysql` | `sql` | MySQL 쿼리 구문을 유효한 CUBRID SQL로 변환 |
+| `explore_unknown_db` | (없음) | 낯선 데이터베이스를 체계적으로 탐색 |
+| `safe_data_analysis` | `question` | 읽기 전용 쿼리로 데이터 질문에 답변 |
+| `write_cubrid_sql` | `natural_language` | 자연어로 유효한 CUBRID SQL 생성 |

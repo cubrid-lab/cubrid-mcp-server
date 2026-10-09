@@ -9,6 +9,7 @@ Checks:
     2. Exactly one [Unreleased] section
     3. No duplicate version sections
     4. Released versions in descending semver order
+    5. No duplicate ### subsection heading within one version section
 
 Exit codes:
     0 — changelog is valid
@@ -30,6 +31,31 @@ def main() -> int:
 
     content = changelog.read_text(encoding="utf-8")
     headers = re.findall(r"^## \[(\S+)\]", content, re.MULTILINE)
+
+    # Rule 5: No duplicate ### subsection heading within one version section
+    # (fenced code blocks are ignored so example headings do not trip the check).
+    section = ""
+    seen_subsections: set[tuple[str, str]] = set()
+    in_fence = False
+    for line in content.splitlines():
+        if line.startswith("```"):
+            in_fence = not in_fence
+            continue
+        if in_fence:
+            continue
+        section_match = re.match(r"^## \[(\S+)\]", line)
+        if section_match:
+            section = section_match.group(1)
+            continue
+        if line.startswith("### "):
+            key = (section, line.strip())
+            if key in seen_subsections:
+                print(
+                    f"ERROR: Duplicate subsection heading '{line.strip()}' in [{section}]",
+                    file=sys.stderr,
+                )
+                return 1
+            seen_subsections.add(key)
 
     if not headers:
         print("ERROR: No version sections found (expected '## [X.Y.Z]')", file=sys.stderr)

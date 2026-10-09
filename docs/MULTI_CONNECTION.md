@@ -63,3 +63,7 @@ Each connection is independently configured and enforced:
 Each connection also has its own lock, connection lifecycle, and stale-connection recovery, so a hung query on one database does not block the others.
 
 Write-mode registration nuance: the `execute_write` tool appears in MCP capability discovery when **any** connection enables writes, but every call is enforced against the **target** connection's setting — a connection with writes off refuses the write even when another connection enables them. See the [Security Model](SECURITY_MODEL.md#layer-2b-opt-in-write-mode-cubrid_mcp_write).
+
+## Resources use the default connection
+
+Every **tool** accepts the `connection` argument, but the MCP **resources** do not: `cubrid://schema` and `cubrid://schema/{table}` always read the `default` connection, because a resource URI carries no connection selector. To inspect a named connection's schema, call the tools (`all_table_names`, `describe_table`, …) with `connection="<name>"`.

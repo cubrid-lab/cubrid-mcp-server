@@ -233,7 +233,8 @@ def list_indexes(table_name: str, connection: str | None = None) -> list[dict[st
 def explain_query(sql: str, connection: str | None = None) -> dict[str, Any]:
     """Return CUBRID's execution plan/trace for a ``SELECT`` or ``WITH`` statement.
 
-    CUBRID uses SHOW TRACE (not standard EXPLAIN). Look for SEQ SCAN
+    The statement is actually executed under SET TRACE ON, then the transaction
+    is rolled back as best-effort cleanup (not a security control). CUBRID uses SHOW TRACE (not standard EXPLAIN). Look for SEQ SCAN
     in the output — it indicates a full table scan that may benefit
     from an index. See cubrid://guide/performance for interpretation tips.
     """
@@ -426,7 +427,7 @@ def _write_mode_requested() -> bool:
 
     Checked once at import to decide whether ``execute_write`` is registered as
     an MCP tool at all: when no connection enables writes the tool is absent from
-    capability discovery, so there is no reachable write path. Per-call
+    capability discovery, so the tool is simply not offered. Per-call
     enforcement via ``config.write_enabled`` (resolved for the *target*
     connection) provides defence in depth and decides which connection may write.
 
@@ -634,7 +635,7 @@ or joining on collection columns, you may need to unnest them.
 - CUBRID has no `EXPLAIN` statement; use the `explain_query` tool for plans
 - Multi-statement input is rejected
 - Write access requires explicit opt-in (`CUBRID_MCP_WRITE=1`)
-- DDL statements auto-commit in CUBRID — cannot be rolled back
+- DDL is not available through this server: `execute_write` is DML-only and `execute_query` is read-only
 
 ## Performance Tips
 
@@ -660,7 +661,7 @@ or joining on collection columns, you may need to unnest them.
 
 1. **LIMIT syntax**: prefer `LIMIT 10 OFFSET 5`; `LIMIT 5, 10` also works but is less readable
 2. **No RETURNING**: After INSERT, use `SELECT LAST_INSERT_ID()` separately
-3. **DDL auto-commits**: CREATE/ALTER/DROP cannot be rolled back
+3. **No DDL**: CREATE/ALTER/DROP are not available through this server (`execute_write` is DML-only, `execute_query` is read-only)
 4. **Reserved words**: `value`, `count`, `data`, `level` need double quotes
 5. **Boolean**: CUBRID uses SMALLINT (0/1), not native BOOLEAN
 """
