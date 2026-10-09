@@ -116,7 +116,11 @@ The lanes check:
   the unit tests, catching accidental use of newer-than-declared APIs.
 - **`integration`** — `pytest -m integration` against a live CUBRID container.
 - **`python scripts/lint_changelog.py`** — checks `CHANGELOG.md` structure and
-  version ordering.
+  version ordering, and rejects a repeated `###` heading within one version. In
+  `[Unreleased]` and in releases after 0.4.0 it also requires the standard `###`
+  sections, each with content, in this order: Upgrade notes, Added, Changed,
+  Deprecated, Removed, Fixed, Security, Performance, Documentation, CI, Tests.
+  Releases up to 0.4.0 keep their historical headings.
 
 Every executing job sets an integer `timeout-minutes` instead of GitHub's
 360-minute default (#228): 2–5 minutes for gates and small jobs, 10–15 for
@@ -144,8 +148,13 @@ catch compatibility drift between weekly runs. The advisory upstream canaries
 
 Add an entry under `## [Unreleased]` in
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) style, in the
-appropriate group (`Added` / `Changed` / `Fixed` / `Security`), and reference
-the issue or PR number — match the format of the existing entries. Security
+appropriate standard group, and reference the issue or PR number — match the
+format of the existing entries. The allowed `###` groups, in this order, are
+Upgrade notes, Added, Changed, Deprecated, Removed, Fixed, Security, Performance,
+Documentation, CI, Tests; use `Documentation`, not `Docs`, and file release
+automation under `CI` or `Changed`. The GitHub Release body is the CHANGELOG
+section plus one `**Full Changelog**` compare link; see the "GitHub Release
+Policy" in [`AGENTS.md`](AGENTS.md). Security
 fixes use a `fix:` title plus the `security` label and go under `Security`. Do **not**
 bump the version yourself; maintainers cut releases following
 [`RELEASING.md`](RELEASING.md).
