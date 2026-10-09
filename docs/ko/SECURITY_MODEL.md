@@ -25,7 +25,7 @@ GRANT SELECT ON orders TO mcp_reader;
 
 ## 계층 2 — 읽기 전용 SQL 화이트리스트
 
-서버는 **기본적으로 읽기 전용**입니다. `CUBRID_MCP_READONLY=1`(기본값)이면 모든 문장이 `sqlparse`로 파싱되어 `SELECT`, `SHOW`, `DESC`, `DESCRIBE`, `EXPLAIN`, `WITH`(CTE)가 아니면 거부됩니다. 다중 문장 입력은 즉시 거부되므로 `; DROP TABLE …`이 뒤에 붙는 것도 막힙니다.
+서버는 **기본적으로 읽기 전용**입니다. `CUBRID_MCP_READONLY=1`(기본값)이면 모든 문장이 `sqlparse`로 파싱되어 `SELECT`, `SHOW`, `DESC`, `DESCRIBE`, `WITH`(CTE)가 아니면 거부됩니다. CUBRID에는 `EXPLAIN` 문이 없으므로 실행 계획은 `explain_query` 도구를 사용하세요. 다중 문장 입력은 즉시 거부되므로 `; DROP TABLE …`이 뒤에 붙는 것도 막힙니다.
 
 > 이 화이트리스트는 심층 방어이지 보안 경계가 아닙니다. 명백한 실수를 막는 파서 기반 가드레일일 뿐이며, 실제 강제 계층은 데이터베이스 자신입니다(계층 1).
 

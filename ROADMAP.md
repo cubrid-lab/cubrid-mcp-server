@@ -24,7 +24,7 @@ The latest published release is listed on
 - Opt-in write mode: `execute_write` is registered only when write mode is
   enabled, every write is audited, and per-connection audit logging is available.
 - Read-only by default: a code-level SQL whitelist allows only `SELECT`, `SHOW`,
-  `DESC`, `DESCRIBE`, `EXPLAIN`, and `WITH`, rejects multi-statement input, and
+  `DESC`, `DESCRIBE`, and `WITH`, rejects multi-statement input, and
   is backed by a database user with `SELECT`-only grants.
 - Output safety: row caps (`CUBRID_MCP_MAX_ROWS`), per-value truncation,
   base64-encoded binary values, and sanitized error messages.

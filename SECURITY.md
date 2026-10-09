@@ -30,7 +30,7 @@ Additional hardening:
 
 ## Layer 2 — code-level read-only whitelist
 
-When `CUBRID_MCP_READONLY=1` (the default) the server parses every statement with `sqlparse` and rejects anything that is not `SELECT`, `SHOW`, `DESC`, `DESCRIBE`, `EXPLAIN`, or `WITH` (CTE). Multi-statement input is rejected outright so a trailing `; DROP TABLE …` cannot slip through.
+When `CUBRID_MCP_READONLY=1` (the default) the server parses every statement with `sqlparse` and rejects anything that is not `SELECT`, `SHOW`, `DESC`, `DESCRIBE`, or `WITH` (CTE). CUBRID has no `EXPLAIN` statement; use the `explain_query` tool for execution plans. Multi-statement input is rejected outright so a trailing `; DROP TABLE …` cannot slip through.
 
 You can disable this layer by setting `CUBRID_MCP_READONLY=0`, but only do so when:
 

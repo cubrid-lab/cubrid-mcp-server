@@ -44,7 +44,6 @@ _TEST_CONFIG = Config(
         "SeLeCt 1",
         "WITH x AS (SELECT 1) SELECT * FROM x",
         "with x as (select 1) select * from x",
-        "EXPLAIN SELECT * FROM users WHERE id = 1",
     ],
 )
 def test_safety_accepts_legitimate_read_variants(sql: str) -> None:

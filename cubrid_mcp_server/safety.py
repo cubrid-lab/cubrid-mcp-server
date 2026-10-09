@@ -20,9 +20,7 @@ import sqlparse
 from sqlparse.sql import Statement
 from sqlparse.tokens import Keyword
 
-READ_ONLY_KEYWORDS: frozenset[str] = frozenset(
-    {"SELECT", "SHOW", "DESC", "DESCRIBE", "EXPLAIN", "WITH"}
-)
+READ_ONLY_KEYWORDS: frozenset[str] = frozenset({"SELECT", "SHOW", "DESC", "DESCRIBE", "WITH"})
 
 # Statements permitted in opt-in write mode (CUBRID_MCP_WRITE=1). Deliberately
 # limited to single-statement DML: DDL is excluded because CUBRID auto-commits

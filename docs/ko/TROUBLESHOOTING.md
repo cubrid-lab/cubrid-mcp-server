@@ -31,7 +31,7 @@ CUBRID 사용자에게 권한이 없습니다. CUBRID는 **테이블 단위**로
 
 **증상:** `execute_query`가 문장을 거부함.
 
-설계된 동작입니다. 화이트리스트는 `SELECT`, `SHOW`, `DESC`, `DESCRIBE`, `EXPLAIN`, `WITH`만 허용하며 다중 문장은 항상 거부됩니다. 정말 다른 문장이 필요하면 먼저 읽기 전용 DB 사용자를 배치한 뒤 `CUBRID_MCP_READONLY=0`을 고려하세요 — 쓰기는 화이트리스트를 끄는 대신 옵트인 쓰기 모드를 사용하세요.
+설계된 동작입니다. 화이트리스트는 `SELECT`, `SHOW`, `DESC`, `DESCRIBE`, `WITH`만 허용하며 다중 문장은 항상 거부됩니다. CUBRID에는 `EXPLAIN` 문이 없으므로 실행 계획은 `explain_query` 도구를 사용하세요. 정말 다른 문장이 필요하면 먼저 읽기 전용 DB 사용자를 배치한 뒤 `CUBRID_MCP_READONLY=0`을 고려하세요 — 쓰기는 화이트리스트를 끄는 대신 옵트인 쓰기 모드를 사용하세요.
 
 ## 출력이 잘린 것처럼 보임
 

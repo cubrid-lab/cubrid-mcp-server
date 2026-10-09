@@ -30,9 +30,9 @@
 
 테이블에 정의된 인덱스와 인덱스된 키 컬럼·플래그(유니크, 리버스).
 
-#### `list_class_hierarchy(connection=None, ...)`
+#### `list_class_hierarchy(table_name=None, connection=None)`
 
-CUBRID `CLASS` 상속 관계 — 어느 테이블이 어느 테이블을 상속하는지.
+CUBRID `CLASS` 상속 관계 — 어느 테이블이 어느 테이블을 상속하는지. `table_name`을 생략하면 모든 클래스를, 전달하면 해당 테이블의 직접 상위 클래스만 반환합니다. `table_name`은 다른 스키마 도구와 같은 방식으로 해석됩니다. 사용자 테이블과 대소문자 구분 없이 매칭하며, 알 수 없는 테이블(시스템 클래스와 뷰 포함)은 빈 리스트 대신 `unknown table` 오류를 발생시킵니다.
 
 ### 쿼리
 
@@ -57,7 +57,11 @@ CUBRID `SHOW TRACE`를 통해 `SELECT`/`WITH` 문의 실행 계획/트레이스�
 
 #### `table_row_counts(table_names=None, connection=None)`
 
-한 테이블 또는 여러 테이블의 `COUNT(*)` — 크기를 추정하려고 행을 샘플링하는 것보다 저렴합니다. 생략하거나 `None`인 경우 기본적으로 모든 사용자 테이블을 스캔하며, 빈 리스트(`[]`)를 전달하면 빈 결과를 반환합니다.
+한 테이블 또는 여러 테이블의 `COUNT(*)` — 크기를 추정하려고 행을 샘플링하는 것보다 저렴합니다. `{"tables": [{"table", "row_count"}, …], "truncated": bool, "total_tables": int}`를 반환하며, `total_tables`는 데이터베이스의 사용자 테이블 수입니다. 알 수 없거나 카운트에 실패한 테이블은 `"row_count": null`과 `error`를 가집니다.
+
+- 생략하거나 `None`: 이름 순으로 처음 50개 사용자 테이블을 카운트합니다. 테이블이 더 있으면 `truncated`가 `true`이며, 나머지 이름(`all_table_names`로 확인)을 최대 50개씩 나누어 전달하세요.
+- 명시적 리스트: 해당 테이블을 카운트하며, 50개를 넘으면 `too many tables requested (N); limit is 50 per call` 오류가 발생합니다.
+- 빈 리스트(`[]`): 아무것도 카운트하지 않고 `"tables": []`를 반환합니다.
 
 ### CUBRID 특화
 

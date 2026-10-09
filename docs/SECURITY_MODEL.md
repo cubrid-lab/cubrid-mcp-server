@@ -23,7 +23,7 @@ Additional hardening: use a long random password from a secret manager, rotate i
 
 ## Layer 2 — read-only SQL whitelist
 
-The server is **read-only by default**. When `CUBRID_MCP_READONLY=1` (the default), every statement is parsed with `sqlparse` and rejected unless it is `SELECT`, `SHOW`, `DESC`, `DESCRIBE`, `EXPLAIN`, or `WITH` (CTE). Multi-statement input is rejected outright, so a trailing `; DROP TABLE …` cannot slip through.
+The server is **read-only by default**. When `CUBRID_MCP_READONLY=1` (the default), every statement is parsed with `sqlparse` and rejected unless it is `SELECT`, `SHOW`, `DESC`, `DESCRIBE`, or `WITH` (CTE). CUBRID has no `EXPLAIN` statement; use the `explain_query` tool for execution plans. Multi-statement input is rejected outright, so a trailing `; DROP TABLE …` cannot slip through.
 
 > The whitelist is defense-in-depth, not a security boundary. It is a parser-based guardrail against obvious mistakes; the real enforcement layer is the database itself (Layer 1).
 
