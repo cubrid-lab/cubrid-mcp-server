@@ -53,7 +53,7 @@ CUBRID `CLASS` 상속 관계 — 어느 테이블이 어느 테이블을 상속�
 
 #### `explain_query(sql, connection=None)`
 
-CUBRID `SHOW TRACE`를 통해 `SELECT`/`WITH` 문의 실행 계획/트레이스를 반환합니다. 문장은 `SET TRACE ON` 아래에서 **실제로 실행**됩니다(실제 데이터베이스 자원을 사용하며 쿼리 자체만큼 오래 걸릴 수 있음). 트레이스를 읽은 뒤 트레이스를 끄고 트랜잭션을 롤백합니다. `CUBRID_MCP_READONLY` 플래그와 무관하게 읽기 전용 검사를 적용하며, 데이터베이스 계정의 권한도 그대로 적용됩니다. CUBRID에는 `EXPLAIN` 문이 없으므로 실행 계획에는 이 도구를 사용하세요.
+CUBRID `SHOW TRACE`를 통해 `SELECT`/`WITH` 문의 실행 계획/트레이스를 반환합니다. 문장은 `SET TRACE ON` 아래에서 **실제로 실행**됩니다(실제 데이터베이스 자원을 사용하며 쿼리 자체만큼 오래 걸릴 수 있음). 트레이스를 읽은 뒤 트레이스를 끄고 트랜잭션을 롤백합니다(최선 노력 방식의 정리). `CUBRID_MCP_READONLY` 플래그와 무관하게 읽기 전용 검사를 적용하며, 데이터베이스 계정의 권한도 그대로 적용됩니다. CUBRID에는 `EXPLAIN` 문이 없으므로 실행 계획에는 이 도구를 사용하세요.
 
 #### `table_row_counts(table_names=None, connection=None)`
 
@@ -107,3 +107,8 @@ CUBRID `SERIAL` 시퀀스와 현재값·최솟값·최댓값·증분. (`db_seria
 | `explain_query` | `sql` | `SELECT`/`WITH`의 실행 계획을 얻고 해석 |
 | `inspect_schema` | (없음) | 읽기 전용 도구들로 전체 스키마 개요 작성 |
 | `find_index_candidates` | `table` | 테이블의 인덱스 커버리지 검토 |
+| `optimize_query` | `sql` | 실행 계획을 분석하고 CUBRID에 맞는 최적화 제안 |
+| `migrate_from_mysql` | `sql` | MySQL 쿼리 구문을 유효한 CUBRID SQL로 변환 |
+| `explore_unknown_db` | (없음) | 낯선 데이터베이스를 체계적으로 탐색 |
+| `safe_data_analysis` | `question` | 읽기 전용 쿼리로 데이터 질문에 답변 |
+| `write_cubrid_sql` | `natural_language` | 자연어로 유효한 CUBRID SQL 생성 |

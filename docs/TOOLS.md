@@ -51,7 +51,7 @@ Every read ends its own transaction: the server rolls back after the rows are co
 
 #### `explain_query(sql, connection=None)`
 
-Returns the execution plan/trace for a `SELECT` or `WITH` statement via CUBRID `SHOW TRACE`. The statement is **actually executed** under `SET TRACE ON` (it consumes real database resources and can run as long as the query itself); the trace is read, tracing is turned off and the transaction is rolled back. It applies the read-only checks independent of the `CUBRID_MCP_READONLY` flag, and the database account's privileges still apply. CUBRID has no `EXPLAIN` statement; this is the tool for execution plans.
+Returns the execution plan/trace for a `SELECT` or `WITH` statement via CUBRID `SHOW TRACE`. The statement is **actually executed** under `SET TRACE ON` (it consumes real database resources and can run as long as the query itself); the trace is read, tracing is turned off and the transaction is rolled back as best-effort cleanup. It applies the read-only checks independent of the `CUBRID_MCP_READONLY` flag, and the database account's privileges still apply. CUBRID has no `EXPLAIN` statement; this is the tool for execution plans.
 
 #### `table_row_counts(table_names=None, connection=None)`
 

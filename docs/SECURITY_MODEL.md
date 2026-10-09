@@ -19,7 +19,7 @@ GRANT SELECT ON orders TO mcp_reader;
 -- 3. Do NOT grant CREATE, ALTER, DROP, INSERT, UPDATE, DELETE, GRANT, or any DBA role.
 ```
 
-Grant `SELECT` only on the tables the model needs, and review which object-creation rights the account has in its own schema.
+Grant `SELECT` only on the tables the model needs, and keep the account to the minimum privileges required, with no DDL rights.
 
 Additional hardening: use a long random password from a secret manager, rotate it on your normal cadence, grant per-table rather than schema-wide, and keep CUBRID on a network only the MCP-server host can reach. See [`SECURITY.md`](https://github.com/cubrid-lab/cubrid-mcp-server/blob/main/SECURITY.md) for the full policy.
 
@@ -37,14 +37,14 @@ Write access is **off by default**. Setting `CUBRID_MCP_WRITE=1` registers a sep
 
 - **DML only.** A dedicated whitelist (`ensure_write_allowed`) accepts a **single** `INSERT`, `UPDATE`, or `DELETE` and rejects standalone reads, DDL, transaction control, and multi-statement input. (A single DML statement may still legally embed subqueries, e.g. `INSERT ... SELECT`.)
 - **Atomic transactions.** The statement runs in an explicit transaction — commit on success, rollback on any failure.
-- **DDL is intentionally unsupported.** `execute_write` is a DML tool (`INSERT`/`UPDATE`/`DELETE`) and `execute_query` is read-only, so `CREATE`/`ALTER`/`DROP`/`TRUNCATE` are never permitted through either. (The server runs pycubrid with autocommit off; on the CUBRID versions tested (10.2, 11.2, 11.4) DDL is transactional and is rolled back if it is not committed, so the exclusion rests on the tool contracts, not on DDL auto-commit.)
+- **DDL is intentionally unsupported.** `execute_write` is a DML tool (`INSERT`/`UPDATE`/`DELETE`) and `execute_query` is read-only, so `CREATE`/`ALTER`/`DROP`/`TRUNCATE` are rejected by both. (The server runs pycubrid with autocommit off; on the CUBRID versions tested (10.2, 11.2, 11.4) DDL is transactional and is rolled back if it is not committed, so the exclusion rests on the tool contracts, not on DDL auto-commit.)
 - **Not registered when disabled.** With write mode off, `execute_write` is absent from MCP capability discovery — the tool is simply not offered. Because the SQL checks are a guardrail, the database account remains what actually limits writes.
 - **Per-connection gating.** With multiple connections, the tool is registered when **any** connection enables writes, but each write is enforced against the **target** connection's setting — a connection with writes off refuses even when another enables them.
 - `execute_query` remains **read-only regardless** of the write flag.
 
 ### `explain_query` executes the statement
 
-`explain_query` does not merely plan: it runs the `SELECT`/`WITH` statement under `SET TRACE ON`, reads `SHOW TRACE`, then turns tracing off and rolls the transaction back. The statement therefore consumes real database resources (and can take as long as the query itself), and it is subject to the same keyword checks and database privileges as `execute_query`. The rollback is the server's cleanup step, not a substitute for a least-privilege account.
+`explain_query` does not merely plan: it runs the `SELECT`/`WITH` statement under `SET TRACE ON`, reads `SHOW TRACE`, then turns tracing off and rolls the transaction back. The statement therefore consumes real database resources (and can take as long as the query itself), and it is subject to the same keyword checks and database privileges as `execute_query`. The rollback is best-effort cleanup by the server, not a substitute for a least-privilege account.
 
 ## Layer 3 — output limits
 

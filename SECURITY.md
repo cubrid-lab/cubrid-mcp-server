@@ -32,21 +32,21 @@ Additional hardening:
 
 When `CUBRID_MCP_READONLY=1` (the default) the server parses every statement with `sqlparse` and rejects anything that is not `SELECT`, `SHOW`, `DESC`, `DESCRIBE`, or `WITH` (CTE). CUBRID has no `EXPLAIN` statement; use the `explain_query` tool for execution plans. Multi-statement input is rejected.
 
-These keyword checks are a guardrail and defense-in-depth, not a security boundary. The primary control is a dedicated least-privilege database account (Layer 1): grant `SELECT` only on the tables the model needs, do not reuse `dba` or the owner account, and review which object-creation rights the account has in its own schema.
+These keyword checks are a guardrail and defense-in-depth, not a security boundary. The primary control is a dedicated least-privilege database account (Layer 1): grant `SELECT` only on the tables the model needs, do not reuse `dba` or the owner account, and keep the account to the minimum privileges required, with no DDL rights.
 
 You can disable this layer by setting `CUBRID_MCP_READONLY=0`, but only do so when:
 
 - the underlying DB user is already read-only (Layer 1 is in place), **and**
 - you genuinely need statements outside the whitelist (for example, CUBRID administrative `SHOW` variants that confuse the parser).
 
-**`explain_query` always applies the read-only checks**, independent of `CUBRID_MCP_READONLY`; only `execute_query` honors `CUBRID_MCP_READONLY=0`. Note that `explain_query` executes the `SELECT`/`WITH` statement under `SET TRACE ON` to produce the trace and then rolls the transaction back, so it uses real database resources.
+**`explain_query` always applies the read-only checks**, independent of `CUBRID_MCP_READONLY`; only `execute_query` honors `CUBRID_MCP_READONLY=0`. Note that `explain_query` executes the `SELECT`/`WITH` statement under `SET TRACE ON` to produce the trace and then rolls the transaction back as best-effort cleanup, so it uses real database resources.
 
 ## Layer 2b — opt-in write mode (`CUBRID_MCP_WRITE`)
 
 Write access is **off by default**. Setting `CUBRID_MCP_WRITE=1` registers a separate `execute_write` tool that accepts a **single** `INSERT`/`UPDATE`/`DELETE` statement and runs it in an explicit transaction (commit on success, rollback on any failure). Design constraints that bound the blast radius:
 
 - **DML only.** Standalone reads, DDL, transaction-control, and multi-statement input are rejected by a dedicated whitelist (`ensure_write_allowed`), separate from the read-only path. (A single DML statement may still legally embed subqueries, e.g. `INSERT ... SELECT`.)
-- **DDL is intentionally unsupported.** `execute_write` is a DML tool (`INSERT`/`UPDATE`/`DELETE`) and `execute_query` is read-only, so `CREATE`/`ALTER`/`DROP`/`TRUNCATE` are never permitted through either, even in write mode. (The server runs pycubrid with autocommit off; on the CUBRID versions tested (10.2, 11.2, 11.4) DDL is transactional and is rolled back if it is not committed, so the exclusion rests on the tool contracts, not on DDL auto-commit.)
+- **DDL is intentionally unsupported.** `execute_write` is a DML tool (`INSERT`/`UPDATE`/`DELETE`) and `execute_query` is read-only, so `CREATE`/`ALTER`/`DROP`/`TRUNCATE` are rejected by both. (The server runs pycubrid with autocommit off; on the CUBRID versions tested (10.2, 11.2, 11.4) DDL is transactional and is rolled back if it is not committed, so the exclusion rests on the tool contracts, not on DDL auto-commit.)
 - **Not registered when disabled.** With write mode off, `execute_write` is absent from MCP capability discovery — the tool is simply not offered. The database account remains what actually limits writes.
 - **`execute_query` stays read-only** regardless of the write flag.
 

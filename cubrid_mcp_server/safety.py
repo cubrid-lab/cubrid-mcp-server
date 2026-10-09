@@ -23,8 +23,8 @@ from sqlparse.tokens import Keyword
 READ_ONLY_KEYWORDS: frozenset[str] = frozenset({"SELECT", "SHOW", "DESC", "DESCRIBE", "WITH"})
 
 # Statements permitted in opt-in write mode (CUBRID_MCP_WRITE=1). Deliberately
-# limited to single-statement DML: DDL is excluded because CUBRID auto-commits
-# DDL, which defeats rollback and widens the blast radius. This whitelist is
+# limited to single-statement DML: DDL is not offered because ``execute_write`` is
+# a DML-only tool and ``execute_query`` is read-only. This whitelist is
 # only ever consulted on the explicitly-gated write path; the read-only default
 # path (:func:`ensure_read_only`) is untouched.
 WRITE_KEYWORDS: frozenset[str] = frozenset({"INSERT", "UPDATE", "DELETE"})

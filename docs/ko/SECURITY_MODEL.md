@@ -21,7 +21,7 @@ GRANT SELECT ON orders TO mcp_reader;
 -- 3. CREATE, ALTER, DROP, INSERT, UPDATE, DELETE, GRANT, DBA 역할은 부여 금지.
 ```
 
-모델에 필요한 테이블에만 `SELECT`를 부여하고, 이 계정이 자신의 스키마에서 가진 객체 생성 권한이 있는지 검토하세요.
+모델에 필요한 테이블에만 `SELECT`를 부여하고, 계정에는 필요한 최소 권한만 부여하고 DDL 권한은 부여하지 마세요.
 
 추가 강화: 시크릿 매니저의 긴 무작위 비밀번호 사용, 정기적 로테이션, 스키마 전체가 아닌 테이블 단위 부여, MCP 서버 호스트만 접근 가능한 네트워크에 CUBRID 두기. 전체 정책은 [`SECURITY.md`](https://github.com/cubrid-lab/cubrid-mcp-server/blob/main/SECURITY.md)를 참고하세요.
 
@@ -39,14 +39,14 @@ GRANT SELECT ON orders TO mcp_reader;
 
 - **DML 전용.** 전용 화이트리스트(`ensure_write_allowed`)가 **단일** `INSERT`/`UPDATE`/`DELETE`만 허용하고, 독립 실행형 읽기·DDL·트랜잭션 제어·다중 문장 입력을 거부합니다. (단일 DML 안의 서브쿼리, 예컨대 `INSERT ... SELECT`는 합법적으로 허용됩니다.)
 - **원자적 트랜잭션.** 문장은 명시적 트랜잭션에서 실행됩니다 — 성공 시 커밋, 어떤 실패든 롤백.
-- **DDL은 의도적으로 미지원.** `execute_write`는 DML 도구(`INSERT`/`UPDATE`/`DELETE`)이고 `execute_query`는 읽기 전용이므로 `CREATE`/`ALTER`/`DROP`/`TRUNCATE`는 어느 쪽으로도 허용되지 않습니다. (서버는 autocommit을 끈 pycubrid를 사용하며, 테스트한 CUBRID 버전(10.2, 11.2, 11.4)에서 DDL은 트랜잭션에 속해 커밋하지 않으면 롤백됩니다. 따라서 이 제외는 DDL 자동 커밋이 아니라 도구 계약에 근거합니다.)
+- **DDL은 의도적으로 미지원.** `execute_write`는 DML 도구(`INSERT`/`UPDATE`/`DELETE`)이고 `execute_query`는 읽기 전용이므로 `CREATE`/`ALTER`/`DROP`/`TRUNCATE`는 양쪽 모두에서 거부됩니다. (서버는 autocommit을 끈 pycubrid를 사용하며, 테스트한 CUBRID 버전(10.2, 11.2, 11.4)에서 DDL은 트랜잭션에 속해 커밋하지 않으면 롤백됩니다. 따라서 이 제외는 DDL 자동 커밋이 아니라 도구 계약에 근거합니다.)
 - **비활성 시 미등록.** 쓰기 모드가 꺼져 있으면 `execute_write`는 MCP 기능 탐색에 나타나지 않습니다 — 도구 자체가 제공되지 않습니다. SQL 검사는 가드레일이므로 실제로 쓰기를 제한하는 것은 여전히 데이터베이스 계정입니다.
 - **연결별 게이팅.** 멀티커넥션에서 어떤 연결이 쓰기를 켜면 도구가 등록되지만, 매 쓰기는 **대상** 연결의 설정으로 강제됩니다 — 쓰기가 꺼진 연결은 다른 연결이 켜져 있어도 거부합니다.
 - `execute_query`는 쓰기 플래그와 무관하게 **항상 읽기 전용**입니다.
 
 ### `explain_query`는 문장을 실행합니다
 
-`explain_query`는 계획만 세우지 않습니다: `SELECT`/`WITH` 문을 `SET TRACE ON` 아래에서 실행하고 `SHOW TRACE`를 읽은 뒤, 트레이스를 끄고 트랜잭션을 롤백합니다. 따라서 문장은 실제 데이터베이스 자원을 사용하고(쿼리 자체만큼 오래 걸릴 수 있음), `execute_query`와 동일한 키워드 검사 및 데이터베이스 권한이 적용됩니다. 롤백은 서버의 정리 단계이며 최소 권한 계정을 대신하지 않습니다.
+`explain_query`는 계획만 세우지 않습니다: `SELECT`/`WITH` 문을 `SET TRACE ON` 아래에서 실행하고 `SHOW TRACE`를 읽은 뒤, 트레이스를 끄고 트랜잭션을 롤백합니다. 따라서 문장은 실제 데이터베이스 자원을 사용하고(쿼리 자체만큼 오래 걸릴 수 있음), `execute_query`와 동일한 키워드 검사 및 데이터베이스 권한이 적용됩니다. 롤백은 서버의 최선 노력 정리 단계이며 최소 권한 계정을 대신하지 않습니다.
 
 ## 계층 3 — 출력 제한
 

@@ -225,7 +225,7 @@ Add to `.cursor/mcp.json`:
 
 The server is **read-only by default**. A code-level SQL whitelist allows only `SELECT`, `SHOW`, `DESC`, `DESCRIBE`, and `WITH` statements. Multi-statement queries are rejected. CUBRID has no `EXPLAIN` statement; use the `explain_query` tool for execution plans (it executes the statement under `SET TRACE ON` and rolls back).
 
-> **The SQL keyword checks are a guardrail and defense-in-depth, not a security boundary.** The primary control is a dedicated least-privilege database account: **run the server as a CUBRID user that has `SELECT` only on the tables the model needs**, never reuse `dba` or the owner account, and review which object-creation rights the account has in its own schema. See [`SECURITY.md`](./SECURITY.md).
+> **The SQL keyword checks are a guardrail and defense-in-depth, not a security boundary.** The primary control is a dedicated least-privilege database account: **run the server as a CUBRID user that has `SELECT` only on the tables the model needs**, never reuse `dba` or the owner account, and keep the account to the minimum privileges required, with no DDL rights. See [`SECURITY.md`](./SECURITY.md).
 
 For production use, also configure a read-only database user. See [`SECURITY.md`](./SECURITY.md) for the recommended setup.
 
@@ -236,7 +236,7 @@ Write access is **disabled by default**. Setting `CUBRID_MCP_WRITE=1` registers 
 Constraints and rationale:
 
 - **Single-statement DML only.** Standalone reads, DDL (`CREATE`/`ALTER`/`DROP`/`TRUNCATE`), transaction-control, and multi-statement input are rejected. (A single DML statement may still legally contain subqueries, e.g. `INSERT ... SELECT`.)
-- **DDL is intentionally unsupported.** `execute_write` is a DML tool (`INSERT`/`UPDATE`/`DELETE`) and `execute_query` is read-only, so `CREATE`/`ALTER`/`DROP`/`TRUNCATE` are never permitted through either. (The server runs pycubrid with autocommit off; on the CUBRID versions tested (10.2, 11.2, 11.4) DDL is transactional and is rolled back if it is not committed, so the exclusion rests on the tool contracts, not on DDL auto-commit.)
+- **DDL is intentionally unsupported.** `execute_write` is a DML tool (`INSERT`/`UPDATE`/`DELETE`) and `execute_query` is read-only, so `CREATE`/`ALTER`/`DROP`/`TRUNCATE` are rejected by both. (The server runs pycubrid with autocommit off; on the CUBRID versions tested (10.2, 11.2, 11.4) DDL is transactional and is rolled back if it is not committed, so the exclusion rests on the tool contracts, not on DDL auto-commit.)
 - **Write mode is per-connection.** `execute_write` accepts the same optional `connection` argument as the read tools and runs against that connection; a connection whose `CUBRID_<NAME>_MCP_WRITE` is off refuses the write even when another connection enables it.
 - `execute_query` remains **read-only regardless** of the write-mode flag and of `CUBRID_MCP_READONLY`: with `CUBRID_MCP_READONLY=0` it still rejects write, DDL and transaction-control statements before they run, and rolls back any statement that returns no result set. Clients that sent writes through `execute_query` with `CUBRID_MCP_READONLY=0` must switch to `execute_write`.
 - Enforcement is defense-in-depth; still run the server as a CUBRID user granted only the privileges it needs. See [`SECURITY.md`](./SECURITY.md).
