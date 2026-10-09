@@ -105,18 +105,31 @@ def test_duplicate_section_with_other_spacing_is_rejected(tmp_path: Path) -> Non
 
 def test_fenced_lines_are_content_not_headings(tmp_path: Path) -> None:
     result = run_lint(
-        tmp_path, "## [Unreleased]\n### Added\n```\n### Docs\n## [9.9.9]\n```\n### Fixed\n- Entry\n"
+        tmp_path, "## [Unreleased]\n### Added\n```\n### Docs\n```\n### Fixed\n- Entry\n"
     )
     assert result.returncode == 0, result.stderr
 
 
-def test_fenced_version_and_heading_do_not_split_the_release(tmp_path: Path) -> None:
-    # A fenced "## [9.9.9]" must not start a release, so the later "### Added" repeats
-    # the first one in [Unreleased].
+def test_fenced_release_header_is_rejected(tmp_path: Path) -> None:
+    # extract_release_notes.py is not fence-aware, so a fenced "## [9.9.9]" would truncate
+    # the Release body; it fails closed instead of being read as content.
     result = run_lint(
         tmp_path, "## [Unreleased]\n### Added\n```\n## [9.9.9]\n### Added\n```\n### Added\n- x\n"
     )
     assert result.returncode == 1
+    assert "ERROR: Release header inside an open code fence in CHANGELOG.md" in result.stderr
+
+
+def test_fence_opened_in_unreleased_and_closed_after_a_release_is_rejected(
+    tmp_path: Path,
+) -> None:
+    # The fence would hide the real [0.4.0] header and everything up to the closing fence.
+    result = run_lint(
+        tmp_path,
+        "## [Unreleased]\n### Added\n```\n- x\n## [0.4.0] - 2026-01-01\n### Added\n- y\n```\n",
+    )
+    assert result.returncode == 1
+    assert "ERROR: Release header inside an open code fence in CHANGELOG.md" in result.stderr
 
 
 def test_fenced_duplicate_heading_is_content(tmp_path: Path) -> None:
