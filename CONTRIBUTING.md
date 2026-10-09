@@ -154,7 +154,11 @@ Upgrade notes, Added, Changed, Deprecated, Removed, Fixed, Security, Performance
 Documentation, CI, Tests; use `Documentation`, not `Docs`, and file release
 automation under `CI` or `Changed`. The GitHub Release body is the CHANGELOG
 section plus one `**Full Changelog**` compare link; see the "GitHub Release
-Policy" in [`AGENTS.md`](AGENTS.md). Security
+Policy" in [`AGENTS.md`](AGENTS.md). In `scripts/lint_changelog.py` a fenced
+`###` line is entry content, never a heading; a fenced `## [` release header is an
+error (`scripts/extract_release_notes.py` is not fence-aware and would truncate the
+Release body); an unclosed fence is an error. Only fences that start at column 0
+with three backticks are recognised, not tilde or indented/nested fences. Security
 fixes use a `fix:` title plus the `security` label and go under `Security`. Do **not**
 bump the version yourself; maintainers cut releases following
 [`RELEASING.md`](RELEASING.md).
