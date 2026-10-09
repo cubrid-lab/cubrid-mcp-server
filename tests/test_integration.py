@@ -218,6 +218,84 @@ class TestCubridIntegration:
             with pytest.raises(pycubrid.InterfaceError):
                 cursor.fetchone()
 
+    def _second_session(self) -> Any:
+        """Open an independent pycubrid session (not the server's shared one)."""
+        import pycubrid
+
+        return pycubrid.connect(
+            host=self.config.host,
+            port=self.config.port,
+            user=self.config.user,
+            password=self.config.password,
+            database=self.config.database,
+            connect_timeout=10,
+            read_timeout=30,
+        )
+
+    def test_read_does_not_hold_locks_against_ddl(self) -> None:
+        """A finished execute_query must not keep a lock that blocks another session's DDL."""
+        from cubrid_mcp_server import server
+
+        table = "mcp_it_read_txn_ddl"
+        self.db.execute_write(f"DROP TABLE IF EXISTS {table}")
+        self.db.execute_write(f"CREATE TABLE {table} (id INT PRIMARY KEY, v INT)")
+        other = self._second_session()
+        try:
+            result = server.execute_query(f"SELECT id, v FROM {table}")
+            assert result["row_count"] == 0
+            cursor = other.cursor()
+            # Fail fast instead of waiting if the shared session still holds a lock.
+            cursor.execute("SET TRANSACTION LOCK TIMEOUT 2")
+            cursor.execute(f"ALTER TABLE {table} ADD COLUMN extra INT")
+            other.commit()
+            cursor.close()
+            # The shared connection survived and sees the new column.
+            result = server.execute_query(f"SELECT id, v, extra FROM {table}")
+            assert result["row_count"] == 0
+        finally:
+            other.close()
+            self.db.execute_write(f"DROP TABLE IF EXISTS {table}")
+
+    def test_next_read_sees_rows_committed_by_another_session(self) -> None:
+        """Under REPEATABLE READ each execute_query starts a fresh snapshot."""
+        from cubrid_mcp_server import server
+
+        table = "mcp_it_read_txn_visibility"
+        self.db.execute_write(f"DROP TABLE IF EXISTS {table}")
+        self.db.execute_write(f"CREATE TABLE {table} (id INT PRIMARY KEY)")
+        self.db.execute_write(f"INSERT INTO {table} VALUES (1)")
+        connection = self.db.connect()
+        setup = connection.cursor()
+        setup.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ")
+        setup.close()
+        connection.commit()
+        other = self._second_session()
+        try:
+            count_sql = f"SELECT COUNT(*) FROM {table}"
+            assert server.execute_query(count_sql)["rows"] == [[1]]
+            cursor = other.cursor()
+            cursor.execute(f"INSERT INTO {table} VALUES (2)")
+            other.commit()
+            cursor.close()
+            assert server.execute_query(count_sql)["rows"] == [[2]]
+            # Same shared session throughout: no reconnect hid a stale snapshot.
+            assert self.db.connect() is connection
+        finally:
+            other.close()
+            self.db.execute_write(f"DROP TABLE IF EXISTS {table}")
+
+    def test_sql_error_keeps_shared_session(self) -> None:
+        """A server-rejected statement rolls back but reuses the same connection."""
+        from cubrid_mcp_server import server
+        from cubrid_mcp_server.database import DatabaseError
+
+        connection = self.db.connect()
+        with pytest.raises(DatabaseError, match="query failed: ProgrammingError"):
+            server.execute_query("SELECT * FROM mcp_it_definitely_missing_table")
+        assert self.db.connect() is connection
+        assert server.execute_query("SELECT 1 + 1")["rows"] == [[2]]
+        assert self.db.connect() is connection
+
     def test_list_serials_tool(self) -> None:
         from cubrid_mcp_server import server
 

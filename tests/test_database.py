@@ -48,6 +48,7 @@ class FakeCursor:
         self.executed: list[tuple[str, tuple[Any, ...]]] = []
         self.closed = False
         self._fetch_offset = 0
+        self.fetchmany_calls = 0
 
     def execute(self, sql: str, params: tuple[Any, ...] = ()) -> None:
         self.executed.append((sql, params))
@@ -56,6 +57,7 @@ class FakeCursor:
         return list(self._rows)
 
     def fetchmany(self, size: int) -> list[tuple[Any, ...]]:
+        self.fetchmany_calls += 1
         chunk = self._rows[self._fetch_offset : self._fetch_offset + size]
         self._fetch_offset += size
         return chunk
@@ -498,3 +500,292 @@ def test_serial_attribute_column_reset_by_failed_query(monkeypatch: pytest.Monke
             _raise(ConnectionResetError("broker restarted"))
     backend["column"] = "attr_name"
     assert db.serial_attribute_column() == "attr_name"
+
+
+# --- read transactions end after every fetch (#234) ---
+
+
+class CountingConnection(FakeConnection):
+    """Fake connection that counts rollbacks/commits and can fail on demand."""
+
+    def __init__(
+        self,
+        rows: list[tuple[Any, ...]] | None = None,
+        execute_error: BaseException | None = None,
+        rollback_error: BaseException | None = None,
+        fetch_error: BaseException | None = None,
+        cursor_error: BaseException | None = None,
+    ) -> None:
+        super().__init__(rows)
+        self.rollbacks = 0
+        self.lock_owned_at_rollback: list[bool] = []
+        self.cursors_closed_at_rollback: list[bool] = []
+        self.lock_probe: Any = None
+        self._fetch_error = fetch_error
+        self._cursor_error = cursor_error
+        self.commits = 0
+        self._execute_error = execute_error
+        self._rollback_error = rollback_error
+
+    def cursor(self) -> FakeCursor:
+        if self._cursor_error is not None:
+            raise self._cursor_error
+        cursor = super().cursor()
+        cursor.rowcount = 1  # type: ignore[attr-defined]
+        fetch_error = self._fetch_error
+        if fetch_error is not None:
+
+            def _fetchmany(size: int) -> list[tuple[Any, ...]]:
+                raise fetch_error
+
+            cursor.fetchmany = _fetchmany  # type: ignore[method-assign]
+        error = self._execute_error
+        if error is not None:
+
+            def _execute(sql: str, params: tuple[Any, ...] = ()) -> None:
+                raise error
+
+            cursor.execute = _execute  # type: ignore[method-assign]
+        return cursor
+
+    def rollback(self) -> None:
+        self.rollbacks += 1
+        # Every rollback must happen under the Database lock.
+        assert self.lock_probe is not None and self.lock_probe()
+        self.lock_owned_at_rollback.append(True)
+        self.cursors_closed_at_rollback.append(all(c.closed for c in self.cursors))
+        if self._rollback_error is not None:
+            raise self._rollback_error
+
+    def commit(self) -> None:
+        self.commits += 1
+
+
+def _counting_db(monkeypatch: pytest.MonkeyPatch, **kwargs: Any) -> tuple[Database, list[Any]]:
+    created: list[CountingConnection] = []
+
+    def _connect(**_k: Any) -> CountingConnection:
+        conn = CountingConnection(**kwargs)
+        created.append(conn)
+        return conn
+
+    monkeypatch.setattr(pycubrid, "connect", _connect)
+    db = Database(_TEST_CONFIG)
+    _orig = _connect
+
+    def _connect_probed(**k: Any) -> CountingConnection:
+        conn = _orig(**k)
+        conn.lock_probe = db._lock._is_owned  # type: ignore[attr-defined]
+        return conn
+
+    monkeypatch.setattr(pycubrid, "connect", _connect_probed)
+    return db, created
+
+
+def test_fetch_all_rolls_back_exactly_once(monkeypatch: pytest.MonkeyPatch) -> None:
+    db, created = _counting_db(monkeypatch, rows=[(1,), (2,)])
+    assert db.fetch_all("SELECT x FROM t") == [(1,), (2,)]
+    conn = created[0]
+    assert conn.rollbacks == 1
+    assert conn.commits == 0
+    assert conn.cursors_closed_at_rollback == [True]
+    # The cursor is closed and the connection is kept for the next call.
+    assert conn.cursors[0].closed is True
+    assert db._connection is conn
+
+
+@pytest.mark.parametrize(
+    ("row_count", "max_rows", "expected_truncated"),
+    [
+        (250, 150, True),  # truncated early return mid-batch
+        (250, 200, True),  # truncated exactly at a batch boundary
+        (50, None, False),  # unbounded
+        (50, 50, False),  # exactly max_rows, not truncated
+        (0, 10, False),  # empty result
+    ],
+)
+def test_fetch_many_rolls_back_exactly_once(
+    monkeypatch: pytest.MonkeyPatch,
+    row_count: int,
+    max_rows: int | None,
+    expected_truncated: bool,
+) -> None:
+    rows = [(i,) for i in range(row_count)]
+    db, created = _counting_db(monkeypatch, rows=rows)
+    result, truncated = db.fetch_many("SELECT x FROM t", None, max_rows)
+    assert truncated is expected_truncated
+    assert result == rows[: max_rows if max_rows is not None else row_count]
+    conn = created[0]
+    assert conn.rollbacks == 1
+    assert conn.cursors_closed_at_rollback == [True]
+    assert conn.cursors[0].closed is True
+    assert db._connection is conn
+
+
+@pytest.mark.parametrize(
+    ("row_count", "max_rows", "expected_calls"),
+    [(250, 150, 2), (250, 200, 3), (50, None, 2), (0, 10, 1)],
+)
+def test_fetch_many_stops_fetching_once_truncated(
+    monkeypatch: pytest.MonkeyPatch, row_count: int, max_rows: int | None, expected_calls: int
+) -> None:
+    db, created = _counting_db(monkeypatch, rows=[(i,) for i in range(row_count)])
+    db.fetch_many("SELECT x FROM t", None, max_rows)
+    assert created[0].cursors[0].fetchmany_calls == expected_calls
+
+
+def test_each_read_ends_its_own_transaction(monkeypatch: pytest.MonkeyPatch) -> None:
+    db, created = _counting_db(monkeypatch, rows=[(1,)])
+    db.fetch_all("SELECT 1")
+    db.fetch_many("SELECT 1", None, 10)
+    db.fetch_all("SELECT 1")
+    assert len(created) == 1
+    assert created[0].rollbacks == 3
+
+
+@pytest.mark.parametrize("method", ["fetch_all", "fetch_many"])
+def test_failed_read_rollback_discards_connection(
+    monkeypatch: pytest.MonkeyPatch, method: str
+) -> None:
+    db, created = _counting_db(monkeypatch, rows=[(1,)], rollback_error=RuntimeError("gone"))
+    # The rows were collected, so the read still succeeds...
+    assert getattr(db, method)("SELECT 1") in ([(1,)], ([(1,)], False))
+    first = created[0]
+    assert first.rollbacks == 1
+    # ...but a connection with unknown transaction state is dropped.
+    assert first.closed is True
+    assert db._connection is None
+    db.connect()
+    assert len(created) == 2
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        pycubrid.ProgrammingError("Semantic: unknown class t", code=-494, errno=-494),
+        pycubrid.IntegrityError("unique constraint", code=-670, errno=-670),
+        pycubrid.DataError("type conversion", code=-8, errno=-8),
+    ],
+)
+def test_server_sql_error_rolls_back_and_keeps_connection(
+    monkeypatch: pytest.MonkeyPatch, error: BaseException
+) -> None:
+    db, created = _counting_db(monkeypatch, execute_error=error)
+    with pytest.raises(DatabaseError) as excinfo:
+        db.fetch_all("SELECT bogus FROM t")
+    assert str(excinfo.value) == f"query failed: {type(error).__name__}"
+    assert not isinstance(excinfo.value, QueryTimeoutError)
+    conn = created[0]
+    assert conn.rollbacks == 1
+    assert conn.closed is False
+    assert db._connection is conn
+    assert conn.cursors[0].closed is True
+    # The next call reuses the same session.
+    assert db.connect() is conn
+    assert len(created) == 1
+
+
+def test_server_sql_error_with_failed_rollback_discards(monkeypatch: pytest.MonkeyPatch) -> None:
+    db, created = _counting_db(
+        monkeypatch,
+        execute_error=pycubrid.ProgrammingError("syntax error", code=-493, errno=-493),
+        rollback_error=OSError("connection reset"),
+    )
+    with pytest.raises(DatabaseError, match="query failed: ProgrammingError"):
+        db.fetch_many("SELEC 1", None, 10)
+    assert created[0].rollbacks == 1
+    assert created[0].closed is True
+    assert db._connection is None
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        pycubrid.OperationalError("Communication error", code=-4, errno=-4),
+        pycubrid.InterfaceError("connection is closed"),
+        pycubrid.InternalError("internal error", code=-2, errno=-2),
+        pycubrid.DatabaseError("unmapped CAS error", code=-1, errno=-1),
+        ConnectionResetError("broker restarted"),
+        ValueError("decode failure"),
+    ],
+)
+def test_transport_and_unclassified_errors_still_discard(
+    monkeypatch: pytest.MonkeyPatch, error: BaseException
+) -> None:
+    db, created = _counting_db(monkeypatch, execute_error=error)
+    with pytest.raises(DatabaseError, match="query failed"):
+        db.fetch_all("SELECT 1")
+    conn = created[0]
+    # No rollback is attempted on a possibly broken session; it is dropped.
+    assert conn.rollbacks == 0
+    assert conn.closed is True
+    assert db._connection is None
+
+
+def test_timeout_wrapped_in_sql_error_class_still_discards(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # A timeout is classified first, whatever class the driver wraps it in.
+    wrapped = pycubrid.ProgrammingError("socket communication failed")
+    wrapped.__cause__ = TimeoutError("timed out")
+    db, created = _counting_db(monkeypatch, execute_error=wrapped)
+    with pytest.raises(QueryTimeoutError):
+        db.fetch_many("SELECT SLEEP(999)", None, 10)
+    assert created[0].rollbacks == 0
+    assert db._connection is None
+
+
+def test_read_timeout_path_unchanged(monkeypatch: pytest.MonkeyPatch) -> None:
+    db, created = _counting_db(monkeypatch, execute_error=TimeoutError("read timed out"))
+    with pytest.raises(QueryTimeoutError, match="query exceeded timeout"):
+        db.fetch_all("SELECT SLEEP(999)")
+    conn = created[0]
+    # No rollback on the dead socket, and the cursor is not closed either.
+    assert conn.rollbacks == 0
+    assert conn.cursors[0].closed is False
+    assert conn.closed is True
+    assert db._connection is None
+
+
+def test_execute_write_still_commits_without_extra_rollback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    db, created = _counting_db(monkeypatch)
+    db.execute_write("UPDATE t SET x = 1")
+    assert created[0].commits == 1
+    assert created[0].rollbacks == 0
+
+
+def test_trace_cleanup_rolls_back_once(monkeypatch: pytest.MonkeyPatch) -> None:
+    db, created = _counting_db(monkeypatch, rows=[("Trace Statistics: stub",)])
+    with db.trace_enabled() as cursor:
+        cursor.execute("SELECT 1", ())
+    assert created[0].rollbacks == 1
+    assert db._connection is created[0]
+
+
+def test_data_error_from_fetchmany_rolls_back_and_keeps_connection(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    error = pycubrid.DataError("type conversion", code=-8, errno=-8)
+    db, created = _counting_db(monkeypatch, rows=[(1,)], fetch_error=error)
+    with pytest.raises(DatabaseError, match="query failed: DataError"):
+        db.fetch_many("SELECT x FROM t", None, 10)
+    conn = created[0]
+    assert conn.rollbacks == 1
+    assert conn.closed is False
+    assert db._connection is conn
+
+
+def test_cursor_creation_server_error_discards_connection(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    error = pycubrid.ProgrammingError("cannot open cursor", code=-493, errno=-493)
+    db, created = _counting_db(monkeypatch, cursor_error=error)
+    with pytest.raises(DatabaseError, match="query failed: ProgrammingError"):
+        db.fetch_all("SELECT 1")
+    conn = created[0]
+    # No cursor exists, so the session state is unknown: no rollback, just discard.
+    assert conn.rollbacks == 0
+    assert conn.closed is True
+    assert db._connection is None

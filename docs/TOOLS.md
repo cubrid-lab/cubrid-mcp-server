@@ -45,6 +45,8 @@ Runs **read-only** SQL (`SELECT`, `SHOW`, `DESC`, `DESCRIBE`, `EXPLAIN`, `WITH`)
 
 Multi-statement input is rejected. Binary values are base64-encoded when small and summarized (`<binary N bytes>`) when large.
 
+Every read ends its own transaction: the server rolls back after the rows are collected (truncated or not), so no locks or snapshot are held between tool calls and the next call sees rows other sessions have committed. `execute_query` never commits: a statement that returns no result set fails and its session is discarded, and every successful read is rolled back. Use `execute_write` for writes.
+
 #### `explain_query(sql, connection=None)`
 
 Returns the execution plan/trace for a `SELECT` or `WITH` statement via CUBRID `SHOW TRACE`. Always read-only, independent of the `CUBRID_MCP_READONLY` flag.
