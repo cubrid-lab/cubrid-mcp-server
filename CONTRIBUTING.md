@@ -116,11 +116,11 @@ The lanes check:
   the unit tests, catching accidental use of newer-than-declared APIs.
 - **`integration`** — `pytest -m integration` against a live CUBRID container.
 - **`python scripts/lint_changelog.py`** — checks `CHANGELOG.md` structure and
-  version ordering, and rejects a repeated `###` heading within one version. In
-  `[Unreleased]` and in releases after 0.4.0 it also requires the standard `###`
-  sections, each with content, in this order: Upgrade notes, Added, Changed,
+  version ordering. In `[Unreleased]` and in releases after 0.4.0 it also
+  rejects a repeated `###` heading within one version and requires the standard
+  `###` sections, each with content, in this order: Upgrade notes, Added, Changed,
   Deprecated, Removed, Fixed, Security, Performance, Documentation, CI, Tests.
-  Releases up to 0.4.0 keep their historical headings.
+  Releases up to 0.4.0 keep their historical headings, duplicates included.
 
 Every executing job sets an integer `timeout-minutes` instead of GitHub's
 360-minute default (#228): 2–5 minutes for gates and small jobs, 10–15 for
@@ -158,7 +158,12 @@ Policy" in [`AGENTS.md`](AGENTS.md). In `scripts/lint_changelog.py` a fenced
 `###` line is entry content, never a heading; a fenced `## [` release header is an
 error (`scripts/extract_release_notes.py` is not fence-aware and would truncate the
 Release body); an unclosed fence is an error. Only fences that start at column 0
-with three backticks are recognised, not tilde or indented/nested fences. Security
+with three backticks are recognised, not tilde or indented/nested fences. A repeated
+`###` heading within one version is rejected only in `[Unreleased]` and in releases
+after 0.4.0: released history up to 0.4.0 is never rewritten, and different releases
+may reuse the same heading names. `scripts/lint_changelog.py` is shared with pycubrid,
+sqlalchemy-cubrid and the cookbook; once all four repositories adopt the rule-5
+cutoff gating, only `SECTION_POLICY_CUTOFF` differs. Security
 fixes use a `fix:` title plus the `security` label and go under `Security`. Do **not**
 bump the version yourself; maintainers cut releases following
 [`RELEASING.md`](RELEASING.md).
