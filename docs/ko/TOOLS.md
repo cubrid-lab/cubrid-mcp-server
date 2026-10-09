@@ -47,6 +47,8 @@ CUBRID `CLASS` 상속 관계 — 어느 테이블이 어느 테이블을 상속�
 
 다중 문장 입력은 거부됩니다. 바이너리 값은 작으면 base64로 인코딩되고 크면 요약됩니다(`<binary N bytes>`).
 
+모든 읽기는 자체 트랜잭션을 종료합니다. 서버는 행을 수집한 뒤(잘림 여부와 무관하게) 롤백하므로 도구 호출 사이에 잠금이나 스냅샷이 유지되지 않으며, 다음 호출은 다른 세션이 커밋한 행을 봅니다. `CUBRID_MCP_READONLY=0`이어도 `execute_query`로 보낸 DML은 커밋되지 않으므로(DDL은 CUBRID가 여전히 자동 커밋합니다) 쓰기에는 `execute_write`를 사용하세요.
+
 #### `explain_query(sql, connection=None)`
 
 CUBRID `SHOW TRACE`를 통해 `SELECT`/`WITH` 문의 실행 계획/트레이스를 반환합니다. `CUBRID_MCP_READONLY` 플래그와 무관하게 항상 읽기 전용입니다.
