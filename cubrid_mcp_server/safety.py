@@ -50,6 +50,10 @@ QUERY_REJECTED_KEYWORDS: frozenset[str] = WRITE_KEYWORDS | frozenset(
         "ROLLBACK",
         "SAVEPOINT",
         "SET",
+        "PREPARE",
+        "EXECUTE",
+        "DEALLOCATE",
+        "DO",
     }
 )
 
@@ -126,30 +130,40 @@ def ensure_read_only(sql: str) -> None:
 
 
 def ensure_query_statement(sql: str) -> None:
-    """Raise :class:`UnsafeSQLError` if ``sql`` leads with a write, DDL or TCL keyword.
+    """Raise :class:`UnsafeSQLError` unless ``sql`` is a single non-write statement.
 
     Consulted by ``execute_query`` when the read-only whitelist is disabled
     (``CUBRID_MCP_READONLY=0``): that flag relaxes the whitelist for result-set
-    reads but never turns ``execute_query`` into a write path. Every statement
-    in the input is checked, so a trailing ``; DELETE ...`` is rejected too.
-    Statements whose leading keyword is not in :data:`QUERY_REJECTED_KEYWORDS`
-    pass; the database read path still rejects any that return no result set.
+    reads but never turns ``execute_query`` into a write path. Empty and
+    multi-statement input are rejected, as in :func:`ensure_read_only`. The
+    first word of the leading keyword is matched against
+    :data:`QUERY_REJECTED_KEYWORDS`, so ``CREATE OR REPLACE ...`` is rejected
+    like ``CREATE``. Other statements pass; the database read path still
+    rejects any that return no result set.
     """
     if not sql or not sql.strip():
         raise UnsafeSQLError("empty SQL statement")
 
+    # Strip comments for parity with ensure_read_only: a leading comment must
+    # not hide the real leading keyword, and comment-only input counts as empty.
     sql = strip_comments(sql)
 
-    for statement in sqlparse.parse(sql):
-        if not _is_non_empty(statement):
-            continue
-        keyword = _leading_keyword(statement)
-        if keyword is not None and keyword.upper() in QUERY_REJECTED_KEYWORDS:
-            raise UnsafeSQLError(
-                f"{keyword.upper()} is not permitted in execute_query, which only runs "
-                "statements that return a result set; use execute_write for "
-                "INSERT/UPDATE/DELETE (requires CUBRID_MCP_WRITE=1)"
-            )
+    statements = [stmt for stmt in sqlparse.parse(sql) if _is_non_empty(stmt)]
+    if len(statements) == 0:
+        raise UnsafeSQLError("empty SQL statement")
+    if len(statements) > 1:
+        raise UnsafeSQLError("multi-statement SQL is not allowed in execute_query")
+
+    keyword = _leading_keyword(statements[0])
+    if keyword is None:
+        return
+    first_word = keyword.split()[0].upper()
+    if first_word in QUERY_REJECTED_KEYWORDS:
+        raise UnsafeSQLError(
+            f"{first_word} is not permitted in execute_query, which only runs "
+            "statements that return a result set; use execute_write for "
+            "INSERT/UPDATE/DELETE (requires CUBRID_MCP_WRITE=1)"
+        )
 
 
 def ensure_write_allowed(sql: str) -> None:

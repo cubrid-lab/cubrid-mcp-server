@@ -139,7 +139,10 @@ def test_ensure_read_only_rejects_hidden_writes(sql: str) -> None:
         "SET TRANSACTION ISOLATION LEVEL 4",
         "/* note */ INSERT INTO users VALUES (1)",
         "-- note\nDELETE FROM users",
-        "SELECT 1; DELETE FROM users",
+        "PREPARE s FROM 'DELETE FROM users'",
+        "EXECUTE s",
+        "DEALLOCATE PREPARE s",
+        "DO 1",
     ],
 )
 def test_ensure_query_statement_rejects_write_ddl_and_tcl(sql: str) -> None:
@@ -163,7 +166,50 @@ def test_ensure_query_statement_allows_result_set_statements(sql: str) -> None:
     ensure_query_statement(sql)
 
 
-@pytest.mark.parametrize("sql", ["", "   "])
+@pytest.mark.parametrize(
+    ("sql", "keyword"),
+    [
+        ("CREATE TABLE x (a INT)", "CREATE"),
+        ("CREATE OR REPLACE VIEW v AS SELECT 1", "CREATE"),
+        ("create or replace procedure p() as begin null; end", "CREATE"),
+        ("CREATE UNIQUE INDEX i ON users (a)", "CREATE"),
+        ("DROP TABLE IF EXISTS users", "DROP"),
+        ("ALTER TABLE users ADD COLUMN b INT", "ALTER"),
+    ],
+)
+def test_ensure_query_statement_matches_first_word_of_leading_keyword(
+    sql: str, keyword: str
+) -> None:
+    with pytest.raises(UnsafeSQLError, match=f"^{keyword} is not permitted in execute_query"):
+        ensure_query_statement(sql)
+
+
+@pytest.mark.parametrize(
+    "sql",
+    [
+        "SELECT 1; DELETE FROM users",
+        "SELECT 1; SELECT 2",
+        "SELECT 1;\nSELECT 2;",
+    ],
+)
+def test_ensure_query_statement_rejects_multi_statement(sql: str) -> None:
+    with pytest.raises(UnsafeSQLError, match="multi-statement SQL is not allowed in execute_query"):
+        ensure_query_statement(sql)
+
+
+def test_ensure_query_statement_allows_trailing_semicolon() -> None:
+    ensure_query_statement("SELECT 1;")
+
+
+def test_ensure_query_statement_strips_comments_before_matching() -> None:
+    # Without strip_comments a trailing block comment would count as a second
+    # statement, and comment-only input would not count as empty.
+    ensure_query_statement("SELECT 1; /* note */")
+    with pytest.raises(UnsafeSQLError, match="empty"):
+        ensure_query_statement("/* SELECT 1 */")
+
+
+@pytest.mark.parametrize("sql", ["", "   ", "-- only a comment", "/* c */", ";", " ; ;"])
 def test_ensure_query_statement_rejects_empty(sql: str) -> None:
     with pytest.raises(UnsafeSQLError, match="empty"):
         ensure_query_statement(sql)

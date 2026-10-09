@@ -365,8 +365,9 @@ def execute_query(sql: str, connection: str | None = None) -> dict[str, Any]:
     """Execute a read-only SQL statement and return rows, truncated if large.
 
     Only statements that return a result set are run, and the read is always
-    rolled back. Write, DDL and transaction-control statements are rejected even
-    when CUBRID_MCP_READONLY=0; use execute_write for INSERT/UPDATE/DELETE.
+    rolled back. Write, DDL and transaction-control statements, and
+    multi-statement input, are rejected even when CUBRID_MCP_READONLY=0; use
+    execute_write for INSERT/UPDATE/DELETE.
 
     CUBRID SQL notes: prefer LIMIT n OFFSET m (comma form also works);
     no RETURNING clause; collection types (SET, MULTISET, SEQUENCE)

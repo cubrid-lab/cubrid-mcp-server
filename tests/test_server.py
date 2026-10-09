@@ -978,7 +978,11 @@ def _whitelist_off_db(
         "ROLLBACK",
         "SET TRANSACTION ISOLATION LEVEL 4",
         "/* c */ insert into t values (1)",
-        "SELECT 1; DELETE FROM t",
+        "CREATE OR REPLACE VIEW v AS SELECT 1",
+        "PREPARE s FROM 'DELETE FROM t'",
+        "EXECUTE s",
+        "DEALLOCATE PREPARE s",
+        "DO 1",
     ],
 )
 def test_execute_query_rejects_writes_when_whitelist_off(
@@ -988,6 +992,25 @@ def test_execute_query_rejects_writes_when_whitelist_off(
     with pytest.raises(UnsafeSQLError, match="execute_write"):
         server.execute_query(sql)
     # Rejected before cursor.execute: nothing reached the database.
+    assert conn.executed == []
+    assert conn.commits == 0
+
+
+@pytest.mark.parametrize(
+    ("sql", "message"),
+    [
+        ("SELECT 1; DELETE FROM t", "multi-statement"),
+        ("SELECT 1; SELECT 2", "multi-statement"),
+        ("-- only a comment", "empty"),
+        (";", "empty"),
+    ],
+)
+def test_execute_query_rejects_multi_and_empty_when_whitelist_off(
+    monkeypatch: pytest.MonkeyPatch, sql: str, message: str
+) -> None:
+    _db, conn = _whitelist_off_db(monkeypatch)
+    with pytest.raises(UnsafeSQLError, match=message):
+        server.execute_query(sql)
     assert conn.executed == []
     assert conn.commits == 0
 
