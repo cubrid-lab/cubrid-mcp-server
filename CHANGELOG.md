@@ -95,6 +95,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **create-release.yml: dropped `--target` from `gh release create`** — with an already-pushed tag (the normal tag-push trigger) `--verify-tag` already guarantees the tag exists, and passing `target_commitish` for an existing tag makes the Releases API return `422 Validation Failed`, so the first tag-triggered run of this workflow always failed. Verified live by the v0.4.0 tag attempt in cubrid-mcp-server.
 
 ### Tests
+- **Release-please push guards are pinned (cubrid-lab/pycubrid#801)** —
+  `tests/test_release_workflows.py` now asserts the exact, ordered guards of
+  `release-please.yml`: the push is directly preceded by the stale-main `exit`
+  and the `autorelease: review` re-check, the compose step starts with
+  `set -euo pipefail`, the branch `case` guard runs before checkout and is
+  followed by the generation-time stale-main `exit`, the freeze step counts the
+  exact `autorelease: review` label, and the checkout keeps
+  `persist-credentials: false`. Removing or weakening any of them now fails a
+  test; before, these mutations passed. `RELEASING.md` gains the recovery row
+  for abandoning a merged release (remove `autorelease: pending`, never add
+  `autorelease: tagged`), and the blocked-preparation steps say to skip waiting
+  for a green publisher run in that case. Test and docs only; the server and
+  workflows are unchanged.
 - **Live shared-session concurrency regression (#211)** — two simultaneous in-process tool calls now verify that `execute_query` waits while `explain_query` owns the real `SET TRACE` context on the cached Database connection. The test checks distinct responses, connection reuse and closure of every real cursor, including trace cleanup. It exercises the existing serialized RLock model, not MCP stdio concurrency, a connection pool or per-request transaction isolation. No runtime change.
 
 ## [0.4.0] - 2026-09-09
