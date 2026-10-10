@@ -10,6 +10,7 @@ Tiers:
 * ``pr``    - ordinary PR: representative Python unit lane, plus risk-selected lanes
   (one default live CUBRID lane for runtime/test changes, lowest-direct for
   dependency metadata, Python/CUBRID endpoints for compatibility changes).
+  Workflow edits other than ``ci.yml`` select the unit lane only (#232).
 * ``full``  - push to main, manual dispatch, or a change to the CI policy itself:
   Python endpoints, both primary CUBRID endpoints and lowest-direct.
 
@@ -33,8 +34,6 @@ CUBRID_ENDPOINTS = ["11.2", "11.4"]
 SELF = (".github/workflows/ci.yml", "scripts/ci_scope.py", "tests/test_ci_scope.py")
 # Dependency metadata: lowest-direct plus endpoint lanes (requires-python, driver pins).
 DEPS = ("pyproject.toml",)
-# Other workflows (shared pinned actions, matrix definitions): endpoint lanes.
-COMPAT = (".github/workflows/*",)
 # Connection / catalog SQL / live suite: both primary CUBRID endpoints.
 LIVE_ENDPOINTS = (
     "cubrid_mcp_server/database.py",
@@ -53,6 +52,9 @@ TOOLING = (
     ".mcpb/*",
     "glama.json",
     ".github/dependabot.yml",
+    # Workflows other than ci.yml (which is SELF) are validated by the contract tests
+    # in the unit lane (#232); ci.yml's live job never executes another workflow.
+    ".github/workflows/*",
     # Pinned docs tooling, checked by tests/test_ci_policy.py (#244).
     "docs-tools/*",
     ".github/ISSUE_TEMPLATE/*",
@@ -86,8 +88,6 @@ def classify(event: str, paths: Iterable[str]) -> dict[str, object]:
             full = True
         elif _match(path, DEPS):
             unit = lowest = live = py_endpoints = cubrid_endpoints = True
-        elif _match(path, COMPAT):
-            unit = live = py_endpoints = cubrid_endpoints = True
         elif _match(path, LIVE_ENDPOINTS):
             unit = live = cubrid_endpoints = True
         elif _match(path, RUNTIME):

@@ -99,12 +99,45 @@ def test_dependency_metadata_runs_lowest_direct_and_endpoints() -> None:
     assert scope["cubrid"] == ["11.2", "11.4"]
 
 
-def test_other_workflow_changes_run_endpoints_without_lowest_direct() -> None:
-    scope = pr(".github/workflows/release.yml")
-    assert scope["tier"] == "pr"
+@pytest.mark.parametrize("path", sorted(p.name for p in WORKFLOWS.glob("*.yml")))
+def test_workflow_edits_select_live_lanes_only_for_ci_yml(path: str) -> None:
+    scope = pr(f".github/workflows/{path}")
+    if path == "ci.yml":
+        assert scope["tier"] == "full"
+        assert scope["live"] is True
+    else:
+        # ci.yml's live job never executes another workflow (#232).
+        assert scope["tier"] == "pr"
+        assert scope["unit"] is True
+        assert scope["live"] is False
+        assert scope["lowest"] is False
+        assert scope["python"] == ["3.12"]
+        assert scope["cubrid"] == ["11.4"]
+
+
+def test_codeql_only_edit_starts_no_live_lane() -> None:
+    scope = pr(".github/workflows/codeql.yml")
+    assert scope["unit"] is True
+    assert scope["live"] is False
+
+
+def test_ci_yml_edit_keeps_its_current_lanes() -> None:
+    scope = pr(".github/workflows/ci.yml")
+    assert scope["tier"] == "full"
+    assert scope["unit"] is True and scope["lowest"] is True and scope["live"] is True
     assert scope["python"] == ["3.11", "3.12", "3.14"]
     assert scope["cubrid"] == ["11.2", "11.4"]
-    assert scope["lowest"] is False
+
+
+def test_release_please_edit_selects_the_unit_lane() -> None:
+    scope = pr(".github/workflows/release-please.yml")
+    assert scope["unit"] is True
+    assert scope["live"] is False
+
+
+def test_workflow_edit_with_dependency_metadata_keeps_lowest_direct() -> None:
+    scope = pr(".github/workflows/codeql.yml", "pyproject.toml")
+    assert scope["lowest"] is True
 
 
 @pytest.mark.parametrize(
