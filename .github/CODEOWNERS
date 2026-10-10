@@ -9,6 +9,11 @@
 
 # Release scripts and configuration
 /scripts/prepare_release.py       @yeongseon @paikend
+/scripts/compose_release_changelog.py @yeongseon @paikend
+/scripts/reconcile_release_labels.py  @yeongseon @paikend
+/scripts/check_release_please.cjs     @yeongseon @paikend
+/release-please-config.json       @yeongseon @paikend
+/.release-please-manifest.json    @yeongseon @paikend
 /scripts/release_detect.py        @yeongseon @paikend
 /scripts/release_summary.py       @yeongseon @paikend
 /scripts/pypi_duplicate_guard.py  @yeongseon @paikend

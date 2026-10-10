@@ -34,18 +34,20 @@ cubrid_mcp_server/
 - `make check` — ruff lint + mypy typecheck
 - `make test` — unit tests (excludes integration)
 - `make integration` — integration tests (requires a live CUBRID)
-- `make release-check VERSION=x.y.z` — read-only release consistency gate (run by `prepare-release.yml` and `release.yml`)
+- `make release-check VERSION=x.y.z` — read-only release consistency gate (run by `release-please.yml` and `release.yml`)
 
 ## Release Process
 
 Version is single-sourced from `cubrid_mcp_server/__init__.py` → `__version__ = "x.y.z"`
 (`pyproject.toml` reads it dynamically; `.mcpb/server.json` mirrors it for the MCP Registry).
-Merging a reviewed release PR is the only normal way to release: `prepare-release.yml`
-opens it (dated CHANGELOG section + `__version__` and `.mcpb/server.json` bump, checked by
-`make release-check VERSION=x.y.z`), and after the squash-merge `release.yml` detects the
-version change and runs consistency → full matrix → build → tag/Release/PyPI → cookbook
-verification (the cookbook smoke test called as a pinned reusable workflow, no token) →
-summary on its own. Ordinary PRs never change `__version__` or date a
+Merging a reviewed release PR is the only normal way to release: `release-please.yml`
+opens it (curated + Conventional Commit dated CHANGELOG section + `__version__` and
+`.mcpb/server.json` bump, checked by `make release-check VERSION=x.y.z`), and after the
+squash-merge `release.yml` detects the version change and runs consistency → full matrix →
+build → tag/Release/PyPI → cookbook verification (the cookbook smoke test called as a
+pinned reusable workflow, no token) → summary on its own.
+Freeze a release candidate with `autorelease: review` before branch-only note edits; wait for in-flight preparation to finish. Unfrozen notes come from main Unreleased. GITHUB_TOKEN updates require maintainer-triggered CI at the final head. Pending labels are reconciled only after successful publication and cookbook verification.
+Ordinary PRs never change `__version__` or date a
 CHANGELOG section. Never push tags or publish by hand; the only manual entry point is the
 narrow recovery dispatch of `release.yml`. Procedure, failure matrix and recovery:
 [`RELEASING.md`](RELEASING.md).

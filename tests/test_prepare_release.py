@@ -176,7 +176,7 @@ def write_server_json(tree: Path, data: dict[str, object]) -> Path:
 
 def test_server_json_versions_are_bumped(tree: Path) -> None:
     path = write_server_json(tree, SERVER_JSON)
-    # The same order as VERSION_FILES in prepare-release.yml: __init__.py first.
+    # The same order as VERSION_FILES in the retired prepare-release.yml: __init__.py first.
     assert run("--version", "1.9.0", "--version-file", "server.json") == 0
     assert '__version__ = "1.9.0"' in (tree / "pkg" / "__init__.py").read_text()
     data = json.loads(path.read_text())
