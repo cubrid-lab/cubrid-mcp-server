@@ -53,9 +53,10 @@ publisher tool's, are untouched). Tags remain `vX.Y.Z`.
 
 Conventional `fix` proposes patch, `feat` minor, breaking changes major.
 Python strategy also treats `docs` as a patch release; hidden `chore` alone
-creates no candidate. While the version is `0.x`, a breaking change proposes
-`1.0.0` (release-please's default; `bump-minor-pre-major` is not set). Review
-these proposals against the compatibility impact; commit spelling does not
+creates no candidate. Pre-1.0: breaking changes bump the minor version
+(`bump-minor-pre-major`). 1.0.0 is released only by an explicit
+`Release-As: 1.0.0` maintainer decision. Review these proposals against the
+compatibility impact; commit spelling does not
 replace that review. A maintainer-approved Conventional Commit body containing
 `Release-As: X.Y.Z` overrides a proposal; remove/correct an erroneous override
 through a reviewed commit, never by editing the manifest on main. Historical

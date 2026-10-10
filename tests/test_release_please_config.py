@@ -68,6 +68,14 @@ def test_package_identity_and_pr_only_mode() -> None:
     assert entry["changelog-path"] == "RELEASE_CHANGELOG.md"
 
 
+def test_pre_1_0_breaking_changes_bump_the_minor_version() -> None:
+    # MCP-only (0.x): a breaking change proposes 0.Y+1.0, not 1.0.0; feat still
+    # bumps the minor, so the patch-for-minor flag stays unset.
+    entry = package()
+    assert entry["bump-minor-pre-major"] is True
+    assert "bump-patch-for-minor-pre-major" not in entry
+
+
 def test_server_json_versions_are_extra_files() -> None:
     assert package()["extra-files"] == [
         {"type": "json", "path": ".mcpb/server.json", "jsonpath": "$.version"},
