@@ -76,10 +76,34 @@ lanes run:
 | Tooling (`scripts/`, `Makefile`, `codecov.yml`, `.gitignore`, `.mcpb/`, `glama.json`, `.github/dependabot.yml`, `docs-tools/`, issue templates, `demos/`) | Python 3.12 | — | — |
 | Runtime or tests (`cubrid_mcp_server/`, `tests/`) | Python 3.12 | — | CUBRID 11.4 |
 | Connection / catalog SQL (`database.py`, `context.py`, `tests/conftest.py`, `tests/test_integration.py`) | Python 3.12 | — | CUBRID 11.2 + 11.4 |
-| Other workflows (`.github/workflows/*` except `ci.yml`) | Python 3.11, 3.12, 3.14 | — | CUBRID 11.2 + 11.4 |
+| Other workflows (`.github/workflows/*` except `ci.yml`, see the impact table below) | Python 3.12 | — | — |
 | Dependency metadata (`pyproject.toml`) | Python 3.11, 3.12, 3.14 | yes | CUBRID 11.2 + 11.4 |
 | CI policy (`ci.yml`, `scripts/ci_scope.py`, `tests/test_ci_scope.py`), push to `main`, manual dispatch | Python 3.11, 3.12, 3.14 | yes | CUBRID 11.2 + 11.4 |
 | Any other path (fail-closed) | Python 3.12 | — | CUBRID 11.4 |
+
+Workflow edits are routed by which lane can actually detect a problem in the
+edited file (#232). `ci.yml`'s live `integration` job only runs the pytest live
+suite against CUBRID; it never executes another workflow, so it cannot validate any
+workflow other than `ci.yml`. The unit lane (`pytest -m "not integration"`) runs the
+workflow-contract tests, and `tests/test_workflow_path_impact.py` fails if any test
+module that reads a workflow file (by literal path, split path or constant) carries
+the `integration` marker.
+
+| Workflow | Validated by | Lanes selected on a PR that edits only this file |
+|---|---|---|
+| `ci.yml` | Itself (it is the policy and defines every lane); `test_ci_scope.py`, `test_ci_policy.py`, `test_workflow_timeouts.py` | Full tier: unit (3.11, 3.12, 3.14), `lowest-direct`, live CUBRID 11.2 + 11.4 |
+| `codeql.yml` | Runs itself on the PR; `test_ci_policy.py`, `test_workflow_timeouts.py` | Unit (3.12) |
+| `dependabot-auto-merge.yml` | `test_workflow_timeouts.py` (and the other all-workflow scans) | Unit (3.12) |
+| `docs-sync.yml` | Runs itself on the PR; the all-workflow scans | Unit (3.12) |
+| `docs.yml` | `test_ci_policy.py`; builds docs on PRs touching docs paths | Unit (3.12) |
+| `integration-full.yml` | `test_ci_scope.py`, `test_release_workflows.py`, `test_workflow_timeouts.py`, plus a **manual `workflow_dispatch` on the PR head, linked from the PR** (not automated; the release gate depends on it) | Unit (3.12) |
+| `pr-title.yml` | Runs itself on the PR; `test_pr_title.py` | Unit (3.12) |
+| `release-please.yml` | `test_release_workflows.py`, `test_release_please_config.py`, `test_workflow_timeouts.py` | Unit (3.12) |
+| `release.yml` | `test_release_workflows.py`, `test_pypi_duplicate_guard.py`, `test_prepare_release.py`, `test_workflow_timeouts.py` | Unit (3.12) |
+| `upstream-canary.yml` | The all-workflow scans (`test_ci_policy.py`, `test_workflow_timeouts.py`), plus a **manual `workflow_dispatch` on the PR head, linked from the PR** | Unit (3.12) |
+
+If the same PR also edits `pyproject.toml`, `lowest-direct` and the endpoint lanes
+are added by that row, not by the workflow edit.
 
 A PR takes the union of the rows its files match. `changelog-lint` runs on every
 PR. The final `ci-gate` job is the one required check: it fails unless
