@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Turn ``## [Unreleased]`` into a dated release section and bump the version.
 
-``prepare-release.yml`` runs this before opening the release PR:
+Historical offline utility: ``prepare-release.yml`` ran this before opening the release
+PR until release-please took over preparation (#254); no workflow runs it now:
 
 * ``CHANGELOG.md``: the entries under ``## [Unreleased]`` move under a new
   ``## [X.Y.Z] - YYYY-MM-DD`` heading; an empty ``## [Unreleased]`` stays on top.

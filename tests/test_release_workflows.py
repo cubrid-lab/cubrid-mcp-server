@@ -1,8 +1,8 @@
 """Static contract checks for the automated release workflows (#204).
 
-Parses release.yml, prepare-release.yml and integration-full.yml offline (PyYAML
-comes with pre-commit in the dev extra). Kept identical across pycubrid,
-sqlalchemy-cubrid and cubrid-mcp-server.
+Parses release.yml, release-please.yml and integration-full.yml offline (PyYAML
+comes with pre-commit in the dev extra). Shared release behavior across pycubrid,
+sqlalchemy-cubrid and cubrid-mcp-server; this repo retains its registered publisher filename.
 """
 
 from __future__ import annotations
@@ -31,7 +31,7 @@ def load(name: str) -> dict[str, Any]:
 
 
 RELEASE = load("release.yml")
-PREPARE = load("prepare-release.yml")
+PREPARE = load("release-please.yml")
 FULL = load("integration-full.yml")
 
 
@@ -64,12 +64,21 @@ def test_release_triggers() -> None:
     assert set(inputs) == {"action", "version"}
 
 
-def test_prepare_release_is_dispatch_only() -> None:
-    assert set(PREPARE["on"]) == {"workflow_dispatch"}
-    assert set(PREPARE["on"]["workflow_dispatch"]["inputs"]) == {"version"}
+def test_release_please_replaces_normal_preparer() -> None:
+    assert not (WORKFLOWS / "prepare-release.yml").exists()
+    assert set(PREPARE["on"]) == {"push", "workflow_dispatch"}
+    assert PREPARE["on"]["push"] == {"branches": ["main"]}
+    actions = [
+        s
+        for s in steps(PREPARE["jobs"]["prepare"])
+        if "googleapis/release-please-action@" in s.get("uses", "")
+    ]
+    assert len(actions) == 1
+    assert actions[0]["with"]["skip-github-release"] is True
+    assert "freeze.outputs.frozen" in actions[0]["if"]
 
 
-@pytest.mark.parametrize("workflow", ["release.yml", "prepare-release.yml", "integration-full.yml"])
+@pytest.mark.parametrize("workflow", ["release.yml", "release-please.yml", "integration-full.yml"])
 def test_actions_are_sha_pinned(workflow: str) -> None:
     data = load(workflow)
     for name, job in data["jobs"].items():
@@ -82,7 +91,7 @@ def test_actions_are_sha_pinned(workflow: str) -> None:
                 assert PINNED.match(step["uses"]), (name, step["uses"])
 
 
-@pytest.mark.parametrize("workflow", ["release.yml", "prepare-release.yml"])
+@pytest.mark.parametrize("workflow", ["release.yml", "release-please.yml"])
 def test_no_expression_interpolation_in_run(workflow: str) -> None:
     # Inputs, outputs and secrets reach shell code only through env:.
     for name, job in load(workflow)["jobs"].items():
@@ -113,7 +122,7 @@ def test_release_permissions_are_minimal_per_job() -> None:
 def test_prepare_permissions() -> None:
     assert PREPARE["permissions"] == {}
     (job,) = PREPARE["jobs"].values()
-    assert job["permissions"] == {"contents": "write", "pull-requests": "write"}
+    assert job["permissions"] == {"contents": "write", "pull-requests": "write", "actions": "read"}
 
 
 def test_concurrency_never_cancels_a_release() -> None:
@@ -301,19 +310,19 @@ def test_recovery_dispatch_is_limited_to_main() -> None:
     validate = steps(RELEASE["jobs"]["detect"])[0]
     assert validate["if"] == "github.event_name == 'workflow_dispatch'"
     assert '[ "$ACTION" != "dry-run" ] && [ "$GITHUB_REF" != "refs/heads/main" ]' in validate["run"]
-    prepare = steps(next(iter(PREPARE["jobs"].values())))[0]["run"]
-    assert '"$GITHUB_REF" != "refs/heads/main"' in prepare
+    assert PREPARE["jobs"]["prepare"]["if"] == "github.ref == 'refs/heads/main'"
 
 
-def test_prepare_release_opens_a_checked_pr() -> None:
-    runs = "\n".join(s.get("run", "") for s in steps(next(iter(PREPARE["jobs"].values()))))
+def test_release_please_composes_checked_notes_before_push() -> None:
+    runs = "\n".join(s.get("run", "") for s in steps(PREPARE["jobs"]["prepare"]))
     assert (
-        runs.index("scripts/prepare_release.py")
+        runs.index("/tmp/compose-release.py --base-changelog")
         < runs.index("make release-check")
-        < runs.index("gh pr create")
+        < runs.index('push origin "HEAD:refs/heads/$branch"')
     )
-    assert '--title "chore: release v$VERSION"' in runs
-    assert 'branch="release/v$VERSION"' in runs
+    assert runs.count("git rev-parse FETCH_HEAD") >= 3
+    assert "autorelease: review" in runs
+    assert "scripts/reconcile_release_labels.py" in runs
 
 
 def test_integration_full_is_callable_at_a_sha_and_keeps_its_triggers() -> None:
@@ -323,3 +332,43 @@ def test_integration_full_is_callable_at_a_sha_and_keeps_its_triggers() -> None:
     for name, job in FULL["jobs"].items():
         for checkout in checkouts(job):
             assert checkout["ref"] == "${{ inputs.sha || github.sha }}", name
+
+
+def test_blocked_publication_fails_preparation_before_release_please() -> None:
+    # A blocked release must turn "Prepare release" red instead of hiding behind
+    # release-please's own "untagged, merged release PRs outstanding" abort.
+    prepare = steps(PREPARE["jobs"]["prepare"])
+    names = [s.get("name") or s.get("uses", "") for s in prepare]
+    reconcile = prepare[names.index("Reconcile completed publication labels")]
+    assert reconcile["run"] == "python scripts/reconcile_release_labels.py"
+    assert "if" not in reconcile and "continue-on-error" not in reconcile
+    release = next(i for i, name in enumerate(names) if "release-please-action" in name)
+    assert names.index("Reconcile completed publication labels") < release
+
+
+# cubrid-mcp-server only (#254): the preparation job keeps pycubrid's step order,
+# with the unconditional reconcile before the review freeze.
+def test_prepare_step_order_matches_pycubrid() -> None:
+    prepare = steps(PREPARE["jobs"]["prepare"])
+    kinds = [str(s.get("uses", "")).split("@")[0] or s["name"] for s in prepare]
+    assert kinds == [
+        "actions/checkout",
+        "actions/setup-python",
+        "Reconcile completed publication labels",
+        "Freeze reviewed release PRs",
+        "googleapis/release-please-action",
+        "Compose and validate reviewed release notes",
+    ]
+    assert prepare[3]["id"] == "freeze" and "if" not in prepare[3]
+    assert prepare[4]["if"] == "steps.freeze.outputs.frozen == 'false'"
+    assert prepare[5]["if"] == "steps.release.outputs.pr != ''"
+    assert prepare[4]["uses"] == (
+        "googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7"
+    )
+    assert prepare[4]["with"] == {
+        "config-file": "release-please-config.json",
+        "manifest-file": ".release-please-manifest.json",
+        "skip-github-release": True,
+    }
+    assert PREPARE["name"] == "Prepare release"
+    assert PREPARE["concurrency"] == {"group": "release-please", "cancel-in-progress": False}
