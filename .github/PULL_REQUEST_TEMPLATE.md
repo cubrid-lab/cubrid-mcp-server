@@ -44,17 +44,18 @@ See CONTRIBUTING.md#pull-request-and-commit-titles.
 
 ## Development Route and Review Disposition
 
-<!-- Maintainer/agent-authored PRs. Human contributors do not need a specific AI tool. -->
-- Development route: OpenCode + Oracle pre/post / standalone Claude Code / standalone Codex / human/other (select one).
+<!-- Record the route actually used; human contributors do not need a specific AI tool. -->
+- Development route: OpenCode + Oracle pre/post / trivial OpenCode with recorded Oracle skip / standalone Claude Code / standalone Codex / standalone ChatGPT or other agent (name it) / human (select one).
+- Trivial OpenCode exception, if used: skipped Oracle phases and reason, or not applicable.
 - Actual review evidence: Oracle review references or submitted GitHub review URL, reviewer, reviewed head SHA, or **pending**.
 - Findings: fixed commit + tests / rejected with reason / deferred issue.
-- Open review threads and why, or "none verified".
-- Maintainer merge decision: applicable review and final code checked; required CI passed.
+- Open review threads and why, or "none" after verification.
+- Maintainer merge decision: **pending**; complete only after checking the applicable review, final code, required CI and thread dispositions.
 <!-- Review requests, bot approval suggestions and passing CI alone do not complete review. -->
 
-## Optional: AI / tool review
+## Optional: additional AI / tool review
 
-<!-- Optional evidence only; never a prerequisite for contributing. -->
+<!-- Supplementary evidence only; does not replace the required development route above. No internal tool installation is required to contribute. -->
 
 ## Type of Change
 
