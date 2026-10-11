@@ -183,8 +183,10 @@ an issue, not a pull request:
   `PR title` (from `pr-title.yml`). The branch must be up to date with `main`
   before merging.
 - **No required human approval and no required code-owner approval.** The
-  project has a small maintainer team, and a mandatory approval would block every
-  merge while one maintainer is away, including Dependabot auto-merge.
+  project has a small maintainer team. A mandatory approval would block a
+  maintainer's own pull request whenever the other maintainers are away, and
+  Dependabot updates would wait for a human approval instead of merging
+  automatically once the required checks pass.
   `.github/CODEOWNERS` only routes review requests. Review expectations for
   maintainer and agent pull requests are in
   [Agent-authored PR review requirements](#agent-authored-pr-review-requirements).
