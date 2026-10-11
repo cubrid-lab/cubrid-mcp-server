@@ -91,12 +91,12 @@ the `integration` marker.
 
 | Workflow | Validated by | Lanes selected on a PR that edits only this file |
 |---|---|---|
-| `ci.yml` | Itself (it is the policy and defines every lane); `test_ci_scope.py`, `test_ci_policy.py`, `test_workflow_timeouts.py` | Full tier: unit (3.11, 3.12, 3.14), `lowest-direct`, live CUBRID 11.2 + 11.4 |
+| `ci.yml` | Itself (it is the policy and defines every lane); `test_ci_scope.py`, `test_ci_policy.py`, `test_workflow_installs.py`, `test_workflow_timeouts.py` | Full tier: unit (3.11, 3.12, 3.14), `lowest-direct`, live CUBRID 11.2 + 11.4 |
 | `codeql.yml` | Runs itself on the PR; `test_ci_policy.py`, `test_workflow_timeouts.py` | Unit (3.12) |
 | `dependabot-auto-merge.yml` | `test_workflow_timeouts.py` (and the other all-workflow scans) | Unit (3.12) |
 | `docs-sync.yml` | Runs itself on the PR; the all-workflow scans | Unit (3.12) |
 | `docs.yml` | `test_ci_policy.py`; builds docs on PRs touching docs paths | Unit (3.12) |
-| `integration-full.yml` | `test_ci_scope.py`, `test_release_workflows.py`, `test_workflow_timeouts.py`, plus a **manual `workflow_dispatch` on the PR head, linked from the PR** (not automated; the release gate depends on it) | Unit (3.12) |
+| `integration-full.yml` | `test_ci_scope.py`, `test_release_workflows.py`, `test_workflow_installs.py`, `test_workflow_timeouts.py`, plus a **manual `workflow_dispatch` on the PR head, linked from the PR** (not automated; the release gate depends on it) | Unit (3.12) |
 | `pr-title.yml` | Runs itself on the PR; `test_pr_title.py` | Unit (3.12) |
 | `release-please.yml` | `test_release_workflows.py`, `test_release_please_config.py`, `test_workflow_timeouts.py` | Unit (3.12) |
 | `release.yml` | `test_release_workflows.py`, `test_pypi_duplicate_guard.py`, `test_prepare_release.py`, `test_workflow_timeouts.py` | Unit (3.12) |
@@ -127,6 +127,16 @@ deploy, read-only permissions) on pull requests touching `docs-tools/`,
 each; the exact-pinned `ruff` and `mypy` each get their own group so a breaking
 minor release of one never blocks the others; major updates and the runtime dependencies (`fastmcp`,
 `pycubrid`, `sqlparse`) stay as separate PRs.
+
+Every Python job in `ci.yml` and `integration-full.yml` installs with a pinned
+uv instead of pip (#229): `astral-sh/setup-uv` (pinned to a commit SHA, with
+`version` pinned) runs after `actions/setup-python` with the same
+`python-version`, caches per job (`cache-suffix: ${{ github.job }}`, keyed on
+`pyproject.toml`), installs with `uv pip install --system` and logs the resolved
+versions with `uv pip freeze --system`. uv resolves the same package set as pip
+from the same `pyproject.toml` constraints; only the installer changes. The
+release smoke venvs, the docs build and the upstream canary keep plain pip.
+`tests/test_workflow_installs.py` pins this setup.
 
 The lanes check:
 
