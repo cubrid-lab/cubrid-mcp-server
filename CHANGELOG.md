@@ -60,6 +60,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   genuine technical dependencies. The PR body is inert data and the validator
   uses no checkout or token permissions; fenced examples and HTML comments are
   ignored. Repository-local issue and PR templates document ownership.
+- **The cookbook verifies the built wheel before it is published
+  (cubrid-lab/cubrid-cookbook-python#240)** — `release.yml` gains
+  `verify-candidate`, which calls the cookbook smoke test in candidate mode on the
+  `release-dist` wheel of the same run (exact file set and SHA-256 checked against
+  the `build` job's `sha256` output), and `require-candidate`, which requires
+  `status == success`, `evidence == candidate artifact`, installed == requested ==
+  the release version and the verified digest == the built wheel's digest, and
+  whose downloaded candidate report must name this package, request, run and
+  repository,
+  `release-dist`, the release commit and the build's file map. `publish` needs
+  `require-candidate` and now also checks `dist/` and
+  `release-meta/` against the `build` job outputs `sha256` and the new
+  `meta_sha256` (`scripts/verify_dist.py`) before tagging. The gate is never
+  skipped after a successful build, `resume` included: builds are not
+  reproducible, so every run that publishes verifies its own bytes (a
+  `gh run rerun --failed` of the same run keeps its earlier verification). A
+  `dry-run` dispatch now verifies the freshly built wheel instead of the
+  already-published version; the post-publication `verify-cookbook` is
+  unchanged. Both cookbook calls use one pin, moved from `32e80c6` to `98866c2`,
+  the same pin as pycubrid and sqlalchemy-cubrid. The candidate's drivers still
+  come from PyPI. No runtime change.
 - **The PyPI duplicate guard uses `hashlib.file_digest()` (#220)** —
   `scripts/pypi_duplicate_guard.py` hashes `dist/` files with the Python 3.11 stdlib
   helper instead of a hand-written chunked read loop; the digests are the same. The
