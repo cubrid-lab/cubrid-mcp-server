@@ -58,8 +58,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   required `PR title` check rejects foreign closing keywords in PR-body text
   while allowing `Closes #N` for local issues and `Refs owner/repo#N` for
   genuine technical dependencies. The PR body is inert data and the validator
-  uses no checkout or token permissions; fenced examples and HTML comments are
-  ignored. Repository-local issue and PR templates document ownership.
+  uses no checkout or token permissions. `Closes: owner/repo#N` is caught too.
+  The guard is a best-effort line scanner, not a full Markdown parser: fenced,
+  indented and inline code and HTML comments are ignored in one pass, so a
+  comment opener inside a fence cannot hide a later closure; fences inside
+  block quotes or list items are not recognized. Repository-local issue and PR
+  templates document ownership.
 - **The cookbook verifies the built wheel before it is published
   (cubrid-lab/cubrid-cookbook-python#240)** — `release.yml` gains
   `verify-candidate`, which calls the cookbook smoke test in candidate mode on the
