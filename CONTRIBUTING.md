@@ -192,6 +192,18 @@ fixes use a `fix:` title plus the `security` label and go under `Security`. Do *
 bump the version yourself; maintainers cut releases following
 [`RELEASING.md`](RELEASING.md).
 
+## Agent-authored PR review requirements
+
+Maintainer/agent PRs use the review route in
+[AGENTS.md](AGENTS.md#development-workflow-cubrid-lab-org-standard).
+OpenCode work records Oracle design and post-implementation reviews; standalone
+Claude Code or Codex PRs wait for a substantive submitted GitHub Copilot or
+other-person review. A pending request, CI pass or automated approval suggestion
+does not count. Record dispositions at the final relevant head and close
+inline threads only after verification. Outside contributors need no internal
+agent or Oracle tooling. Existing safety, integration and release checks remain
+mandatory.
+
 ## Pull request and commit titles
 
 This rule covers issue titles, pull request titles and commit subjects in every
