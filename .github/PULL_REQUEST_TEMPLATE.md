@@ -79,4 +79,7 @@ See CONTRIBUTING.md#pull-request-and-commit-titles.
 
 ## Related Issues
 
-<!-- Closes #123 / Refs #456. Issue numbers go here, not in the PR title. -->
+<!-- Use Closes #N for a completed LOCAL issue (or N/A and a reason).
+     Cite sibling dependencies as Refs owner/repo#N, not closing keywords.
+     Each repo manages its own work and closure; the PR title check enforces
+     no direct auto-closing references to a foreign repository. -->
