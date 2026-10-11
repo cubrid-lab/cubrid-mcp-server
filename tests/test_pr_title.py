@@ -219,6 +219,7 @@ class PrTitleValidatorTest(unittest.TestCase):
             "- Summary\n\n    Closes another-org/another-repo#43",
             "1. Summary\n\n    Closes another-org/another-repo#43",
             "- a\n\n    - Closes another-org/another-repo#43",
+            "- Summary\nlazy continuation\n\n    Closes another-org/another-repo#43",
             "Intro <!--> Closes another-org/another-repo#43 -->",
         ):
             with self.subTest(body=body):
