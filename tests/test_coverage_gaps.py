@@ -108,9 +108,15 @@ class _CleanupFailingConn:
 
 
 class _CleanupFailingDB:
+    def __init__(self) -> None:
+        self.discarded = 0
+
     @contextmanager
     def exclusive(self) -> Any:
         yield _CleanupFailingConn()
+
+    def _discard_connection(self) -> None:
+        self.discarded += 1
 
     # Reuse the real cleanup logic so this test exercises production code.
     _safe_close_cursor = staticmethod(Database._safe_close_cursor)
@@ -119,13 +125,12 @@ class _CleanupFailingDB:
 
 
 def test_explain_query_swallows_cleanup_errors(monkeypatch: pytest.MonkeyPatch) -> None:
-    """SET TRACE OFF and rollback failures during cleanup are logged, not raised."""
-    monkeypatch.setattr(
-        server, "_context", AppContext.single(config=_TEST_CONFIG, database=_CleanupFailingDB())
-    )
+    """A cleanup failure is logged and discards the connection, not raised (#264)."""
+    db = _CleanupFailingDB()
+    monkeypatch.setattr(server, "_context", AppContext.single(config=_TEST_CONFIG, database=db))
     result = server.explain_query("SELECT 1")
-    assert result["plan"] == "plan text"
-    assert result["sql"] == "SELECT 1"
+    assert result == {"sql": "SELECT 1", "plan": "plan text"}
+    assert db.discarded == 1
 
 
 # ---------------------------------------------------------------------------

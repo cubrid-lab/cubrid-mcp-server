@@ -329,39 +329,51 @@ class Database:
         Holds the connection lock across the whole ``SET TRACE ... SHOW TRACE``
         sequence so a concurrent query cannot interleave and clobber the session
         trace state. On exit the trace flag is turned off and any pending
-        transaction is rolled back on a best-effort basis.
+        transaction is rolled back on a best-effort basis; if that cleanup fails
+        the connection is discarded (see :meth:`_reset_trace_state`). After a
+        timeout the socket is dead and ``exclusive()`` discards the connection,
+        so no cleanup statement is sent.
         """
         with self.exclusive() as connection:
             cursor = connection.cursor()
+            timed_out = False
             try:
                 cursor.execute("SET TRACE ON", ())
                 yield cursor
+            except Exception as exc:
+                timed_out = _is_timeout_error(exc)
+                raise
             finally:
-                self._safe_close_cursor(cursor)
-                self._reset_trace_state(connection)
+                if not timed_out:
+                    self._safe_close_cursor(cursor)
+                    self._reset_trace_state(connection)
 
     def _reset_trace_state(self, connection: Any) -> None:
-        """Best-effort cleanup of ``SET TRACE`` session state and pending transaction."""
-        cleanup_errors: list[str] = []
+        """Best-effort cleanup of ``SET TRACE`` session state and pending transaction.
+
+        Called with the connection lock held. If opening the cleanup cursor,
+        ``SET TRACE OFF`` or the rollback fails, the session may still have
+        tracing on or a transaction open, so the connection is discarded and the
+        next call reconnects instead of reusing it. Cleanup stops at the first
+        failure, so an unhealthy session gets no further statements. It never
+        raises: a query error that is already propagating stays the error the
+        caller sees.
+        """
+        step = "opening the cleanup cursor"
         try:
             cursor = connection.cursor()
-        except Exception as exc:
-            cleanup_errors.append(f"SET TRACE OFF failed: {exc}")
-        else:
+            step = "SET TRACE OFF"
             try:
                 cursor.execute("SET TRACE OFF", ())
-            except Exception as exc:
-                cleanup_errors.append(f"SET TRACE OFF failed: {exc}")
             finally:
-                # Best-effort close: a failing close() must not be misreported
-                # as a "SET TRACE OFF failed" error when the execute succeeded.
+                # Best-effort close: a failing close() is logged, not treated
+                # as a failed cleanup step.
                 self._safe_close_cursor(cursor)
-        try:
+            step = "rollback"
             connection.rollback()
         except Exception as exc:
-            cleanup_errors.append(f"rollback failed: {exc}")
-        if cleanup_errors:
-            logger.debug("trace cleanup: %s", "; ".join(cleanup_errors))
+            logger.warning("trace cleanup failed at %s; discarding connection", step, exc_info=exc)
+            self._discard_connection()
 
     def health_check(self) -> dict[str, Any]:
         """Verify connectivity on demand, reconnecting lazily on failure.
