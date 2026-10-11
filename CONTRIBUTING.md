@@ -196,13 +196,15 @@ bump the version yourself; maintainers cut releases following
 
 Maintainer/agent PRs use the review route in
 [AGENTS.md](AGENTS.md#development-workflow-cubrid-lab-org-standard).
-OpenCode work records Oracle design and post-implementation reviews; standalone
-Claude Code or Codex PRs wait for a substantive submitted GitHub Copilot or
-other-person review. A pending request, CI pass or automated approval suggestion
-does not count. Record dispositions at the final relevant head and close
-inline threads only after verification. Outside contributors need no internal
-agent or Oracle tooling. Existing safety, integration and release checks remain
-mandatory.
+Non-trivial OpenCode work records Oracle design and post-implementation reviews;
+trivial OpenCode changes may omit those reviews with a recorded reason.
+Standalone Claude Code, Codex, ChatGPT or other agent tools wait for a substantive
+submitted GitHub Copilot or other-person review. A pending request, CI pass or
+an automated approval suggestion alone does not complete that review route.
+Record dispositions at the final relevant head and close inline threads only
+after verification. Human contributions follow ordinary contributor review;
+no contributor must install internal agent or Oracle tooling. Existing safety,
+integration and release checks remain mandatory.
 
 ## Pull request and commit titles
 
