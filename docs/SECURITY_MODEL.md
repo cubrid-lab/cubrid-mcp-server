@@ -44,7 +44,7 @@ Write access is **off by default**. Setting `CUBRID_MCP_WRITE=1` registers a sep
 
 ### `explain_query` executes the statement
 
-`explain_query` does not merely plan: it runs the `SELECT`/`WITH` statement under `SET TRACE ON`, reads `SHOW TRACE`, then turns tracing off and rolls the transaction back. The statement therefore consumes real database resources (and can take as long as the query itself), and it is subject to the same keyword checks and database privileges as `execute_query`. The rollback is best-effort cleanup by the server, not a substitute for a least-privilege account.
+`explain_query` does not merely plan: it runs the `SELECT`/`WITH` statement under `SET TRACE ON`, reads `SHOW TRACE`, then turns tracing off and rolls the transaction back. The statement therefore consumes real database resources (and can take as long as the query itself), and it is subject to the same keyword checks and database privileges as `execute_query`. The rollback is best-effort cleanup by the server, not a substitute for a least-privilege account. If any cleanup step fails, the server discards the connection instead of reusing a session that may still have tracing on or a transaction open; the next call reconnects.
 
 ## Layer 3 — output limits
 

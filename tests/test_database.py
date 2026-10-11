@@ -789,6 +789,138 @@ def test_trace_cleanup_rolls_back_once(monkeypatch: pytest.MonkeyPatch) -> None:
     assert db._connection is created[0]
 
 
+class _TraceCleanupConnection(FakeConnection):
+    """Fake connection whose trace cleanup fails at one chosen step (#264).
+
+    ``fail_at`` is ``"cursor"`` (opening the cleanup cursor, the second
+    ``cursor()`` call), ``"trace_off"`` (``SET TRACE OFF``) or ``"rollback"``.
+    Every driver call records whether the ``Database`` lock was held.
+    """
+
+    def __init__(self, fail_at: str | None, lock_probe: Any) -> None:
+        super().__init__(rows=[("Trace Statistics: stub",)])
+        self._fail_at = fail_at
+        self._lock_probe = lock_probe
+        self.lock_owned: list[bool] = []
+        self.rollbacks = 0
+        self.executed: list[str] = []
+
+    def cursor(self) -> FakeCursor:
+        self.lock_owned.append(self._lock_probe())
+        if self._fail_at == "cursor" and len(self.cursors) == 1:
+            raise pycubrid.OperationalError("cursor boom")
+        cursor = super().cursor()
+        plain_execute = cursor.execute
+
+        def _execute(sql: str, params: tuple[Any, ...] = ()) -> None:
+            self.lock_owned.append(self._lock_probe())
+            self.executed.append(sql)
+            if self._fail_at == "trace_off" and sql == "SET TRACE OFF":
+                raise pycubrid.OperationalError("trace off boom")
+            plain_execute(sql, params)
+
+        cursor.execute = _execute  # type: ignore[method-assign]
+        return cursor
+
+    def rollback(self) -> None:
+        self.lock_owned.append(self._lock_probe())
+        self.rollbacks += 1
+        if self._fail_at == "rollback":
+            raise pycubrid.OperationalError("rollback boom")
+
+
+def _trace_cleanup_db(
+    monkeypatch: pytest.MonkeyPatch, fail_at: str | None
+) -> tuple[Database, list[_TraceCleanupConnection]]:
+    """Return a Database whose first connection fails cleanup at ``fail_at``.
+
+    Later connections are healthy, so the next call shows whether it reconnected.
+    """
+    created: list[_TraceCleanupConnection] = []
+    db = Database(_TEST_CONFIG)
+    probe = db._lock._is_owned  # type: ignore[attr-defined]
+
+    def _connect(**_k: Any) -> _TraceCleanupConnection:
+        conn = _TraceCleanupConnection(fail_at if not created else None, probe)
+        created.append(conn)
+        return conn
+
+    monkeypatch.setattr(pycubrid, "connect", _connect)
+    return db, created
+
+
+def _run_explain(db: Database) -> list[tuple[Any, ...]]:
+    with db.trace_enabled() as cursor:
+        cursor.execute("SELECT 1", ())
+        cursor.execute("SHOW TRACE", ())
+        return list(cursor.fetchall())
+
+
+@pytest.mark.parametrize("fail_at", ["cursor", "trace_off", "rollback"])
+def test_trace_cleanup_failure_discards_connection(
+    monkeypatch: pytest.MonkeyPatch, fail_at: str
+) -> None:
+    db, created = _trace_cleanup_db(monkeypatch, fail_at)
+    # The successful query keeps its result; the cleanup failure is not raised.
+    assert _run_explain(db) == [("Trace Statistics: stub",)]
+    failed = created[0]
+    assert db._connection is None
+    assert failed.closed is True
+    # Cleanup ran entirely under the lock.
+    assert failed.lock_owned and all(failed.lock_owned)
+    # Cleanup stops at the first failure: no rollback after a cursor or
+    # SET TRACE OFF failure.
+    assert failed.rollbacks == (1 if fail_at == "rollback" else 0)
+    # The user statement ran once and is not replayed on the new connection.
+    assert failed.executed.count("SELECT 1") == 1
+    assert db.fetch_all("SELECT 2") == [("Trace Statistics: stub",)]
+    assert len(created) == 2
+    assert db._connection is created[1]
+    assert "SELECT 1" not in created[1].executed
+
+
+def test_trace_cleanup_failure_keeps_original_query_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    db, created = _trace_cleanup_db(monkeypatch, "trace_off")
+    original = pycubrid.ProgrammingError("bad sql")
+    with pytest.raises(DatabaseError, match=r"^query failed: ProgrammingError$") as info:
+        with db.trace_enabled():
+            _raise(original)
+    # The query error, not the cleanup error, is the one reported.
+    assert info.value.__cause__ is original
+    assert db._connection is None
+    assert created[0].closed is True
+    db.fetch_all("SELECT 2")
+    assert db._connection is created[1]
+
+
+def test_trace_timeout_skips_cleanup(monkeypatch: pytest.MonkeyPatch) -> None:
+    db, created = _trace_cleanup_db(monkeypatch, None)
+    with pytest.raises(QueryTimeoutError):
+        with db.trace_enabled():
+            _raise(socket.timeout("timed out"))
+    conn = created[0]
+    # The socket is dead: no cursor close, SET TRACE OFF or rollback is sent.
+    assert conn.executed == ["SET TRACE ON"]
+    assert conn.rollbacks == 0
+    assert conn.cursors[0].closed is False
+    assert db._connection is None
+
+
+def test_trace_cleanup_success_keeps_connection(monkeypatch: pytest.MonkeyPatch) -> None:
+    db, created = _trace_cleanup_db(monkeypatch, None)
+    _run_explain(db)
+    _run_explain(db)
+    assert len(created) == 1
+    conn = created[0]
+    assert db._connection is conn
+    assert conn.closed is False
+    assert conn.rollbacks == 2
+    assert conn.executed.count("SET TRACE OFF") == 2
+    assert all(conn.lock_owned)
+
+
 def test_data_error_from_fetchmany_rolls_back_and_keeps_connection(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
