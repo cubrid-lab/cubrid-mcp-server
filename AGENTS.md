@@ -44,8 +44,9 @@ Merging a reviewed release PR is the only normal way to release: `release-please
 opens it (curated + Conventional Commit dated CHANGELOG section + `__version__` and
 `.mcpb/server.json` bump, checked by `make release-check VERSION=x.y.z`), and after the
 squash-merge `release.yml` detects the version change and runs consistency → full matrix →
-build → tag/Release/PyPI → cookbook verification (the cookbook smoke test called as a
-pinned reusable workflow, no token) → summary on its own.
+build → candidate verification (the cookbook smoke test in candidate mode on the built
+wheel; `publish` needs it) → tag/Release/PyPI → cookbook verification (the cookbook smoke
+test called as a pinned reusable workflow, no token) → summary on its own.
 Freeze a release candidate with `autorelease: review` before branch-only note edits; wait for in-flight preparation to finish. Unfrozen notes come from main Unreleased. GITHUB_TOKEN updates require maintainer-triggered CI at the final head. Pending labels are reconciled only after successful publication and cookbook verification.
 Ordinary PRs never change `__version__` or date a
 CHANGELOG section. Never push tags or publish by hand; the only manual entry point is the
