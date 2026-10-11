@@ -54,6 +54,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - README gains a **Related Projects** section linking pycubrid, sqlalchemy-cubrid, and cubrid-cookbook-python, matching the sibling packages' READMEs — every cubrid-lab PyPI page now leads to the runnable examples.
 
 ### CI
+- **PRs cannot directly auto-close another repository's issue** — the existing
+  required `PR title` check rejects foreign closing keywords in PR-body text
+  while allowing `Closes #N` for local issues and `Refs owner/repo#N` for
+  genuine technical dependencies. The PR body is inert data and the validator
+  uses no checkout or token permissions; fenced examples and HTML comments are
+  ignored. Repository-local issue and PR templates document ownership.
 - **The PyPI duplicate guard uses `hashlib.file_digest()` (#220)** —
   `scripts/pypi_duplicate_guard.py` hashes `dist/` files with the Python 3.11 stdlib
   helper instead of a hand-written chunked read loop; the digests are the same. The
