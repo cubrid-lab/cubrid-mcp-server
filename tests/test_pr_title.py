@@ -190,6 +190,7 @@ class PrTitleValidatorTest(unittest.TestCase):
             f"<!-- {chr(96) * 3} -->\nCloses #271",
             "# Example\n    Closes another-org/another-repo#42",
             "Intro <!-- Closes another-org/another-repo#42 --> outro",
+            "- Summary\nlazy\n\nend\n\n    Closes another-org/another-repo#42",
         ):
             with self.subTest(body=body):
                 result = _run("docs: align issue ownership", body)
