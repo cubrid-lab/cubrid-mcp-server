@@ -107,7 +107,8 @@ and an automated "approval recommended" summary are not completed reviews.
 1. Obtain Oracle pre-implementation **design** review before editing.
 2. Implement the agreed scope, preserving read-only/write-mode, audit,
    connection/timeout and MCP stdout invariants, with tests.
-3. Update affected README, TOOL, SECURITY_MODEL and CHANGELOG documentation.
+3. Update only affected documentation, such as `README.md`, `docs/TOOLS.md`,
+   `docs/SECURITY_MODEL.md` and `CHANGELOG.md`, under the existing docs policy.
 4. Obtain Oracle post-implementation **code** review, disposition findings,
    and record both reviews plus executed validation.
 
@@ -116,20 +117,22 @@ Oracle pre/post reviews satisfy this route; a further Copilot review is not
 automatically required. Existing branch/maintainer and required CI conditions
 still apply.
 
-**Standalone Claude Code or Codex:** open a PR after implementation, tests
-and docs, then **wait for a substantive submitted GitHub Copilot review or a
-review by another person** before merging. A submitted Copilot COMMENTED review
-with actual code assessment can count; it is not GitHub APPROVED status.
+**Standalone agents (Claude Code, Codex, ChatGPT, or other agent tools):**
+open a PR after implementation, tests and docs, then **wait for a substantive
+submitted GitHub Copilot review or a review by another person** before merging.
+A submitted Copilot COMMENTED review with actual code assessment can count;
+it is not GitHub APPROVED status.
 Requested/pending reviews, Copilot suggestion summaries without substantive
 assessment, self-review and passing CI are insufficient. Evaluate findings
 against the final relevant head. Without the required review, leave the PR
 unmerged (Draft/pending review).
 
-**Human/other contributions:** follow ordinary contributor requirements;
-maintainers arrange any project-specific tooling and integration. Installing
-OpenCode, Oracle, Copilot, Claude Code or Codex is never an outside-contributor
-prerequisite. Preserve original authorship and use attribution only for tools
-actually involved.
+**Human contributions:** follow ordinary contributor requirements;
+maintainers arrange any project-specific tooling and integration. This route
+is not a fallback for unnamed standalone agent tools, which use the route above.
+Installing OpenCode, Oracle, Copilot, Claude Code or Codex is never an
+outside-contributor prerequisite. Preserve original authorship and use
+attribution only for tools actually involved.
 
 ## Issue specification and ownership
 
@@ -260,7 +263,7 @@ Do not mark work complete until code, tests, and documentation are consistent.
 ## Commit Convention
 
 Issue titles, pull request titles and commit subjects follow
-[CONTRIBUTING.md - Pull request and commit titles](CONTRIBUTING.md#pull-request-and-commit-titles):
+[CONTRIBUTING.md](CONTRIBUTING.md#pull-request-and-commit-titles):
 `type(scope)!: description` with types `feat`, `fix`, `docs`, `test`, `perf`,
 `refactor`, `ci`, `build`, `chore`, `style`, `revert`; English, lowercase start
 unless the first word is an API name, acronym, or proper noun; no trailing
