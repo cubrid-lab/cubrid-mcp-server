@@ -168,6 +168,36 @@ the corners — Python 3.11 × CUBRID 10.2 and Python 3.14 × CUBRID 11.4 — to
 catch compatibility drift between weekly runs. The advisory upstream canaries
 (`upstream-canary.yml`, pycubrid@main and latest FastMCP) run weekly on Monday.
 
+## Main branch protection
+
+Every change reaches `main` through a pull request. The maintainers apply this
+baseline to `main` (the default branch) in the repository settings; it is not
+stored in the repository, so a change to it is a maintainer decision recorded on
+an issue, not a pull request:
+
+- **No deletion** of `main`.
+- **No force push** (non-fast-forward updates are rejected).
+- **Pull request required.** Direct pushes to `main` are rejected. Merges are
+  squash merges, so the pull request title becomes the commit title.
+- **Required checks:** `ci-gate` (the aggregate gate described above) and
+  `PR title` (from `pr-title.yml`). The branch must be up to date with `main`
+  before merging.
+- **No required human approval and no required code-owner approval.** The
+  project has a small maintainer team, and a mandatory approval would block every
+  merge while one maintainer is away, including Dependabot auto-merge.
+  `.github/CODEOWNERS` only routes review requests. Review expectations for
+  maintainer and agent pull requests are in
+  [Agent-authored PR review requirements](#agent-authored-pr-review-requirements).
+- **No bypass actor.** The rules also apply to administrators. No workflow pushes
+  to `main`: `release-please.yml` pushes only to its `release-please--branches--main`
+  branch and opens a pull request, `release.yml` creates only `v*` tags and the
+  GitHub Release, and `dependabot-auto-merge.yml` merges through the pull request
+  with the same required checks.
+
+Renaming the `ci-gate` job or the `PR title` job changes the check name and
+blocks every merge until the required checks are updated in the settings; change
+both together.
+
 ## CHANGELOG
 
 Add an entry under `## [Unreleased]` in

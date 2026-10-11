@@ -336,6 +336,10 @@ gh workflow run release.yml --ref <branch> -f action=dry-run -f version=X.Y.Z
 ## Repository settings this relies on
 
 - Squash merge only; the PR title becomes the commit title.
+- `main` protection as described in
+  [CONTRIBUTING.md](CONTRIBUTING.md#main-branch-protection): pull request
+  required, `ci-gate` and `PR title` required, no deletion or force push, no
+  bypass actor. The release flow never pushes to `main`, so it needs no bypass.
 - Settings → Actions → General: "Allow GitHub Actions to create and approve
   pull requests" (for `release-please.yml`).
 - Labels `autorelease: pending`, `autorelease: tagged` and `autorelease: review`
