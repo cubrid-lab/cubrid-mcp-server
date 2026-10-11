@@ -216,6 +216,10 @@ class PrTitleValidatorTest(unittest.TestCase):
             "<!-->\nCloses another-org/another-repo#43",
             f"{fence}a{chr(96)}b\nCloses another-org/another-repo#43",
             f"\\{chr(96)}Closes another-org/another-repo#43\\{chr(96)}",
+            "- Summary\n\n    Closes another-org/another-repo#43",
+            "1. Summary\n\n    Closes another-org/another-repo#43",
+            "- a\n\n    - Closes another-org/another-repo#43",
+            "Intro <!--> Closes another-org/another-repo#43 -->",
         ):
             with self.subTest(body=body):
                 result = _run("docs: align issue ownership", body)
