@@ -12,8 +12,10 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 import textwrap
 import unittest
+import unittest.mock
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -84,7 +86,7 @@ INVALID = (
 
 TICK = chr(96)
 FENCE = TICK * 3
-GUARD_SHA256 = "cc334ccb5a0b24b3632857534f8c8ace84871cb0bd2f4257a6a343e650485bf9"
+GUARD_SHA256 = "311a09ba81095a4d1ab3a244c19904dc5605e87cd5ef863cb6eae0cd8fcaffd5"
 
 
 def _validator() -> str:
@@ -96,7 +98,7 @@ def _validator() -> str:
 
 
 def _run(
-    title: str, body: str = "", timeout: float | None = None
+    title: str, body: str = "", commits: str | None = None, timeout: float | None = None
 ) -> subprocess.CompletedProcess[str]:
     env = {
         **os.environ,
@@ -104,14 +106,23 @@ def _run(
         "PR_BODY": body,
         "GITHUB_REPOSITORY": "cubrid-lab/cubrid-mcp-server",
     }
-    return subprocess.run(
-        [sys.executable, "-c", _validator()],
-        capture_output=True,
-        text=True,
-        env=env,
-        check=False,
-        timeout=timeout,
-    )
+    env.pop("PR_COMMITS_FILE", None)
+    if commits is not None:
+        with tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False) as handle:
+            handle.write(commits)
+        env["PR_COMMITS_FILE"] = handle.name
+    try:
+        return subprocess.run(
+            [sys.executable, "-c", _validator()],
+            capture_output=True,
+            text=True,
+            env=env,
+            check=False,
+            timeout=timeout,
+        )
+    finally:
+        if commits is not None:
+            os.unlink(env["PR_COMMITS_FILE"])
 
 
 class PrTitleValidatorTest(unittest.TestCase):
@@ -154,6 +165,11 @@ class PrTitleValidatorTest(unittest.TestCase):
         self.assertIn("  pull_request:\n    types: [opened, edited, reopened, synchronize]", text)
         self.assertNotRegex(text, r"(?m)^\s*pull_request_target:")
         self.assertIn("\npermissions: {}\n", text)
+        job = text.split("\njobs:\n", 1)[1]
+        self.assertEqual(
+            re.findall(r"(?m)^ +permissions:.*(?:\n {6,}\S.*)*", job),
+            ["    permissions:\n      pull-requests: read"],
+        )
         self.assertNotIn("actions/checkout", text)
         self.assertIn("PR_TITLE: ${{ github.event.pull_request.title }}", text)
         self.assertIn("PR_BODY: ${{ github.event.pull_request.body }}", text)
@@ -211,6 +227,32 @@ class PrTitleValidatorTest(unittest.TestCase):
             "Fixes https://github.com/cubrid-lab/pycubrid/issues/833",
             issue="cubrid-lab/pycubrid#833",
         )
+
+    def test_enterprise_managed_owner_fails(self) -> None:
+        # Enterprise managed user accounts carry an "_shortcode" suffix.
+        self.assert_blocked("Closes alice_acme/another-repo#42", issue="alice_acme/another-repo#42")
+
+    def test_foreign_closure_in_a_commit_message_fails(self) -> None:
+        commits = "fix: keep cursor state\n\nCloses another-org/another-repo#43\n"
+        result = _run("docs: align issue ownership", "Closes #271", commits)
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("in a commit message", result.stdout)
+        # Commit messages are plain text: Markdown code does not hide a keyword.
+        result = _run("docs: x", "", f"docs: x\n\n{TICK}Closes another-org/another-repo#43{TICK}")
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        result = _run("docs: x", "", "fix: a\n\nCloses #271\nRefs another-org/another-repo#43\n")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_foreign_closure_in_the_title_fails(self) -> None:
+        result = _run("fix: closes https://github.com/another-org/another-repo/issues/43")
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("in a PR title", result.stdout)
+
+    def test_too_many_commits_to_list_fails(self) -> None:
+        with unittest.mock.patch.dict(os.environ, {"PR_COMMIT_COUNT": "250"}):
+            result = _run("docs: align issue ownership", "", "fix: a\n")
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("250 or more commits", result.stdout)
 
     def test_local_closures_and_foreign_refs_pass(self) -> None:
         self.assert_allowed(
