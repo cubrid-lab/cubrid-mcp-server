@@ -87,22 +87,25 @@ class UnsafeSQLError(ValueError):
     """Raised when a statement is rejected by the read-only checker."""
 
 
-def _lex(sql: str, *, backslash_escapes: bool) -> list[tuple[str, str]]:
+def lex_sql(sql: str, *, backslash_escapes: bool) -> list[tuple[str, str]]:
     """Split ``sql`` into ``(kind, text)`` segments following CUBRID's lexical rules.
 
     ``kind`` is ``"code"``, ``"comment"``, ``"quoted"`` (a string literal or
-    quoted identifier) or ``"unterminated"`` (a quote that is never closed). ``sqlparse`` uses a generic lexer whose rules differ from
-    CUBRID's: it does not know CUBRID's ``//`` line comments, it treats ``#`` as a
-    comment (CUBRID does not), and it treats a backslash as an escape inside
-    quotes. So the boundaries of comments, literals and statements are decided
-    here instead, the way the CUBRID server decides them.
+    quoted identifier) or ``"unterminated"`` (a quote that is never closed).
+    ``sqlparse`` uses a generic lexer whose rules differ from CUBRID's: it does
+    not know CUBRID's ``//`` line comments, it treats ``#`` as a comment (CUBRID
+    does not), and it treats a backslash as an escape inside quotes. So the
+    boundaries of comments, literals and statements are decided here instead,
+    the way the CUBRID server decides them. The audit log uses the same scanner
+    to blank out literals and comments.
 
     CUBRID comments are ``--`` and ``//`` up to the end of the line (``\n`` or
     ``\r``) and ``/* ... */``, which does not nest; an unterminated block comment
-    runs to the end of the input. Quotes are ``'...'`` and ``"..."`` (a doubled
-    quote escapes itself), ```...``` and ``[...]``. A backslash escapes the next
-    character inside ``'...'`` and ``"..."`` only when ``backslash_escapes`` is
-    true, which models a server running with ``no_backslash_escapes=no``.
+    runs to the end of the input. Quotes are ``'...'``, ``"..."`` and ```...```
+    (a doubled quote character escapes itself) and ``[...]``. A backslash
+    escapes the next character inside ``'...'`` and ``"..."`` only when
+    ``backslash_escapes`` is true, which models a server running with
+    ``no_backslash_escapes=no``.
     """
     segments: list[tuple[str, str]] = []
     code_start = 0
@@ -120,11 +123,11 @@ def _lex(sql: str, *, backslash_escapes: bool) -> list[tuple[str, str]]:
             close = sql.find("*/", i + 2)
             end = n if close == -1 else close + 2
             kind = "comment"
-        elif ch in "'\"":
+        elif ch in "'\"`":
             end = i + 1
             kind = "unterminated"
             while end < n:
-                if backslash_escapes and sql[end] == "\\":
+                if backslash_escapes and ch != "`" and sql[end] == "\\":
                     end += 2
                 elif sql[end] != ch:
                     end += 1
@@ -135,8 +138,8 @@ def _lex(sql: str, *, backslash_escapes: bool) -> list[tuple[str, str]]:
                     kind = "quoted"
                     break
             end = min(end, n)
-        elif ch in "`[":
-            close = sql.find("`" if ch == "`" else "]", i + 1)
+        elif ch == "[":
+            close = sql.find("]", i + 1)
             end = n if close == -1 else close + 1
             kind = "unterminated" if close == -1 else "quoted"
         else:
@@ -178,7 +181,7 @@ def strip_comments(sql: str) -> str:
     the real leading keyword. Quoted text is reduced to an empty quote (see
     :func:`_render`); the result is only for analysis, never for execution.
     """
-    return _render(_lex(sql, backslash_escapes=False))
+    return _render(lex_sql(sql, backslash_escapes=False))
 
 
 def _cubrid_statements(sql: str) -> list[str]:
@@ -191,8 +194,8 @@ def _cubrid_statements(sql: str) -> list[str]:
     statements the server runs cannot be known here. An unterminated quote is
     rejected too: everything after it would otherwise be hidden from the checks.
     """
-    segments = _lex(sql, backslash_escapes=False)
-    if segments != _lex(sql, backslash_escapes=True):
+    segments = lex_sql(sql, backslash_escapes=False)
+    if segments != lex_sql(sql, backslash_escapes=True):
         raise UnsafeSQLError(
             "a backslash inside a quoted literal makes the statement ambiguous; "
             "escape a quote by doubling the quote character used ('' or \"\") instead"

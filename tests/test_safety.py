@@ -257,6 +257,7 @@ CHECKERS = [ensure_read_only, ensure_query_statement, ensure_write_allowed]
         "SELECT 'a//b', 'c--d', 'e/*f*/' FROM t",
         'SELECT "a;--b" FROM t',
         "SELECT `a;b`, [c;d] FROM t",
+        'SELECT `a``;b`, "c"";d" FROM t',
         "SELECT 'C:\\temp' FROM t",
     ],
 )
@@ -339,7 +340,14 @@ def test_checkers_reject_backslash_quote_ambiguity(sql: str) -> None:
 
 @pytest.mark.parametrize(
     "sql",
-    ["SELECT 'abc", 'SELECT "abc', "SELECT `abc", "SELECT [abc", "SELECT 'a'' ; DELETE FROM t"],
+    [
+        "SELECT 'abc",
+        'SELECT "abc',
+        "SELECT `abc",
+        "SELECT [abc",
+        "SELECT 'a'' ; DELETE FROM t",
+        "SELECT `a``; DELETE FROM t",
+    ],
 )
 def test_checkers_reject_unterminated_quotes(sql: str) -> None:
     for checker in CHECKERS:

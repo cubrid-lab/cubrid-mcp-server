@@ -32,6 +32,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Iterator, TextIO
 
 from cubrid_mcp_server.database import sanitize_error
+from cubrid_mcp_server.safety import lex_sql
 
 _AUDIT_LOGGER_NAME = "cubrid_mcp_server.audit"
 
@@ -45,25 +46,35 @@ _TABLE_REF = re.compile(
 )
 _LEADING_WORD = re.compile(r"[A-Za-z]+")
 
-# SQL noise that must never be inspected for identifiers or the category:
-# single-quoted string literals (with doubled-quote escapes), CUBRID's ``--`` and
-# ``//`` line comments (ended by ``\n`` or ``\r``), and block comments. An
-# unterminated literal or block comment runs to the end of the input. These are
-# blanked out before the ``FROM``/``JOIN`` scan so a literal or comment such as
-# ``'JOIN secret'`` or ``-- JOIN secret`` can never echo an identifier, and
-# before the category is read so a leading comment cannot hide or replace it.
-_SQL_NOISE = re.compile(
-    r"'(?:[^']|'')*(?:'|\Z)"  # single-quoted string literal
-    r"|(?:--|//)[^\r\n]*"  # line comment
-    r"|/\*.*?(?:\*/|\Z)",  # block comment
-    re.DOTALL,
-)
+# A double-quoted name that :data:`_IDENTIFIER` can match. Any other quoted text
+# (a string literal, or a quoted name that could be a literal when the server
+# runs with ``ansi_quotes=no``) is noise.
+_STRICT_QUOTED_IDENTIFIER = re.compile(r'"[A-Za-z_][A-Za-z0-9_]*"')
 
 
 def _strip_noise(sql: str) -> str:
     """Blank out string literals and comments so neither identifier extraction
-    nor category detection inspects quoted or commented text."""
-    return _SQL_NOISE.sub(" ", sql)
+    nor category detection inspects quoted or commented text.
+
+    Boundaries come from the CUBRID-aware scanner the SQL checks use
+    (:func:`cubrid_mcp_server.safety.lex_sql`): ``--`` and ``//`` line comments,
+    non-nesting block comments, quotes, and unterminated quotes or comments that
+    run to the end of the input. The input is scanned both with and without
+    backslash escapes (the server parameter ``no_backslash_escapes`` decides
+    which applies), and text that is a literal or a comment under either reading
+    is blanked, so a ``FROM``/``JOIN`` inside a literal or comment such as
+    ``'JOIN secret'`` or ``-- JOIN secret`` can never echo an identifier, and a
+    leading comment cannot hide or replace the category.
+    """
+    noise = [False] * len(sql)
+    for backslash_escapes in (False, True):
+        start = 0
+        for kind, text in lex_sql(sql, backslash_escapes=backslash_escapes):
+            end = start + len(text)
+            if kind != "code" and not _STRICT_QUOTED_IDENTIFIER.fullmatch(text):
+                noise[start:end] = [True] * len(text)
+            start = end
+    return "".join(" " if blank else ch for ch, blank in zip(sql, noise))
 
 
 def _category(sql: str | None) -> str | None:

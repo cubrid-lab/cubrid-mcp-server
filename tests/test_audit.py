@@ -156,6 +156,21 @@ def test_identifiers_ignore_cubrid_and_unterminated_comments_and_literals() -> N
     assert _identifiers(f"SELECT * FROM real WHERE x = 'JOIN {_SECRET}") == ["real"]
 
 
+def test_identifiers_ignore_literals_under_either_backslash_mode() -> None:
+    # With no_backslash_escapes=no, \' does not end the literal, so the JOIN is
+    # still literal text; it must not be logged under either server setting.
+    sql = f"SELECT * FROM real WHERE note = 'x\\' JOIN {_SECRET} -- still literal'"
+    assert _identifiers(sql) == ["real"]
+
+
+def test_identifiers_ignore_double_quoted_text_that_is_not_a_name() -> None:
+    # With ansi_quotes=no, "..." is a string literal; only a strict quoted name
+    # is kept for extraction.
+    assert _identifiers(f'SELECT * FROM real WHERE x = "JOIN {_SECRET}"') == ["real"]
+    assert _identifiers('SELECT * FROM "Real" JOIN "s"."t" ON 1=1') == ["Real", "s.t"]
+    assert _identifiers("SELECT * FROM real WHERE x = `JOIN hidden`") == ["real"]
+
+
 # --------------------------------------------------------------------------- #
 # AuditLogger behaviour
 # --------------------------------------------------------------------------- #
