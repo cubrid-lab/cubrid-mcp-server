@@ -9,7 +9,7 @@ from typing import Any
 import pytest
 from fastmcp import Client
 
-from cubrid_mcp_server import server
+from cubrid_mcp_server import __version__, server
 from cubrid_mcp_server.config import Config
 from cubrid_mcp_server.context import AppContext
 from cubrid_mcp_server.database import Database
@@ -512,6 +512,14 @@ def test_schema_resource_unknown_table_raises(fake_db: FakeDatabase) -> None:
     fake_db.queue([("users",)])  # _resolve_table lookup: 'nope' not present
     with pytest.raises(ValueError, match="unknown table"):
         server.schema_resource("nope")
+
+
+async def test_initialize_reports_package_version() -> None:
+    # serverInfo.version is the package version, not FastMCP's own version.
+    async with Client(server.mcp) as client:
+        # FastMCP 4 exposes ``server_info``; FastMCP 3 only ``initialize_result``.
+        info = getattr(client, "server_info", None) or client.initialize_result.serverInfo
+    assert (info.name, info.version) == ("cubrid-mcp-server", __version__)
 
 
 async def test_schema_resources_listed_via_protocol(fake_db: FakeDatabase) -> None:

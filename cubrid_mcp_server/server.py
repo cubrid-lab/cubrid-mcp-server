@@ -13,6 +13,7 @@ from urllib.parse import quote
 
 from fastmcp import FastMCP
 
+from cubrid_mcp_server import __version__
 from cubrid_mcp_server.audit import AuditLogger
 from cubrid_mcp_server.config import Config, ConfigError, _parse_bool
 from cubrid_mcp_server.context import AppContext
@@ -36,6 +37,8 @@ mcp = FastMCP(
         "Read-only by default; write tools are opt-in. "
         "Consult cubrid://agent-guide for CUBRID-specific guidance."
     ),
+    # Without it FastMCP reports its own version as serverInfo.version.
+    version=__version__,
 )
 
 # Cap on how many tables ``table_row_counts`` will scan in a single call, to avoid
