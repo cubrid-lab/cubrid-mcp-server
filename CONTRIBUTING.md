@@ -99,7 +99,7 @@ the `integration` marker.
 | `integration-full.yml` | `test_ci_scope.py`, `test_release_workflows.py`, `test_workflow_installs.py`, `test_workflow_timeouts.py`, plus a **manual `workflow_dispatch` on the PR head, linked from the PR** (not automated; the release gate depends on it) | Unit (3.12) |
 | `pr-title.yml` | Runs itself on the PR; `test_pr_title.py` | Unit (3.12) |
 | `release-please.yml` | `test_release_workflows.py`, `test_release_please_config.py`, `test_workflow_timeouts.py` | Unit (3.12) |
-| `release.yml` | `test_release_workflows.py`, `test_pypi_duplicate_guard.py`, `test_prepare_release.py`, `test_workflow_timeouts.py` | Unit (3.12) |
+| `publish-pypi.yml` | `test_release_workflows.py`, `test_pypi_duplicate_guard.py`, `test_prepare_release.py`, `test_workflow_timeouts.py` | Unit (3.12) |
 | `upstream-canary.yml` | The all-workflow scans (`test_ci_policy.py`, `test_workflow_timeouts.py`), plus a **manual `workflow_dispatch` on the PR head, linked from the PR** | Unit (3.12) |
 
 If the same PR also edits `pyproject.toml`, `lowest-direct` and the endpoint lanes
@@ -161,7 +161,7 @@ Every executing job sets an integer `timeout-minutes` instead of GitHub's
 docs/release helpers, live lanes, `lowest-direct` and the upstream canaries, and 30
 for the unit lane (observed maximum 8.6).
 Jobs that call a reusable workflow cannot set a timeout; the repo-local callee
-(`release.yml` → `integration-full.yml`) is covered through its own jobs, and the
+(`publish-pypi.yml` → `integration-full.yml`) is covered through its own jobs, and the
 externally owned callees (the org CodeQL workflow and the cookbook smoke test) are
 an explicit allowlist. `tests/test_workflow_timeouts.py` parses every workflow and
 fails when an executing job lacks a bounded timeout, when a new external caller is
@@ -172,7 +172,7 @@ requires it to fail on any non-success planning or matrix result.
 The full Python {3.11–3.14} × CUBRID {10.2, 11.0, 11.2, 11.4} matrix lives in
 `.github/workflows/integration-full.yml`. It runs weekly (Sunday 03:00 UTC), on
 manual dispatch (`scope` = `full` or `corners`), and always in full as the
-release gate (`release.yml` calls it at the release commit; a release run that
+release gate (`publish-pypi.yml` calls it at the release commit; a release run that
 is not full or not fully green blocks publication). Monday–Saturday it runs only
 the corners — Python 3.11 × CUBRID 10.2 and Python 3.14 × CUBRID 11.4 — to
 catch compatibility drift between weekly runs. The advisory upstream canaries
@@ -202,7 +202,7 @@ an issue, not a pull request:
   [Agent-authored PR review requirements](#agent-authored-pr-review-requirements).
 - **No bypass actor.** The rules also apply to administrators. No workflow pushes
   to `main`: `release-please.yml` pushes only to its `release-please--branches--main`
-  branch and opens a pull request, `release.yml` creates only `v*` tags and the
+  branch and opens a pull request, `publish-pypi.yml` creates only `v*` tags and the
   GitHub Release, and `dependabot-auto-merge.yml` merges through the pull request
   with the same required checks.
 

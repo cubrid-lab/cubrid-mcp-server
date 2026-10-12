@@ -26,11 +26,11 @@ Key invariants:
 
 `release-please.yml` ("Prepare release") prepares a release PR on pushes to
 `main` or manual dispatch. Reviewed squash merge starts the unchanged guarded
-`release.yml` publisher. The old `prepare-release.yml` entry point is removed
+`publish-pypi.yml` publisher. The old `prepare-release.yml` entry point is removed
 in the same cutover (#254).
 
 ```text
-release-please.yml  ->  release PR (freeze, review, start CI)  ->  squash-merge  ->  release.yml
+release-please.yml  ->  release PR (freeze, review, start CI)  ->  squash-merge  ->  publish-pypi.yml
 ```
 
 ### 1. Prepare and regenerate
@@ -127,13 +127,13 @@ second production release PR.
 
 Merge only the reviewed candidate; keep release-please's title
 (`chore(main): release X.Y.Z`). Git version facts, rather than its title,
-start `release.yml`. release-please is **PR-only** (`skip-github-release: true`);
+start `publish-pypi.yml`. release-please is **PR-only** (`skip-github-release: true`);
 it cannot tag, create a Release or publish to PyPI.
 
 Before another generation, `reconcile_release_labels.py` changes a merged PR
 from `autorelease: pending` to `autorelease: tagged` only when the manifest at
 its merge SHA matches a published nondraft GitHub Release, the dereferenced
-tag points at that SHA, and a successful `release.yml` run at that SHA has
+tag points at that SHA, and a successful `publish-pypi.yml` run at that SHA has
 both **Tag, GitHub Release and PyPI** and **Require a verified release** jobs
 successful. A dry run or partial publication cannot clear pending. Until
 publication completes, upstream release-please blocks a subsequent candidate.
@@ -173,7 +173,7 @@ proves strategy/file generation, not authenticated live GitHub PR creation,
 repository settings or a full broker matrix. Test-generated 0.5.0 is a
 fixture, not the approved next release version.
 
-### 4. Automatic release (`release.yml`)
+### 4. Automatic release (`publish-pypi.yml`)
 
 Every push to `main` runs the cheap **detect** job
 (`scripts/release_detect.py`). It is a release only when all of these hold at
@@ -343,7 +343,7 @@ While a merged release PR stays `autorelease: pending`, upstream release-please
 only logs "There are untagged, merged release PRs outstanding - aborting" and
 opens no new release PR. To keep that from passing silently,
 `reconcile_release_labels.py` (the first step of **Prepare release**) classifies
-every pending PR it could not mark tagged, using the newest `release.yml`
+every pending PR it could not mark tagged, using the newest `publish-pypi.yml`
 run at the merge SHA:
 
 | State | When | Prepare release run |
@@ -375,7 +375,7 @@ means: a release was merged, and its publication is not proven. To recover:
    abandoned-release row (remove `autorelease: pending`, merge the fix, then
    dispatch).
 
-If no publisher run exists, check whether the push started `release.yml`
+If no publisher run exists, check whether the push started `publish-pypi.yml`
 and what `detect` decided. If recovery ran as a dispatch at another SHA
 (`resume` or `verify-only` from the current `main` head), the run at the merge
 SHA stays failed and the PR stays blocked: label it manually (add
@@ -390,7 +390,7 @@ silently green until its failed jobs were re-run.
 
 ### Recovery dispatch (the only manual entry point)
 
-`release.yml` has one `workflow_dispatch` with an `action` input. It never
+`publish-pypi.yml` has one `workflow_dispatch` with an `action` input. It never
 creates a new version, never moves a tag and never deletes anything.
 
 | `action` | Allowed when | Runs |
@@ -400,9 +400,9 @@ creates a new version, never moves a tag and never deletes anything.
 | `dry-run` | Any branch; `X.Y.Z` must equal `__version__` at the dispatched commit and have a dated CHANGELOG section. | consistency → matrix → build → verify-candidate → require-candidate, **no** tag, Release or upload (`publish` needs `detect`'s `publish == true`, which a dry run never sets, and the `pypi` environment allows only `main`). The cookbook verifies the wheel this run built; the post-publication `verify-cookbook` does not run. |
 
 ```bash
-gh workflow run release.yml -f action=resume -f version=X.Y.Z
-gh workflow run release.yml -f action=verify-only -f version=X.Y.Z
-gh workflow run release.yml --ref <branch> -f action=dry-run -f version=X.Y.Z
+gh workflow run publish-pypi.yml -f action=resume -f version=X.Y.Z
+gh workflow run publish-pypi.yml -f action=verify-only -f version=X.Y.Z
+gh workflow run publish-pypi.yml --ref <branch> -f action=dry-run -f version=X.Y.Z
 ```
 
 ## Repository settings this relies on
@@ -417,8 +417,14 @@ gh workflow run release.yml --ref <branch> -f action=dry-run -f version=X.Y.Z
 - Labels `autorelease: pending`, `autorelease: tagged` and `autorelease: review`
   (release-please applies the first two; the freeze label is applied by hand).
 - Environment `pypi`: deployment branches limited to `main`; PyPI Trusted
-  Publisher for `cubrid-lab/cubrid-mcp-server`, workflow `release.yml`, environment
-  `pypi` (<https://pypi.org/manage/project/cubrid-mcp-server/settings/publishing/>).
+  Publisher for `cubrid-lab/cubrid-mcp-server`, workflow `publish-pypi.yml`,
+  environment `pypi`
+  (<https://pypi.org/manage/project/cubrid-mcp-server/settings/publishing/>).
+  The workflow filename is part of that Trusted Publisher identity: do not rename
+  `.github/workflows/publish-pypi.yml`. A renamed file fails the PyPI upload with
+  "Publisher with matching claims was not found" (the 0.5.0 release run failed
+  this way after the file was renamed to `release.yml`). pycubrid and
+  sqlalchemy-cubrid use the same filename.
 - No secret for the cookbook verification: the smoke test runs as a reusable
   workflow inside the release run.
 - No tag protection rule that blocks `github-actions[bot]` from creating

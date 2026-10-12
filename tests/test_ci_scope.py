@@ -398,7 +398,7 @@ def test_full_matrix_result_fails_closed() -> None:
 
 
 def test_release_still_gates_on_the_full_matrix() -> None:
-    release = load("release.yml")
+    release = load("publish-pypi.yml")
     assert release["jobs"]["matrix"]["uses"] == "./.github/workflows/integration-full.yml"
     assert "matrix" in release["jobs"]["build"]["needs"]
 

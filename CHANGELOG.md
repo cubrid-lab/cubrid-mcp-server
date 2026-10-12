@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **The release workflow is named `publish-pypi.yml` again** — `.github/workflows/release.yml` is renamed back to `.github/workflows/publish-pypi.yml`, the workflow filename registered as the PyPI Trusted Publisher (environment `pypi`). Under the `release.yml` name the 0.5.0 run failed at the PyPI upload with "Publisher with matching claims was not found". The shared release scripts (`release_detect.py`, `release_summary.py`, `verify_dist.py`, `pypi_duplicate_guard.py`, `reconcile_release_labels.py`) are again byte-identical with pycubrid and sqlalchemy-cubrid, and `RELEASING.md`, `CONTRIBUTING.md`, `AGENTS.md`, the `Makefile` and the workflow tests name `publish-pypi.yml`. `RELEASING.md` notes that the filename is the Trusted Publisher identity and must not be renamed. No runtime change.
+
 ## [0.5.0] - 2026-10-12
 
 ### Upgrade notes

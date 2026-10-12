@@ -46,7 +46,7 @@ def test_pending_transition_requires_completed_publication(
             return {"object": {"type": "commit", "sha": tag_sha}}
         if "/workflows/" in endpoint:
             assert endpoint == (
-                "repos/cubrid-lab/cubrid-mcp-server/actions/workflows/release.yml/runs"
+                "repos/cubrid-lab/cubrid-mcp-server/actions/workflows/publish-pypi.yml/runs"
                 "?head_sha=abc&per_page=100"
             )
             return {
@@ -265,7 +265,7 @@ def test_missing_publisher_run_threshold(hours_ago, expected):
         "cubrid-lab/cubrid-mcp-server", 709, SHA, merged(hours_ago), NOW, fake_api([], [])
     )
     assert state == expected
-    assert "no release.yml run" in message
+    assert "no publish-pypi.yml run" in message
 
 
 def test_recent_merge_without_run_is_a_notice(tmp_path, capsys):

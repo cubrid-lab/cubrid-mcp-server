@@ -34,7 +34,7 @@ cubrid_mcp_server/
 - `make check` — ruff lint + mypy typecheck
 - `make test` — unit tests (excludes integration)
 - `make integration` — integration tests (requires a live CUBRID)
-- `make release-check VERSION=x.y.z` — read-only release consistency gate (run by `release-please.yml` and `release.yml`)
+- `make release-check VERSION=x.y.z` — read-only release consistency gate (run by `release-please.yml` and `publish-pypi.yml`)
 
 ## Release Process
 
@@ -43,14 +43,14 @@ Version is single-sourced from `cubrid_mcp_server/__init__.py` → `__version__ 
 Merging a reviewed release PR is the only normal way to release: `release-please.yml`
 opens it (curated + Conventional Commit dated CHANGELOG section + `__version__` and
 `.mcpb/server.json` bump, checked by `make release-check VERSION=x.y.z`), and after the
-squash-merge `release.yml` detects the version change and runs consistency → full matrix →
+squash-merge `publish-pypi.yml` detects the version change and runs consistency → full matrix →
 build → candidate verification (the cookbook smoke test in candidate mode on the built
 wheel; `publish` needs it) → tag/Release/PyPI → cookbook verification (the cookbook smoke
 test called as a pinned reusable workflow, no token) → summary on its own.
 Freeze a release candidate with `autorelease: review` before branch-only note edits; wait for in-flight preparation to finish. Unfrozen notes come from main Unreleased. GITHUB_TOKEN updates require maintainer-triggered CI at the final head. Pending labels are reconciled only after successful publication and cookbook verification.
 Ordinary PRs never change `__version__` or date a
 CHANGELOG section. Never push tags or publish by hand; the only manual entry point is the
-narrow recovery dispatch of `release.yml`. Procedure, failure matrix and recovery:
+narrow recovery dispatch of `publish-pypi.yml`. Procedure, failure matrix and recovery:
 [`RELEASING.md`](RELEASING.md).
 
 ## GitHub Release Policy
@@ -69,7 +69,7 @@ These rules add to the release procedure above; the procedures and gates in
   editing a draft through the API, always resend `tag_name`: a PATCH without it resets
   the draft's tag to `untagged-…`. `gh release edit` resends `tag_name` automatically;
   raw `gh api` PATCHes must include it.
-- Automation enforces these rules: `release.yml` creates Releases with
+- Automation enforces these rules: `publish-pypi.yml` creates Releases with
   `--title "$TAG"` and, on resume or recovery, fails closed through
   `scripts/check_release_title.py` when an existing Release has another title. It never
   renames one. Agents verify these rules whenever they touch release automation.

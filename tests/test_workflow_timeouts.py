@@ -28,10 +28,10 @@ JOB_MAX_OVERRIDES: dict[tuple[str, str], int] = {}
 # tracked) in the owning repository, not here. Keep entries exact.
 EXTERNAL_REUSABLE_CALLERS = {
     ("codeql.yml", "analyze"): "cubrid-lab/.github/.github/workflows/codeql.yml",
-    ("release.yml", "verify-candidate"): (
+    ("publish-pypi.yml", "verify-candidate"): (
         "cubrid-lab/cubrid-cookbook-python/.github/workflows/smoke-test.yml"
     ),
-    ("release.yml", "verify-cookbook"): (
+    ("publish-pypi.yml", "verify-cookbook"): (
         "cubrid-lab/cubrid-cookbook-python/.github/workflows/smoke-test.yml"
     ),
 }

@@ -19,11 +19,9 @@ import json
 import os
 import re
 import subprocess
-from collections.abc import Callable, Mapping
 from datetime import datetime, timedelta, timezone
-from typing import Any
 
-# A merge with no release.yml run yet is normal right after the merge (the
+# A merge with no publish-pypi.yml run yet is normal right after the merge (the
 # push event may not have created the run). The publisher is created within
 # seconds and runs well under an hour, so after this window a missing run is a
 # block, not latency. Queued/in-progress runs are never blocked by age.
@@ -32,12 +30,12 @@ IN_PROGRESS = "in-progress"
 BLOCKED = "blocked"
 
 
-def gh(*args: str) -> Any:
+def gh(*args: str) -> object:
     result = subprocess.run(["gh", *args], check=True, text=True, capture_output=True)
     return json.loads(result.stdout) if result.stdout.strip() else None
 
 
-def ready(repository: str, sha: str, api: Callable[..., Any] = gh) -> bool:
+def ready(repository: str, sha: str, api=gh) -> bool:
     """Fail closed on absent/partial/mismatched release facts."""
     try:
         blob = api("api", f"repos/{repository}/contents/.release-please-manifest.json?ref={sha}")
@@ -56,7 +54,7 @@ def ready(repository: str, sha: str, api: Callable[..., Any] = gh) -> bool:
             return False
         runs = api(
             "api",
-            f"repos/{repository}/actions/workflows/release.yml/runs?head_sha={sha}&per_page=100",
+            f"repos/{repository}/actions/workflows/publish-pypi.yml/runs?head_sha={sha}&per_page=100",
         )
         for run in runs["workflow_runs"]:
             if run.get("head_sha") != sha or run.get("conclusion") != "success":
@@ -85,12 +83,7 @@ RERUNNABLE = {"failure", "cancelled", "timed_out"}
 
 
 def classify(
-    repository: str,
-    number: int,
-    sha: str,
-    merged_at: str,
-    now: datetime,
-    api: Callable[..., Any] = gh,
+    repository: str, number: int, sha: str, merged_at: str, now: datetime, api=gh
 ) -> tuple[str, str]:
     """Classify a merged pending PR that ready() could not prove published."""
     recovery = (
@@ -101,7 +94,7 @@ def classify(
     try:
         runs = api(
             "api",
-            f"repos/{repository}/actions/workflows/release.yml/runs?head_sha={sha}&per_page=100",
+            f"repos/{repository}/actions/workflows/publish-pypi.yml/runs?head_sha={sha}&per_page=100",
         )["workflow_runs"]
         runs = [run for run in runs if run.get("head_sha") == sha]
         age = now - _parse_time(merged_at)
@@ -109,9 +102,9 @@ def classify(
         return BLOCKED, f"{head}; publisher state could not be read ({exc!r}). {recovery}"
     if not runs:
         if age < PUBLISHER_START_GRACE:
-            return IN_PROGRESS, f"{head}; no release.yml run yet, merged {_age(age)} ago."
+            return IN_PROGRESS, f"{head}; no publish-pypi.yml run yet, merged {_age(age)} ago."
         return BLOCKED, (
-            f"{head}; no release.yml run for that SHA {_age(age)} after the merge. "
+            f"{head}; no publish-pypi.yml run for that SHA {_age(age)} after the merge. "
             f"Check why the publisher did not start or detected no release. {recovery}"
         )
     # Any unfinished run (including a re-run of an older, lower-id run) is progress.
@@ -140,7 +133,7 @@ def classify(
     )
 
 
-def report(blocked: list[str], env: Mapping[str, str] = os.environ) -> int:
+def report(blocked: list[str], env=os.environ) -> int:
     """Make blocked publications visible in the log, the step summary and the exit code."""
     for message in blocked:
         print(f"::error::{message}")
@@ -152,11 +145,7 @@ def report(blocked: list[str], env: Mapping[str, str] = os.environ) -> int:
     return 1 if blocked else 0
 
 
-def main(
-    api: Callable[..., Any] = gh,
-    now: datetime | None = None,
-    env: Mapping[str, str] = os.environ,
-) -> int:
+def main(api=gh, now: datetime | None = None, env=os.environ) -> int:
     now = now or datetime.now(timezone.utc)
     repository = env["GITHUB_REPOSITORY"]
     pulls = api(

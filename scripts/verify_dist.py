@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Fail unless a directory holds exactly the files a JSON digest map names.
 
-``release.yml`` runs this in the ``publish`` job before the tag step, once
+``publish-pypi.yml`` runs this in the ``publish`` job before the tag step, once
 for ``dist/`` against the ``build`` job output ``sha256`` and once for
 ``release-meta/`` against ``meta_sha256``. A finished job's outputs cannot be
 changed by a later job of the run, while any job of the run (the cookbook
@@ -19,7 +19,7 @@ SHA-256 must equal its entry. Any other case, or an OS error while reading,
 exits 1 with an ``::error::``.
 
 Standard library only. Kept identical across pycubrid, sqlalchemy-cubrid and
-cubrid-mcp-server except for the workflow file name; see RELEASING.md.
+cubrid-mcp-server; see RELEASING.md.
 """
 
 from __future__ import annotations

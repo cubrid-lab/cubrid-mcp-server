@@ -2,7 +2,7 @@ name: Integration Full Matrix
 
 # Python × CUBRID compatibility matrix (#223).
 #
-#   release   release.yml calls it through workflow_call with the release commit
+#   release   publish-pypi.yml calls it through workflow_call with the release commit
 #             SHA: always the full 4 × 4 matrix, fail-closed. PR and main CI only
 #             run reduced lanes, so this is the authoritative full-compatibility
 #             check gating a release.
@@ -29,7 +29,7 @@ on:
   workflow_call:
     inputs:
       sha:
-        description: "Full commit SHA to test (release.yml passes the release commit)"
+        description: "Full commit SHA to test (publish-pypi.yml passes the release commit)"
         required: true
         type: string
 
