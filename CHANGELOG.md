@@ -117,9 +117,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   required `PR title` check rejects foreign closing keywords in PR-body text while
   allowing `Closes #N` for local issues and `Refs owner/repo#N` for genuine
   technical dependencies. The PR body is inert data and the validator uses no
-  checkout or token permissions. (Superseded in part by the entries above: the job
-  now has a `pull-requests: read` token to list the commit messages, and the PR
-  title and commit messages are checked too.) `Closes: owner/repo#N` is caught too.
+  checkout or token permissions. `Closes: owner/repo#N` is caught too. (Superseded
+  in part by the entries above: the job now has a `pull-requests: read` token to
+  list the commit messages, and the PR title and commit messages are checked too.)
   The guard is a best-effort line scanner, not a full Markdown parser: fenced,
   indented code and HTML comments are ignored in one pass, so a comment opener
   inside a fence cannot hide a later closure. (Superseded in part by the entry
