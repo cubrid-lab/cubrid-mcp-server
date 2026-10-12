@@ -3,7 +3,7 @@
   "name": "io.github.cubrid-lab/cubrid-mcp-server",
   "title": "CUBRID MCP Server",
   "description": "MCP server for CUBRID: 11 read-only tools plus an opt-in execute_write tool, schema resources and prompt templates",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "repository": {
     "url": "https://github.com/cubrid-lab/cubrid-mcp-server",
     "source": "github"
@@ -12,7 +12,7 @@
     {
       "registryType": "pypi",
       "identifier": "cubrid-mcp-server",
-      "version": "0.4.0",
+      "version": "0.5.0",
       "registryBaseUrl": "https://pypi.org",
       "transport": {
         "type": "stdio"
