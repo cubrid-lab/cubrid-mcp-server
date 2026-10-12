@@ -332,8 +332,9 @@ def test_checkers_reject_backslash_quote_ambiguity(sql: str) -> None:
     # Whether a backslash escapes a quote depends on the server parameter
     # no_backslash_escapes, so the statements CUBRID runs cannot be known here.
     for checker in CHECKERS:
-        with pytest.raises(UnsafeSQLError, match="ambiguous"):
+        with pytest.raises(UnsafeSQLError, match="ambiguous") as excinfo:
             checker(sql)
+        assert "('' or \"\")" in str(excinfo.value)
 
 
 @pytest.mark.parametrize(

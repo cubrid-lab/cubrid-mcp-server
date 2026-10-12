@@ -195,7 +195,7 @@ def _cubrid_statements(sql: str) -> list[str]:
     if segments != _lex(sql, backslash_escapes=True):
         raise UnsafeSQLError(
             "a backslash inside a quoted literal makes the statement ambiguous; "
-            "escape a quote by doubling it ('') instead"
+            "escape a quote by doubling the quote character used ('' or \"\") instead"
         )
     if any(kind == "unterminated" for kind, _ in segments):
         raise UnsafeSQLError("unterminated quoted literal or identifier")
