@@ -6,19 +6,82 @@
 
 ## 도구
 
+각 도구 아래의 예시는 실제 응답입니다. `cubrid/cubrid:11.4` Docker 이미지를 대상으로 `CUBRID_MCP_WRITE=1`, `CUBRID_MCP_MAX_ROWS=3`과 다음 데모 스키마를 설정한 뒤 MCP stdio(FastMCP 클라이언트)로 도구를 호출해 수집했습니다.
+
+```sql
+CREATE TABLE product (id INT PRIMARY KEY, name VARCHAR(40) NOT NULL, category VARCHAR(20), price NUMERIC(10,2));
+CREATE INDEX idx_product_category ON product (category);
+INSERT INTO product VALUES (1, 'Notebook', 'stationery', 3.50), (2, 'Pen', 'stationery', 1.20),
+  (3, 'Desk lamp', 'furniture', 24.90), (4, 'Chair', 'furniture', 89.00), (5, 'Stapler', 'stationery', 7.80);
+CREATE TABLE note (id INT AUTO_INCREMENT PRIMARY KEY, body VARCHAR(100) NOT NULL, created_at DATETIME DEFAULT SYS_DATETIME);
+CREATE INDEX idx_note_created ON note (created_at DESC);
+CREATE CLASS vehicle (maker VARCHAR(40));
+CREATE CLASS car UNDER vehicle (doors INT);
+CREATE SERIAL order_no START WITH 1000 INCREMENT BY 10;
+```
+
+각 응답은 도구의 JSON 텍스트 콘텐츠를 보기 좋게 정렬한 것입니다. `server_version`이나 시리얼 값 등은 서버에 따라 다릅니다.
+
 ### 스키마 조회
 
 #### `all_table_names(connection=None)`
 
 데이터베이스의 모든 사용자 테이블을 나열합니다. 시스템·카탈로그 테이블은 제외됩니다.
 
+예시: `all_table_names()` 응답
+
+```json
+[
+  "car",
+  "note",
+  "product",
+  "vehicle"
+]
+```
+
 #### `filter_table_names(substring, connection=None)`
 
 테이블 이름에 대한 대소문자 구분 없는 부분 문자열 검색. 스키마가 클 때 `all_table_names` 대신 사용하세요.
 
+예시: `filter_table_names(substring="prod")` 응답
+
+```json
+[
+  "product"
+]
+```
+
 #### `schema_definitions(table_name, connection=None)`
 
 한 테이블의 컬럼 수준 메타데이터: 컬럼 이름·타입·NULL 허용 여부·기본값·기본 키 포함 여부.
+
+예시: `schema_definitions(table_name="note")` 응답
+
+```json
+[
+  {
+    "name": "id",
+    "type": "INTEGER",
+    "nullable": false,
+    "default": null,
+    "primary_key": true
+  },
+  {
+    "name": "body",
+    "type": "STRING",
+    "nullable": false,
+    "default": null,
+    "primary_key": false
+  },
+  {
+    "name": "created_at",
+    "type": "DATETIME",
+    "nullable": true,
+    "default": "SYS_DATETIME",
+    "primary_key": false
+  }
+]
+```
 
 #### `describe_table(table_name, connection=None)`
 
@@ -26,13 +89,125 @@
 
 `primary_key`는 키 컬럼을 **선언된 기본 키 순서**(`PRIMARY KEY (...)`에 적은 순서, 즉 CUBRID `db_index_key.key_order`)로 나열하며, `indexes`의 기본 키 항목과 일치합니다. `columns`는 테이블 정의 순서를 유지하고 컬럼별 불리언 `primary_key` 플래그를 가집니다. 기본 키가 없는 테이블은 `"primary_key": []`를 반환합니다.
 
+예시: `describe_table(table_name="note")` 응답
+
+```json
+{
+  "table": "note",
+  "columns": [
+    {
+      "name": "id",
+      "type": "INTEGER",
+      "nullable": false,
+      "default": null,
+      "primary_key": true
+    },
+    {
+      "name": "body",
+      "type": "STRING",
+      "nullable": false,
+      "default": null,
+      "primary_key": false
+    },
+    {
+      "name": "created_at",
+      "type": "DATETIME",
+      "nullable": true,
+      "default": "SYS_DATETIME",
+      "primary_key": false
+    }
+  ],
+  "primary_key": ["id"],
+  "indexes": [
+    {
+      "name": "idx_note_created",
+      "unique": false,
+      "primary_key": false,
+      "foreign_key": false,
+      "reverse": false,
+      "key_count": 1,
+      "columns": [
+        {
+          "name": "created_at",
+          "order": 0,
+          "asc_desc": "DESC"
+        }
+      ]
+    },
+    {
+      "name": "pk_note_id",
+      "unique": true,
+      "primary_key": true,
+      "foreign_key": false,
+      "reverse": false,
+      "key_count": 1,
+      "columns": [
+        {
+          "name": "id",
+          "order": 0,
+          "asc_desc": "ASC"
+        }
+      ]
+    }
+  ]
+}
+```
+
 #### `list_indexes(table_name, connection=None)`
 
 테이블에 정의된 인덱스와 인덱스된 키 컬럼·플래그(유니크, 리버스).
 
+예시: `list_indexes(table_name="note")` 응답
+
+```json
+[
+  {
+    "name": "idx_note_created",
+    "unique": false,
+    "primary_key": false,
+    "foreign_key": false,
+    "reverse": false,
+    "key_count": 1,
+    "columns": [
+      {
+        "name": "created_at",
+        "order": 0,
+        "asc_desc": "DESC"
+      }
+    ]
+  },
+  {
+    "name": "pk_note_id",
+    "unique": true,
+    "primary_key": true,
+    "foreign_key": false,
+    "reverse": false,
+    "key_count": 1,
+    "columns": [
+      {
+        "name": "id",
+        "order": 0,
+        "asc_desc": "ASC"
+      }
+    ]
+  }
+]
+```
+
 #### `list_class_hierarchy(table_name=None, connection=None)`
 
 CUBRID `CLASS` 상속 관계 — 어느 테이블이 어느 테이블을 상속하는지. `table_name`을 생략하면 모든 클래스를, 전달하면 해당 테이블의 직접 상위 클래스만 반환합니다. `table_name`은 다른 스키마 도구와 같은 방식으로 해석됩니다. 사용자 테이블과 대소문자 구분 없이 매칭하며, 알 수 없는 테이블(시스템 클래스와 뷰 포함)은 빈 리스트 대신 `unknown table` 오류를 발생시킵니다.
+
+예시: `list_class_hierarchy(table_name="car")` 응답
+
+```json
+[
+  {
+    "class_name": "car",
+    "super_classes": ["vehicle"]
+  }
+]
+```
 
 ### 쿼리
 
@@ -51,9 +226,38 @@ CUBRID `CLASS` 상속 관계 — 어느 테이블이 어느 테이블을 상속�
 
 > **마이그레이션:** `CUBRID_MCP_READONLY=0`으로 `execute_query`를 통해 `INSERT`/`UPDATE`/`DELETE`를 보내던 클라이언트는 대신 `execute_write`(`CUBRID_MCP_WRITE=1`)를 사용해야 합니다.
 
+예시: `CUBRID_MCP_MAX_ROWS=3`이므로 5행 결과가 3행으로 잘리고 `truncated`가 `true`입니다. `NUMERIC` 값은 정밀도를 잃지 않도록 문자열로 반환됩니다. `execute_query(sql="SELECT id, name, category, price FROM product ORDER BY id")` 응답
+
+```json
+{
+  "row_count": 3,
+  "truncated": true,
+  "rows": [
+    [1, "Notebook", "stationery", "3.50"],
+    [2, "Pen", "stationery", "1.20"],
+    [3, "Desk lamp", "furniture", "24.90"]
+  ]
+}
+```
+
+거부 예시: `execute_query(sql="DELETE FROM note")` 호출은 실패하며(`isError: true`) 다음 텍스트를 반환합니다
+
+```text
+Error calling tool 'execute_query': DELETE is not permitted in read-only mode; allowed statements: DESC, DESCRIBE, SELECT, SHOW, WITH
+```
+
 #### `explain_query(sql, connection=None)`
 
 CUBRID `SHOW TRACE`를 통해 `SELECT`/`WITH` 문의 실행 계획/트레이스를 반환합니다. 문장은 `SET TRACE ON` 아래에서 **실제로 실행**됩니다(실제 데이터베이스 자원을 사용하며 쿼리 자체만큼 오래 걸릴 수 있음). 트레이스를 읽은 뒤 트레이스를 끄고 트랜잭션을 롤백합니다(최선 노력 방식의 정리). 이 정리가 실패하면(정리용 커서를 열 수 없거나 `SET TRACE OFF` 또는 롤백이 실패하면) 실행 계획은 그대로 반환되고, 실패는 stderr에 기록되며, 연결은 폐기되어 다음 호출은 새 연결을 엽니다. 쿼리 시간 초과 후에는 정리 문장을 보내지 않습니다. `CUBRID_MCP_READONLY` 플래그와 무관하게 읽기 전용 검사를 적용하며, 데이터베이스 계정의 권한도 그대로 적용됩니다. CUBRID에는 `EXPLAIN` 문이 없으므로 실행 계획에는 이 도구를 사용하세요.
+
+예시: `explain_query(sql="SELECT name, price FROM product WHERE category = 'furniture'")` 응답
+
+```json
+{
+  "sql": "SELECT name, price FROM product WHERE category = 'furniture'",
+  "plan": "Query Plan:\n  INDEX SCAN (dba.product.idx_product_category) (key range: [dba.product].category= ?:0 )\n\n  rewritten query: select [dba.product].[name], [dba.product].price from [dba.product] [dba.product] where [dba.product].category= ?:0 \n\nTrace Statistics:\n  SELECT (time: 0, fetch: 4, fetch_time: 0, ioread: 0)\n    SCAN (index: dba.product.idx_product_category), (btree time: 0, fetch: 3, ioread: 0, readkeys: 1, filteredkeys: 0, rows: 2) (lookup time: 0, rows: 2)"
+}
+```
 
 #### `table_row_counts(table_names=None, connection=None)`
 
@@ -63,15 +267,81 @@ CUBRID `SHOW TRACE`를 통해 `SELECT`/`WITH` 문의 실행 계획/트레이스�
 - 명시적 리스트: 해당 테이블을 카운트하며, 50개를 넘으면 `too many tables requested (N); limit is 50 per call` 오류가 발생합니다.
 - 빈 리스트(`[]`): 아무것도 카운트하지 않고 `"tables": []`를 반환합니다.
 
+예시: `table_row_counts(table_names=["product", "note", "missing_table"])` 응답
+
+```json
+{
+  "tables": [
+    {
+      "table": "product",
+      "row_count": 5
+    },
+    {
+      "table": "note",
+      "row_count": 2
+    },
+    {
+      "table": "missing_table",
+      "row_count": null,
+      "error": "unknown table"
+    }
+  ],
+  "truncated": false,
+  "total_tables": 4
+}
+```
+
 ### CUBRID 특화
 
 #### `list_serials(connection=None)`
 
 CUBRID `SERIAL` 시퀀스와 현재값·최솟값·최댓값·증분. (`db_serial` 카탈로그의 컬럼명은 CUBRID 11.4에서 `att_name`→`attr_name`으로 개명되어, 서버 버전에 따라 자동으로 해석합니다.)
 
+예시: `list_serials()` 응답
+
+```json
+[
+  {
+    "name": "note_ai_id",
+    "current_value": "2",
+    "increment": "1",
+    "max_value": "2147483647",
+    "min_value": "1",
+    "cyclic": false,
+    "started": true,
+    "class_name": "note",
+    "attribute_name": "id",
+    "cached_num": 0,
+    "comment": null
+  },
+  {
+    "name": "order_no",
+    "current_value": "1000",
+    "increment": "10",
+    "max_value": "99999999999999999999999999999999999999",
+    "min_value": "1000",
+    "cyclic": false,
+    "started": false,
+    "class_name": null,
+    "attribute_name": null,
+    "cached_num": 0,
+    "comment": null
+  }
+]
+```
+
 #### `health_check(connection=None)`
 
 데이터베이스 연결 상태를 요청 시점에 확인하고 연결별 상태를 보고합니다. 환경 변경 후나 긴 유휴 후에 유용합니다.
+
+예시: `health_check()` 응답
+
+```json
+{
+  "ok": true,
+  "server_version": "11.4.6.1963"
+}
+```
 
 ### 옵트인 쓰기
 
@@ -80,6 +350,30 @@ CUBRID `SERIAL` 시퀀스와 현재값·최솟값·최댓값·증분. (`db_seria
 **단일** `INSERT`/`UPDATE`/`DELETE` 문을 명시적 트랜잭션(성공 시 커밋, 실패 시 롤백)으로 실행합니다. **쓰기 모드가 활성화된 경우에만 등록**됩니다(`CUBRID_MCP_WRITE=1` 또는 특정 연결의 `CUBRID_<NAME>_MCP_WRITE=1`) — 쓰기 모드가 꺼져 있으면 MCP 기능 탐색에 이 도구가 아예 존재하지 않습니다.
 
 제약: DDL(`CREATE`/`ALTER`/`DROP`/`TRUNCATE`), 독립 실행형 읽기, 트랜잭션 제어, 다중 문장 입력은 거부됩니다. DDL이 제외되는 이유는 DDL 자동 커밋이 아니라, `execute_write`가 DML 도구이고 `execute_query`가 읽기 전용이기 때문입니다. [보안 모델](SECURITY_MODEL.ko.md) 참고.
+
+결과는 커밋 후 반환되는 `{"affected_rows": N}`입니다. 일치하는 행이 없는 문장도 성공하며 `"affected_rows": 0`을 반환합니다. 거부되거나 실패한 문장은 아무것도 변경하지 않습니다.
+
+예시: `execute_write(sql="INSERT INTO note (body) VALUES ('first note')")` 응답
+
+```json
+{
+  "affected_rows": 1
+}
+```
+
+예시: `execute_write(sql="UPDATE note SET body = 'edited' WHERE id = 999")` 응답
+
+```json
+{
+  "affected_rows": 0
+}
+```
+
+거부 예시: `execute_write(sql="DROP TABLE note")` 호출은 실패하며(`isError: true`) 다음 텍스트를 반환합니다
+
+```text
+Error calling tool 'execute_write': DROP is not permitted in write mode; allowed statements: DELETE, INSERT, UPDATE
+```
 
 ## 리소스
 
