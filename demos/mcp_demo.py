@@ -3,11 +3,12 @@
 
 The script starts the server with ``python -m cubrid_mcp_server`` (passing the
 ``CUBRID_*`` environment), then prints what a real MCP session returns: the
-server name from initialization, the number of tools from tool discovery, the
-result of ``all_table_names``, and the error ``execute_query`` returns for a
-``DROP TABLE`` (the read-only whitelist rejects it). The ``>`` lines are labels
-the script prints before each call; every value after them comes from the
-session. Nothing is written to the database.
+server name from initialization, the tool count and whether ``execute_write``
+is offered from tool discovery, the result of ``all_table_names``, and the
+error ``execute_query`` returns for a ``DROP TABLE`` (the read-only whitelist
+rejects it). The ``>`` lines are labels the script prints before each call;
+every value after them comes from the session. Nothing is written to the
+database.
 
 Requires a reachable CUBRID (``CUBRID_HOST``, ``CUBRID_PORT``,
 ``CUBRID_DATABASE``, ``CUBRID_USER``, ``CUBRID_PASSWORD``) and the package
@@ -44,7 +45,8 @@ async def main() -> int:
         show(f"connected: {info.name} (MCP stdio)")
 
         tools = sorted(tool.name for tool in await client.list_tools())
-        show(f"{len(tools)} tools, read-only by default")
+        writes = "offered" if "execute_write" in tools else "not offered (write mode is off)"
+        show(f"{len(tools)} tools; execute_write {writes}")
 
         show("\n> all_table_names()", 0.6)
         result = await client.call_tool("all_table_names", {})
