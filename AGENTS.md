@@ -4,29 +4,37 @@ Guidance for AI agents and contributors working in this repository.
 
 ## Project Overview
 
-`cubrid-mcp-server` is a [Model Context Protocol](https://modelcontextprotocol.io) server for the [CUBRID](https://www.cubrid.org/) database. It lets LLM clients safely inspect schemas and run **read-only** queries via the pure-Python [pycubrid](https://pypi.org/project/pycubrid/) driver.
+`cubrid-mcp-server` is a [Model Context Protocol](https://modelcontextprotocol.io) server for the [CUBRID](https://www.cubrid.org/) database. It lets LLM clients safely inspect schemas and run **read-only** queries via the pure-Python [pycubrid](https://pypi.org/project/pycubrid/) driver, with an opt-in, separately registered write tool.
 
 - Package: `cubrid_mcp_server/`
-- Entry point: `python -m cubrid_mcp_server`
-- Tool surface (see `README.md`): schema inspection, index/serial/class-hierarchy listing, `explain_query`, `execute_query` (read-only), `health_check`.
+- Entry points: `cubrid-mcp-server` console script or `python -m cubrid_mcp_server`
+- Tool, resource and prompt surface: [`docs/TOOLS.md`](docs/TOOLS.md) is authoritative
+  (schema inspection, index/serial/class-hierarchy listing, `explain_query`,
+  `table_row_counts`, read-only `execute_query`, `health_check`, and `execute_write`
+  only when write mode is enabled). Security boundaries: [`docs/SECURITY_MODEL.md`](docs/SECURITY_MODEL.md).
 
 ## Architecture
 
 ```
 cubrid_mcp_server/
-├── server.py     # MCP server + tool definitions
+├── server.py     # MCP server: tools, resources, prompts
 ├── database.py   # pycubrid connection + query execution
-├── safety.py     # read-only SQL enforcement / whitelist
+├── safety.py     # read-only SQL enforcement / whitelist, write-mode checks
+├── audit.py      # opt-in, redacted stderr audit log (CUBRID_MCP_AUDIT_LOG)
 ├── config.py     # environment-variable configuration
 ├── context.py    # request/connection context
-└── __main__.py   # module entry point
+├── __main__.py   # module / console-script entry point
+└── py.typed      # PEP 561 marker
 ```
+
+`.mcpb/server.json` holds the MCP Registry metadata (its versions mirror `__version__`).
 
 ## Code Conventions
 
 - Python 3.11+, fully typed (`py.typed`); keep `mypy` and `ruff` clean.
 - **All logging MUST be routed to stderr.** stdout is reserved for the MCP protocol stream — never print to stdout.
-- Read-only safety is a core invariant: any change touching `safety.py` / query execution must preserve read-only enforcement and ship tests.
+- Read-only safety is a core invariant: any change touching `safety.py` / query execution must preserve read-only enforcement (and the opt-in write-mode checks) and ship tests.
+- Audit output stays redacted: never log raw SQL, bound values or raw error messages from `audit.py`.
 
 ## Development
 
