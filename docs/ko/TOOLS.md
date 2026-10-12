@@ -20,7 +20,7 @@ CREATE CLASS car UNDER vehicle (doors INT);
 CREATE SERIAL order_no START WITH 1000 INCREMENT BY 10;
 ```
 
-테이블·스키마·인덱스 예시는 위 스키마를 만든 직후에 실행했습니다. 그다음 `execute_write` 아래의 `INSERT INTO note` 호출 두 개를 `execute_query`, `explain_query`, `table_row_counts`, `list_serials`, `health_check`보다 먼저 실행했으므로, 이 예시들에서는 `note`에 2행이 있고 `note_ai_id` 시리얼 값이 `2`입니다.
+테이블·스키마·인덱스 예시는 위 스키마를 만든 직후에 실행했습니다. 그다음 쓰기 두 개, 즉 `execute_write` 아래에 있는 `execute_write(sql="INSERT INTO note (body) VALUES ('first note')")`와 같은 `{"affected_rows": 1}`을 반환한 `execute_write(sql="INSERT INTO note (body) VALUES ('second note')")`를 `execute_query`, `explain_query`, `table_row_counts`, `list_serials`, `health_check`보다 먼저 실행했으므로, 이 예시들에서는 `note`에 2행이 있고 `note_ai_id` 시리얼 값이 `2`입니다.
 
 각 응답은 도구의 JSON 텍스트 콘텐츠를 보기 좋게 정렬한 것입니다. `server_version`이나 시리얼 값 등은 서버에 따라 다릅니다.
 
