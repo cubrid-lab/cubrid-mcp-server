@@ -589,7 +589,8 @@ def test_blocked_publication_fails_preparation_before_release_please() -> None:
 
 def test_release_please_rewrites_generated_references_in_the_pr_body() -> None:
     # The bot-written PR body keeps release-please's ", closes [#N]" wording, which
-    # GitHub treats as closing keywords; the composer rewrites it after composition.
+    # GitHub treats as closing keywords; the composer rewrites it right after
+    # release-please, before composition.
     prepare = steps(PREPARE["jobs"]["prepare"])
     names = [s.get("name") for s in prepare]
     body = prepare[names.index("Rewrite generated references in the release PR body")]
