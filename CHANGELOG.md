@@ -86,25 +86,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   instead of crashing the check, and long adversarial bodies stay fast at GitHub's
   65,536-character limit.
   This is the same guard, with the same regression cases, as sqlalchemy-cubrid
-  (cubrid-lab/sqlalchemy-cubrid#816); cubrid-cookbook-python gets it in its own pull
-  request. A test pins the guard block's SHA-256 so every copy changes together.
+  (cubrid-lab/sqlalchemy-cubrid#816); cubrid-cookbook-python is to get it in a
+  separate pull request. A test pins the guard block's SHA-256 so every copy changes
+  together.
 - **The PR-body closing guard keeps list context after a lazy continuation line** — a
   list item followed by an unindented continuation line, a blank line and an
   indented `Closes other/repo#N` is still list text on GitHub, so the `PR title`
   check must scan it. The guard previously ended the list context at the
   continuation line and skipped the closure as indented code. The list context
   now ends only at an unindented paragraph that follows a blank line. The
-  regression suite gains this case. A heading, block quote or fence placed
-  directly under a list item is treated as a continuation too, so indented code
-  after it may block a PR but never lets a closure through.
+  regression suite gains this case. (Superseded in part by the entry above: a
+  heading, block quote, fence, thematic break or comment block directly under a
+  list item now ends the list.)
 - **PRs cannot directly auto-close another repository's issue** — the existing
   required `PR title` check rejects foreign closing keywords in PR-body text
   while allowing `Closes #N` for local issues and `Refs owner/repo#N` for
   genuine technical dependencies. The PR body is inert data and the validator
   uses no checkout or token permissions. `Closes: owner/repo#N` is caught too.
   The guard is a best-effort line scanner, not a full Markdown parser: fenced,
-  indented and inline code and HTML comments are ignored in one pass, so a
-  comment opener inside a fence cannot hide a later closure. Indented text in
+  indented code and HTML comments are ignored in one pass, so a comment opener
+  inside a fence cannot hide a later closure. (Superseded in part by the entry
+  above: inline code and inline comments are now scanned.) Indented text in
   a list item is always scanned, and fences inside block quotes or list items
   are not recognized, so either may block a PR but never lets a closure
   through. Repository-local issue and PR

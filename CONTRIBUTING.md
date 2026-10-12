@@ -258,8 +258,9 @@ inherited. Close only this repository's issues (Closes #N). PRs with no local
 issue may state N/A and a reason. The existing PR title check rejects direct
 cross-repository issue-closing keywords in the PR body, including emphasized or
 linked ones. It ignores only fenced and indented code blocks and HTML comment
-blocks, and checks even those after a fence inside a list item or block quote,
-or after raw HTML. Inline code and inline comments are always checked. External
+blocks. After a fence inside a list item, a block quote or raw HTML, later
+fences and comments are checked too, and comments after any HTML tag are always
+checked. Inline code and inline comments are always checked. External
 contributors do not need to install internal agent tools or create duplicate
 work.
 
