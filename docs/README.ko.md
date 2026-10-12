@@ -5,7 +5,9 @@
 
 [CUBRID](https://www.cubrid.org/) 데이터베이스를 위한 [Model Context Protocol](https://modelcontextprotocol.io) 서버. LLM 클라이언트가 순수 Python 드라이버 [pycubrid](https://pypi.org/project/pycubrid/)를 통해 스키마를 안전하게 조회하고 **읽기 전용** 쿼리를 실행할 수 있습니다.
 
-<img src="https://github.com/cubrid-lab/cubrid-mcp-server/raw/main/docs/demo.gif" alt="MCP 서버 데모" width="100%"/>
+<img src="https://github.com/cubrid-lab/cubrid-mcp-server/raw/main/docs/demo.gif" alt="터미널 녹화: MCP 클라이언트가 도구 목록을 확인하고 all_table_names를 호출하며, execute_query가 DROP TABLE을 거부함" width="100%"/>
+
+<sub>실제 MCP stdio 세션의 터미널 녹화입니다(<code>demos/mcp_demo.py</code>, <code>demos/record_demo.sh</code>로 녹화).</sub>
 
 ## 기능
 

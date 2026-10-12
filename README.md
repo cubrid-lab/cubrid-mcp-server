@@ -7,7 +7,9 @@ A [Model Context Protocol](https://modelcontextprotocol.io) server for [CUBRID](
 
 <!-- mcp-name: io.github.cubrid-lab/cubrid-mcp-server -->
 
-<img src="docs/demo.gif" alt="cubrid-mcp-server demo" width="100%"/>
+<img src="docs/demo.gif" alt="Terminal recording: an MCP client lists the tools, calls all_table_names, and execute_query rejects DROP TABLE" width="100%"/>
+
+<sub>Terminal recording of a real MCP stdio session (<code>demos/mcp_demo.py</code>, recorded with <code>demos/record_demo.sh</code>).</sub>
 
 ## Features
 

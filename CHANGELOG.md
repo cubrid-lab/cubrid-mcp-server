@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Documentation
 
+- **README demo GIF recorded from a real MCP session** — `docs/demo.gif` was rendered from a script of hard-coded output lines (`demos/mcp-demo.json`, `demos/render_gif.py`), which also showed a stale version. It is now a terminal recording of `demos/mcp_demo.py`, an MCP stdio client that lists the tools, calls `all_table_names` and sends a `DROP TABLE` that `execute_query` rejects; `demos/record_demo.sh` records it with asciinema and agg. The VHS tape `demos/mcp-demo.tape`, which printed a hard-coded tool count, and the scripted renderer are removed. The Claude Desktop recording and the docs-site video remain to be recorded by hand.
 - **Per-tool JSON response examples in `docs/TOOLS.md`** — every tool, including `execute_write`, now has a response example captured from real tool calls over MCP stdio against the `cubrid/cubrid:11.4` Docker image with a small demo schema (shown on the page): truncation flags for `execute_query`, `null` row counts with `error` for `table_row_counts`, the `affected_rows` result of `execute_write`, and rejected calls for `execute_query` and `execute_write`. The Korean `docs/ko/TOOLS.md` has the same examples.
 
 ## [0.5.0] - 2026-10-12
