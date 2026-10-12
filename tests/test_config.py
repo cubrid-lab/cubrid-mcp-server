@@ -125,6 +125,13 @@ def test_from_env_non_positive_or_non_finite_query_timeout(value: str) -> None:
         Config.from_env(BASE_ENV | {"CUBRID_MCP_QUERY_TIMEOUT": value})
 
 
+def test_empty_password_is_accepted() -> None:
+    # CUBRID's default ``dba`` user has an empty password.
+    cfg = Config.from_env(BASE_ENV | {"CUBRID_USER": "dba", "CUBRID_PASSWORD": ""})
+    assert cfg.user == "dba"
+    assert cfg.password == ""
+
+
 def test_password_not_in_repr() -> None:
     cfg = Config.from_env(BASE_ENV)
     assert "secret" not in repr(cfg)

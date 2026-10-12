@@ -263,6 +263,12 @@ pytest tests/test_integration.py::TestCubridIntegration::test_concurrent_tool_ca
 MCP stdio 전송의 동시성, 커넥션 풀 또는 요청별 트랜잭션 격리를 검증하는 것은
 아닙니다.
 
+## 관련 프로젝트
+
+- [pycubrid](https://github.com/cubrid-lab/pycubrid) — 이 서버가 기반으로 하는 순수 Python DB-API 2.0 드라이버
+- [sqlalchemy-cubrid](https://github.com/cubrid-lab/sqlalchemy-cubrid) — CUBRID용 SQLAlchemy 2.0–2.2 방언
+- [cubrid-cookbook-python](https://github.com/cubrid-lab/cubrid-cookbook-python) — 이 스택을 사용하는 원커맨드 앱 템플릿을 포함한 68개의 실행 가능한 예제
+
 ## 고지
 
 > 이 프로젝트는 CUBRID 개발자 도구를 위한 독립 오픈소스 이니셔티브인 [CUBRID Lab](https://github.com/cubrid-lab)의 일부이며, CUBRID Corporation 또는 공식 CUBRID 프로젝트와 제휴, 후원, 보증 관계가 없습니다.
