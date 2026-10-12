@@ -18,6 +18,8 @@ CREATE CLASS car UNDER vehicle (doors INT);
 CREATE SERIAL order_no START WITH 1000 INCREMENT BY 10;
 ```
 
+The table, schema and index examples ran on this schema as created. The two `INSERT INTO note` calls shown under `execute_write` ran next, before `execute_query`, `explain_query`, `table_row_counts`, `list_serials` and `health_check`, so those examples see two `note` rows and the `note_ai_id` serial at `2`.
+
 Each response is the tool's JSON text content, pretty-printed. Values such as `server_version` and serial values depend on your server.
 
 ### Schema inspection
