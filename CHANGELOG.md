@@ -62,7 +62,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   cubrid-lab/sqlalchemy-cubrid#820 and cubrid-lab/sqlalchemy-cubrid#821) now rewrites generated
   references to `, refs [#N](…)` on generated entry lines outside code blocks, and the
   **Prepare release** workflow applies the same rewrite to the release PR body right after
-  release-please updates it; no permission changes.
+  release-please updates it; no permission changes (#280).
 - **The closing guard also checks the PR title and commit messages, and owners with
   an underscore** — the PR title and the PR's commit messages make up the squash
   commit, so the `PR title` check now reads them too, as plain text: Markdown code
