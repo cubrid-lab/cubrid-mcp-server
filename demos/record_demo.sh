@@ -2,8 +2,10 @@
 # Record docs/demo.gif from a real MCP stdio session.
 #
 # The recording is the terminal output of demos/mcp_demo.py, an MCP client that
-# starts the server and calls its tools; every line shown is real tool output.
-# It is not a Claude Desktop recording.
+# starts the server and calls its tools. The first line is the command, printed
+# by this script, and the ">" lines are labels printed by the client; every
+# value after them (server name, tool count, table list, rejection message)
+# comes from the real MCP session. It is not a Claude Desktop recording.
 #
 # Requires asciinema 2.x and agg (https://github.com/asciinema/agg) on PATH, a
 # reachable CUBRID with a few user tables, the CUBRID_* variables exported

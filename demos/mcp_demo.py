@@ -1,15 +1,17 @@
 #!/usr/bin/env python3
 """Drive cubrid-mcp-server over MCP stdio for the terminal demo recording.
 
-Every line this prints comes from a real tool call: the script starts the
-server with ``python -m cubrid_mcp_server`` (inheriting the ``CUBRID_*``
-environment), lists its tools, calls ``all_table_names``, and sends a
-``DROP TABLE`` through ``execute_query`` to show the read-only whitelist
-rejecting it. Nothing is written to the database.
+The script starts the server with ``python -m cubrid_mcp_server`` (passing the
+``CUBRID_*`` environment), then prints what a real MCP session returns: the
+server name from initialization, the number of tools from tool discovery, the
+result of ``all_table_names``, and the error ``execute_query`` returns for a
+``DROP TABLE`` (the read-only whitelist rejects it). The ``>`` lines are labels
+the script prints before each call; every value after them comes from the
+session. Nothing is written to the database.
 
 Requires a reachable CUBRID (``CUBRID_HOST``, ``CUBRID_PORT``,
 ``CUBRID_DATABASE``, ``CUBRID_USER``, ``CUBRID_PASSWORD``) and the package
-installed (``pip install -e .``). ``demos/mcp-demo.tape`` records it with VHS.
+installed (``pip install -e .``). ``demos/record_demo.sh`` records it.
 """
 
 from __future__ import annotations
