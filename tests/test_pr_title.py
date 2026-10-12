@@ -86,7 +86,7 @@ INVALID = (
 
 TICK = chr(96)
 FENCE = TICK * 3
-GUARD_SHA256 = "311a09ba81095a4d1ab3a244c19904dc5605e87cd5ef863cb6eae0cd8fcaffd5"
+GUARD_SHA256 = "449fd724ae94cb2a2772ca45aa9c0c180fd9166e59867f87d8162545e51a0933"
 
 
 def _validator() -> str:
@@ -199,8 +199,8 @@ class PrTitleValidatorTest(unittest.TestCase):
                 self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
     def test_guard_block_matches_the_shared_copy(self) -> None:
-        # sqlalchemy-cubrid, cubrid-mcp-server and cubrid-cookbook-python carry
-        # the same guard; change every copy and this hash together.
+        # This block is meant to be identical in sqlalchemy-cubrid, cubrid-mcp-server
+        # and cubrid-cookbook-python; change every copy and this hash together.
         text = WORKFLOW.read_text(encoding="utf-8")
         start = text.index("# BEGIN cross-repo-closing-guard")
         stop = text.index("# END cross-repo-closing-guard")
@@ -230,7 +230,13 @@ class PrTitleValidatorTest(unittest.TestCase):
 
     def test_enterprise_managed_owner_fails(self) -> None:
         # Enterprise managed user accounts carry an "_shortcode" suffix.
-        self.assert_blocked("Closes alice_acme/another-repo#42", issue="alice_acme/another-repo#42")
+        self.assert_blocked(
+            "Closes alice_acme/another-repo#42",
+            "Closes [bug](https://github.com/alice_acme/another-repo/issues/42)",
+            issue="alice_acme/another-repo#42",
+        )
+        result = _run("docs: x", "Closes alice_acme/another-repo#42")
+        self.assertNotIn("aliceacme", result.stdout)
 
     def test_foreign_closure_in_a_commit_message_fails(self) -> None:
         commits = "fix: keep cursor state\n\nCloses another-org/another-repo#43\n"
@@ -248,11 +254,37 @@ class PrTitleValidatorTest(unittest.TestCase):
         self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
         self.assertIn("in a PR title", result.stdout)
 
+    def test_commit_messages_are_listed_before_the_validator(self) -> None:
+        # Without this step the commit-message and 250-commit checks never run.
+        text = WORKFLOW.read_text(encoding="utf-8")
+        listing = (
+            'export PR_COMMITS_FILE="$RUNNER_TEMP/pr-commit-messages.txt"\n'
+            '          gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/commits" --paginate \\\n'
+            '            --jq \'.[].commit.message + "\\u0000"\' > "$PR_COMMITS_FILE"\n'
+            "          python3 - <<'PY'\n"
+        )
+        self.assertIn(listing, text)
+        for line in (
+            "PR_NUMBER: ${{ github.event.pull_request.number }}",
+            "PR_COMMIT_COUNT: ${{ github.event.pull_request.commits }}",
+            "GH_TOKEN: ${{ github.token }}",
+        ):
+            self.assertIn(line, text)
+
+    def test_each_commit_message_is_checked_on_its_own(self) -> None:
+        # A bracket in one message must not turn on link checks for another.
+        commits = "fix: a\n\nCloses [x]\n\0docs: b\n\nRefs https://github.com/o/r/issues/5\n\0"
+        result = _run("docs: align issue ownership", "", commits)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
     def test_too_many_commits_to_list_fails(self) -> None:
         with unittest.mock.patch.dict(os.environ, {"PR_COMMIT_COUNT": "250"}):
             result = _run("docs: align issue ownership", "", "fix: a\n")
         self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
         self.assertIn("250 or more commits", result.stdout)
+        with unittest.mock.patch.dict(os.environ, {"PR_COMMIT_COUNT": "249"}):
+            result = _run("docs: align issue ownership", "", "fix: a\n")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
     def test_local_closures_and_foreign_refs_pass(self) -> None:
         self.assert_allowed(

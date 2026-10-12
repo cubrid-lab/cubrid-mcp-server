@@ -54,16 +54,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - README gains a **Related Projects** section linking pycubrid, sqlalchemy-cubrid, and cubrid-cookbook-python, matching the sibling packages' READMEs — every cubrid-lab PyPI page now leads to the runnable examples.
 
 ### CI
-- **The closing guard also checks the PR title and commit messages, and owners
-  with an underscore** — the PR title and the PR's commit messages make up the
-  squash commit, so the `PR title` check now reads them too, as plain text: Markdown
-  code does not hide a keyword there. The job lists the commits with `gh api`, using
-  a token that can only read pull requests (the job has `pull-requests: read`; the
-  workflow-level permissions stay empty), and fails when a PR has 250 or more
-  commits, because GitHub lists only 250. Owners with an underscore, as Enterprise
-  Managed Users have (`alice_acme/repo#N`), are now matched in references and
-  links. The job setup and these checks come from pycubrid's guard
-  (cubrid-lab/pycubrid#845); the PR-body handling is unchanged.
+- **The closing guard also checks the PR title and commit messages, and owners with
+  an underscore** — the PR title and the PR's commit messages make up the squash
+  commit, so the `PR title` check now reads them too, as plain text: Markdown code
+  does not hide a keyword there, and each commit message is checked on its own. The
+  job lists the commits with `gh api`, using a token that can only read pull
+  requests (the job has `pull-requests: read`; the workflow-level permissions stay
+  empty), and fails when a PR has 250 or more commits, because GitHub lists only
+  250. A test pins that step. Owners with an underscore, as Enterprise Managed Users
+  have (`alice_acme/repo#N`), are now matched in references and links. The job setup
+  and these checks come from pycubrid's guard (cubrid-lab/pycubrid#845); the PR-body
+  handling is unchanged.
 - **The PR-body closing guard catches emphasized, linked, escaped and split
   closures, and fails closed where Markdown structure is uncertain** — the
   `PR title` check now rejects:
@@ -87,7 +88,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   fence), no later fence or comment is hidden, so a closing
   fence can never be misread as an opener. Raw HTML blocks end where CommonMark
   ends them, and any other line starting with a tag is treated as raw HTML until
-  a blank line. Comments after anything that may start an HTML tag are scanned, a comment also ends at `--!>`,
+  a blank line. Comments after anything that may
+  start an HTML tag are scanned, a comment also ends at `--!>`,
   and after a raw-text element such as `<textarea>` or `<select>` the rest of the
   body is scanned. Lines split only at CR and LF, a leading byte order mark is
   dropped, and only spaces and tabs count as blank or indentation. A heading, block

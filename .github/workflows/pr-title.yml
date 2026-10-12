@@ -39,7 +39,7 @@ jobs:
         run: |
           export PR_COMMITS_FILE="$RUNNER_TEMP/pr-commit-messages.txt"
           gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/commits" --paginate \
-            --jq '.[].commit.message' > "$PR_COMMITS_FILE"
+            --jq '.[].commit.message + "\u0000"' > "$PR_COMMITS_FILE"
           python3 - <<'PY'
           # BEGIN pr-title-validator
           import html
@@ -344,10 +344,12 @@ jobs:
                   rf"|<!\[CDATA\[(?:(?!<!\[CDATA\[).)*?{cdata_end}"
               )
               text = re.sub(hidden, "", text, flags=re.I | re.S)
-              return re.sub(r"[*_~]", "", tag.sub("", text))
+              # "_" inside a word is not emphasis and may belong to an owner name.
+              return re.sub(r"[*~]|(?<![a-z0-9])_|_(?![a-z0-9])", "", tag.sub("", text), flags=re.I)
 
           # The PR title and the commit messages form the squash commit, which GitHub
-          # reads as plain text, so they are checked without Markdown stripping.
+          # reads as plain text: no code or comment block is exempt there and no
+          # entity is decoded. Each commit message is checked on its own.
           sources = [("PR body", body), ("PR title", title)]
           commits_file = os.environ.get("PR_COMMITS_FILE")
           if commits_file:
@@ -357,7 +359,8 @@ jobs:
                       "messages cannot all be checked for foreign issue closures."
                   )
               with open(commits_file, encoding="utf-8") as handle:
-                  sources.append(("commit message", handle.read()))
+                  messages = handle.read().split("\0")
+              sources += [("commit message", message) for message in messages]
           for where, text in sources:
               check(text)
               # Without markup and emphasis, "Close**s**" and "Clo<b>ses</b>" read
