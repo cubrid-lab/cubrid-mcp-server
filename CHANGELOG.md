@@ -54,6 +54,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - README gains a **Related Projects** section linking pycubrid, sqlalchemy-cubrid, and cubrid-cookbook-python, matching the sibling packages' READMEs — every cubrid-lab PyPI page now leads to the runnable examples.
 
 ### CI
+- **Generated issue references are written as "refs", not "closes", in `CHANGELOG.md` and the
+  release PR body** — release-please 17.6.0 renders every issue trailer in a commit's final
+  footer block as `, closes [#N](…)`, so a commit that only said `Refs #N` was listed as
+  closing that issue, and GitHub read the release PR body as closing it on merge.
+  `scripts/compose_release_changelog.py` (shared byte for byte with sqlalchemy-cubrid,
+  cubrid-lab/sqlalchemy-cubrid#820 and cubrid-lab/sqlalchemy-cubrid#821) now rewrites generated
+  references to `, refs [#N](…)` on generated entry lines outside code blocks, and the
+  **Prepare release** workflow applies the same rewrite to the release PR body right after
+  release-please updates it; no permission changes.
 - **The closing guard also checks the PR title and commit messages, and owners with
   an underscore** — the PR title and the PR's commit messages make up the squash
   commit, so the `PR title` check now reads them too, as plain text: Markdown code

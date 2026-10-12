@@ -75,6 +75,13 @@ header and merges the generated notes into the same standard `###` headings in
 the standard order (curated entries first, release-please's
 `⚠ BREAKING CHANGES` under Upgrade notes), so the candidate passes
 `scripts/lint_changelog.py`. Historical notes are copied unchanged.
+Generated issue references are written as `, refs [#N](…)`: release-please
+17.6.0 turns any `Refs #N` or `Closes #N` trailer in a commit's final footer
+block into a reference and renders every reference as `, closes [#N](…)`,
+which is false for `Refs`. The rewrite applies only to generated `* ` entry
+lines, only right after the commit link, never inside code blocks.
+`RELEASE_CHANGELOG.md` keeps the raw generator output; `CHANGELOG.md`, the
+publication source, has the rewritten form.
 Unknown format or heading, candidate mismatch, invalid date, or stale main fail
 closed. The composed candidate passes `make release-check VERSION=X.Y.Z`
 (including both `.mcpb/server.json` versions) before it is pushed.
@@ -98,6 +105,19 @@ second production release PR.
   entries can describe the same change; trim duplicates on the frozen branch if
   needed. (This repository has no `RELEASE_POLICY.md`; there is no separate
   classification to update.) Do not merge incomplete/uncomposed candidates.
+- The release PR body is release-please's raw notes. GitHub reads a
+  `, closes [#N](…)` there as a closing keyword and would close issue N on
+  merge, even when the commit only said `Refs #N`. Right after release-please
+  updates the PR, the **Rewrite generated references in the release PR body**
+  step runs the composer from `main` with `--pr-body` and applies the same
+  rewrite to the body, with the job's existing `pull-requests: write` token.
+  It runs before composition, so a failed composition does not leave the body
+  unrewritten; an edit someone makes to the body while that step runs can be
+  overwritten. Before merging, confirm that GitHub lists no closing issue the
+  release must not close; normally the list is empty:
+  `gh api graphql -f query='{repository(owner:"cubrid-lab",name:"cubrid-mcp-server"){pullRequest(number:<N>){closingIssuesReferences(first:50){nodes{number state}}}}}'`.
+  Anything listed (for example a link added by hand in the Development
+  sidebar) has to be handled before the merge.
 - **Start CI after the final bot update.** GITHUB_TOKEN events do not trigger
   other workflows. Close/reopen the candidate with your own account or push a
   reviewed commit. No PAT/App credential is introduced. Require all usual PR
