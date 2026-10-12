@@ -54,6 +54,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - README gains a **Related Projects** section linking pycubrid, sqlalchemy-cubrid, and cubrid-cookbook-python, matching the sibling packages' READMEs — every cubrid-lab PyPI page now leads to the runnable examples.
 
 ### CI
+- **The closing guard catches a closing keyword used as link text** —
+  `[Closes](url) owner/repo#N` renders as "Closes owner/repo#N", but the gap after
+  the keyword stopped at `]`. The `PR title` check now crosses a link's `]`,
+  `](destination)` or `][label]`, and also a quoted continuation line, an image's
+  alt text and a link reference definition line, each of which renders nothing
+  between the keyword and the reference. Each `)` or `]` is scanned once per check,
+  so adversarial link syntax stays under a second at GitHub's 65,536-character
+  limit. The fix came from Copilot's review of cubrid-lab/pycubrid#849, and
+  `pr-title.yml` is again byte-identical across pycubrid, sqlalchemy-cubrid,
+  cubrid-mcp-server and cubrid-cookbook-python.
 - **The closing guard also checks the PR title and commit messages, and owners with
   an underscore** — the PR title and the PR's commit messages make up the squash
   commit, so the `PR title` check now reads them too, as plain text: Markdown code
