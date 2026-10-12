@@ -63,6 +63,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   references to `, refs [#N](…)` on generated entry lines outside code blocks, and the
   **Prepare release** workflow applies the same rewrite to the release PR body right after
   release-please updates it; no permission changes (#280).
+- **The closing guard catches a closing keyword used as link text** —
+  `[Closes](url) owner/repo#N` renders as "Closes owner/repo#N", but the gap after
+  the keyword stopped at `]`. The `PR title` check now crosses a link's `]`,
+  `](destination)` or `][label]`, and also a quoted continuation line, an image's
+  alt text and a link reference definition line, each of which renders nothing
+  between the keyword and the reference. Scanning stays linear in the body length,
+  so adversarial link syntax at GitHub's 65,536-character limit stays well under the
+  tests' 5-second timeout. The fix came from Copilot's review of
+  cubrid-lab/pycubrid#849, and `pr-title.yml` is again byte-identical across
+  pycubrid, sqlalchemy-cubrid, cubrid-mcp-server and cubrid-cookbook-python.
 - **The closing guard also checks the PR title and commit messages, and owners with
   an underscore** — the PR title and the PR's commit messages make up the squash
   commit, so the `PR title` check now reads them too, as plain text: Markdown code
