@@ -17,10 +17,17 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 cast="$(mktemp --suffix=.cast)"
-trap 'rm -f "$cast"' EXIT
+status="$(mktemp)"
+trap 'rm -f "$cast" "$status"' EXIT
 
-# Server logs go to stderr; keep them out of the recording.
+# Server logs go to stderr; keep them out of the recording. asciinema does not
+# pass on the recorded command's exit status, so it is written to a file and
+# checked before docs/demo.gif is overwritten.
 asciinema rec --quiet --overwrite --cols 108 --rows 10 \
-  --command "printf '\$ python demos/mcp_demo.py\n'; python demos/mcp_demo.py 2>/dev/null" \
+  --command "printf '\$ python demos/mcp_demo.py\n'; python demos/mcp_demo.py 2>/dev/null; echo \$? > '$status'" \
   "$cast"
+if [ "$(cat "$status")" != "0" ]; then
+  echo "demos/mcp_demo.py failed (exit status '$(cat "$status")'); docs/demo.gif not changed" >&2
+  exit 1
+fi
 agg --theme github-dark --font-size 14 --last-frame-duration 4 "$cast" docs/demo.gif
