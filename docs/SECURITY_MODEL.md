@@ -25,7 +25,7 @@ Additional hardening: use a long random password from a secret manager, rotate i
 
 ## Layer 2 — read-only SQL whitelist
 
-The server is **read-only by default**. When `CUBRID_MCP_READONLY=1` (the default), every statement is parsed with `sqlparse` and rejected unless it is `SELECT`, `SHOW`, `DESC`, `DESCRIBE`, or `WITH` (CTE). CUBRID has no `EXPLAIN` statement; use the `explain_query` tool for execution plans. Multi-statement input is rejected.
+The server is **read-only by default**. When `CUBRID_MCP_READONLY=1` (the default), every statement is parsed with `sqlparse` and rejected unless it is `SELECT`, `SHOW`, `DESC`, `DESCRIBE`, or `WITH` (CTE). CUBRID has no `EXPLAIN` statement; use the `explain_query` tool for execution plans. Multi-statement input is rejected. Comments, quotes and statement boundaries are read with CUBRID's rules, not `sqlparse`'s: `--`, `//` and `/* ... */` are comments (block comments do not nest), `#` is not a comment, and a backslash is an ordinary character inside quotes. Input whose quote boundaries depend on whether a backslash escapes a quote (the server parameter `no_backslash_escapes`), or that has an unterminated quote, is rejected.
 
 > The SQL keyword checks are a guardrail and defense-in-depth, not a security boundary. They are a best-effort client-side filter against obvious mistakes; the primary control is the dedicated least-privilege database account (Layer 1), which should have `SELECT` only on the tables the model needs.
 
@@ -58,7 +58,7 @@ Set `CUBRID_MCP_AUDIT_LOG=1` to emit one structured JSON record per executed sta
 |-------|-------------|
 | `tool` | The MCP tool that ran the statement |
 | `status` | `ok` or `error` |
-| `category` | The leading SQL keyword only (e.g. `SELECT`, `WITH`) — never the full statement |
+| `category` | The leading SQL keyword only (e.g. `SELECT`, `WITH`), read after comments and string literals are stripped — never the full statement |
 | `identifiers` | Table names extracted after `FROM`/`JOIN` via a strict identifier regex; anything that is not a bare identifier is dropped |
 | `sql_length` | Length of the submitted SQL, in characters |
 | `row_count`, `truncated` | Result size and whether output was truncated (success only) |

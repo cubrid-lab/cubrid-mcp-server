@@ -30,7 +30,7 @@ Additional hardening:
 
 ## Layer 2 — code-level read-only whitelist
 
-When `CUBRID_MCP_READONLY=1` (the default) the server parses every statement with `sqlparse` and rejects anything that is not `SELECT`, `SHOW`, `DESC`, `DESCRIBE`, or `WITH` (CTE). CUBRID has no `EXPLAIN` statement; use the `explain_query` tool for execution plans. Multi-statement input is rejected.
+When `CUBRID_MCP_READONLY=1` (the default) the server parses every statement with `sqlparse` and rejects anything that is not `SELECT`, `SHOW`, `DESC`, `DESCRIBE`, or `WITH` (CTE). CUBRID has no `EXPLAIN` statement; use the `explain_query` tool for execution plans. Multi-statement input is rejected. Comments, quotes and statement boundaries are read with CUBRID's rules, not `sqlparse`'s: `--`, `//` and `/* ... */` are comments (block comments do not nest), `#` is not a comment, and a backslash is an ordinary character inside quotes. Input whose quote boundaries depend on whether a backslash escapes a quote (the server parameter `no_backslash_escapes`), or that has an unterminated quote, is rejected.
 
 These keyword checks are a guardrail and defense-in-depth, not a security boundary. The primary control is a dedicated least-privilege database account (Layer 1): grant `SELECT` only on the tables the model needs, do not reuse `dba` or the owner account, and keep the account to the minimum privileges required, with no DDL rights.
 
@@ -61,7 +61,7 @@ Set `CUBRID_MCP_AUDIT_LOG=1` to emit a structured JSON record on **stderr** for 
 
 Audit records are deliberately redaction-safe and share the same sanitization guarantees as client-facing errors:
 
-- Only the statement **category** (leading keyword) and **table identifiers** (extracted via a strict identifier regex) are recorded — never the raw SQL text.
+- Only the statement **category** (leading keyword, read after comments and string literals are stripped) and **table identifiers** (extracted via a strict identifier regex) are recorded — never the raw SQL text.
 - **Bound parameters and literal values are never logged**, so a secret embedded in a query (`WHERE token = '…'`) does not appear in the audit stream.
 - Failures record the exception **class name only** (via `sanitize_error`), never the raw driver message.
 - Records go to `stderr` only; `stdout` remains reserved for the MCP protocol stream.
@@ -83,7 +83,7 @@ Because this server exposes database access to an LLM via MCP, the threat surfac
 - Server-side procedures — `CALL`, `EXECUTE`
 - Row-level locking — `SELECT ... FOR UPDATE`, `LOCK`
 - Multi-statement injection — `;` separated batches are rejected outright
-- Comment-based obfuscation — SQL comments are stripped before the keyword scan
+- Comment-based obfuscation — SQL comments (`--`, `//`, `/* ... */`, read with CUBRID's rules) are stripped before the keyword scan, so a comment cannot hide the real leading keyword
 
 ### What read-only enforcement **does not prevent**
 

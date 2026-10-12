@@ -83,36 +83,161 @@ FORBIDDEN_KEYWORDS: frozenset[str] = frozenset(
 )
 
 
-def strip_comments(sql: str) -> str:
-    """Remove SQL comments before safety check.
-
-    ``sqlparse`` can be confused by keywords inside comments (e.g.
-    ``/* DROP TABLE */`` or ``-- DELETE FROM users``). Stripping
-    comments ensures the safety checker only scans real SQL tokens.
-    """
-    return sqlparse.format(sql, strip_comments=True)
-
-
 class UnsafeSQLError(ValueError):
     """Raised when a statement is rejected by the read-only checker."""
 
 
-def ensure_read_only(sql: str) -> None:
-    """Raise :class:`UnsafeSQLError` if ``sql`` is not a single read-only statement."""
+def _lex(sql: str, *, backslash_escapes: bool) -> list[tuple[str, str]]:
+    """Split ``sql`` into ``(kind, text)`` segments following CUBRID's lexical rules.
+
+    ``kind`` is ``"code"``, ``"comment"``, ``"quoted"`` (a string literal or
+    quoted identifier) or ``"unterminated"`` (a quote that is never closed). ``sqlparse`` uses a generic lexer whose rules differ from
+    CUBRID's: it does not know CUBRID's ``//`` line comments, it treats ``#`` as a
+    comment (CUBRID does not), and it treats a backslash as an escape inside
+    quotes. So the boundaries of comments, literals and statements are decided
+    here instead, the way the CUBRID server decides them.
+
+    CUBRID comments are ``--`` and ``//`` up to the end of the line (``\n`` or
+    ``\r``) and ``/* ... */``, which does not nest; an unterminated block comment
+    runs to the end of the input. Quotes are ``'...'`` and ``"..."`` (a doubled
+    quote escapes itself), ```...``` and ``[...]``. A backslash escapes the next
+    character inside ``'...'`` and ``"..."`` only when ``backslash_escapes`` is
+    true, which models a server running with ``no_backslash_escapes=no``.
+    """
+    segments: list[tuple[str, str]] = []
+    code_start = 0
+    i = 0
+    n = len(sql)
+    while i < n:
+        ch = sql[i]
+        two = sql[i : i + 2]
+        if two in ("--", "//"):
+            end = i
+            while end < n and sql[end] not in "\r\n":
+                end += 1
+            kind = "comment"
+        elif two == "/*":
+            close = sql.find("*/", i + 2)
+            end = n if close == -1 else close + 2
+            kind = "comment"
+        elif ch in "'\"":
+            end = i + 1
+            kind = "unterminated"
+            while end < n:
+                if backslash_escapes and sql[end] == "\\":
+                    end += 2
+                elif sql[end] != ch:
+                    end += 1
+                elif sql[end + 1 : end + 2] == ch:
+                    end += 2
+                else:
+                    end += 1
+                    kind = "quoted"
+                    break
+            end = min(end, n)
+        elif ch in "`[":
+            close = sql.find("`" if ch == "`" else "]", i + 1)
+            end = n if close == -1 else close + 1
+            kind = "unterminated" if close == -1 else "quoted"
+        else:
+            i += 1
+            continue
+        if code_start < i:
+            segments.append(("code", sql[code_start:i]))
+        segments.append((kind, sql[i:end]))
+        i = code_start = end
+    if code_start < n:
+        segments.append(("code", sql[code_start:]))
+    return segments
+
+
+def _render(segments: list[tuple[str, str]]) -> str:
+    """Rebuild SQL for ``sqlparse`` with CUBRID's boundaries made unambiguous.
+
+    Comments become a space. Quoted text is replaced by an empty quote of the
+    same kind, so ``sqlparse`` cannot read a quote boundary differently. ``#``
+    in code becomes a space, so ``sqlparse`` cannot read it as a comment and
+    hide the tokens after it.
+    """
+    parts: list[str] = []
+    for kind, text in segments:
+        if kind == "comment":
+            parts.append(" ")
+        elif kind in ("quoted", "unterminated"):
+            parts.append("[]" if text[0] == "[" else text[0] * 2)
+        else:
+            parts.append(text.replace("#", " "))
+    return "".join(parts)
+
+
+def strip_comments(sql: str) -> str:
+    """Remove SQL comments before the safety check, using CUBRID's comment rules.
+
+    Keywords inside comments (e.g. ``/* DROP TABLE */``, ``-- DELETE FROM users``
+    or ``// DELETE FROM users``) must not be scanned, and a comment must not hide
+    the real leading keyword. Quoted text is reduced to an empty quote (see
+    :func:`_render`); the result is only for analysis, never for execution.
+    """
+    return _render(_lex(sql, backslash_escapes=False))
+
+
+def _cubrid_statements(sql: str) -> list[str]:
+    """Return the non-empty statements CUBRID would see, comment-stripped.
+
+    Statements are split on ``;`` outside comments and quotes. The input is
+    lexed both with and without backslash escapes (the CUBRID server parameter
+    ``no_backslash_escapes`` decides which applies); if the two readings find
+    different comment or quote boundaries the input is rejected, because the
+    statements the server runs cannot be known here. An unterminated quote is
+    rejected too: everything after it would otherwise be hidden from the checks.
+    """
+    segments = _lex(sql, backslash_escapes=False)
+    if segments != _lex(sql, backslash_escapes=True):
+        raise UnsafeSQLError(
+            "a backslash inside a quoted literal makes the statement ambiguous; "
+            "escape a quote by doubling it ('') instead"
+        )
+    if any(kind == "unterminated" for kind, _ in segments):
+        raise UnsafeSQLError("unterminated quoted literal or identifier")
+    rendered = _render(segments)
+    return [part for part in rendered.split(";") if part.strip()]
+
+
+def _parse(sql: str, mode: str) -> tuple[Statement, bool]:
+    """Parse ``sql`` and return ``(statement, more_by_cubrid)``.
+
+    Empty and comment-only input, and input ``sqlparse`` splits into more than
+    one statement, are rejected here. ``more_by_cubrid`` is true when CUBRID's
+    own rules (see :func:`_cubrid_statements`) find more than one statement
+    although ``sqlparse`` found one, for example when ``sqlparse`` groups a
+    ``BEGIN ... END`` block. Callers check the leading keyword first, so a
+    statement that is rejected anyway keeps its specific error, and then
+    reject ``more_by_cubrid`` with :func:`_multi_statement_error`. ``mode``
+    names the path in the error message.
+    """
     if not sql or not sql.strip():
         raise UnsafeSQLError("empty SQL statement")
 
-    # Strip comments before parsing — keywords inside comments could
-    # confuse the safety checker (defence-in-depth).
-    sql = strip_comments(sql)
-
-    statements = [stmt for stmt in sqlparse.parse(sql) if _is_non_empty(stmt)]
-    if len(statements) == 0:
+    cubrid_statements = _cubrid_statements(sql)
+    statements = [
+        stmt for stmt in sqlparse.parse(";".join(cubrid_statements)) if _is_non_empty(stmt)
+    ]
+    if not statements:
         raise UnsafeSQLError("empty SQL statement")
     if len(statements) > 1:
-        raise UnsafeSQLError("multi-statement SQL is not allowed in read-only mode")
+        raise _multi_statement_error(mode)
+    return statements[0], len(cubrid_statements) > 1
 
-    statement = statements[0]
+
+def _multi_statement_error(mode: str) -> UnsafeSQLError:
+    return UnsafeSQLError(f"multi-statement SQL is not allowed in {mode}")
+
+
+def ensure_read_only(sql: str) -> None:
+    """Raise :class:`UnsafeSQLError` if ``sql`` is not a single read-only statement."""
+    # Comments are stripped before parsing, so keywords inside them cannot
+    # confuse the checker or hide the leading keyword (defence-in-depth).
+    statement, more_by_cubrid = _parse(sql, "read-only mode")
     keyword = _leading_keyword(statement)
     if keyword is None:
         raise UnsafeSQLError("could not determine the leading SQL keyword")
@@ -125,6 +250,8 @@ def ensure_read_only(sql: str) -> None:
     forbidden = _forbidden_keywords(statement)
     if forbidden:
         raise UnsafeSQLError(f"{sorted(forbidden)[0]} is not permitted in read-only mode")
+    if more_by_cubrid:
+        raise _multi_statement_error("read-only mode")
 
 
 def ensure_query_statement(sql: str) -> None:
@@ -139,29 +266,19 @@ def ensure_query_statement(sql: str) -> None:
     like ``CREATE``. Other statements pass; the database read path still
     rejects any that return no result set.
     """
-    if not sql or not sql.strip():
-        raise UnsafeSQLError("empty SQL statement")
-
-    # Strip comments for parity with ensure_read_only: a leading comment must
-    # not hide the real leading keyword, and comment-only input counts as empty.
-    sql = strip_comments(sql)
-
-    statements = [stmt for stmt in sqlparse.parse(sql) if _is_non_empty(stmt)]
-    if len(statements) == 0:
-        raise UnsafeSQLError("empty SQL statement")
-    if len(statements) > 1:
-        raise UnsafeSQLError("multi-statement SQL is not allowed in execute_query")
-
-    keyword = _leading_keyword(statements[0])
-    if keyword is None:
-        return
-    first_word = keyword.split()[0].upper()
+    # Same parsing as ensure_read_only: a leading comment must not hide the real
+    # leading keyword, and comment-only input counts as empty.
+    statement, more_by_cubrid = _parse(sql, "execute_query")
+    keyword = _leading_keyword(statement)
+    first_word = keyword.split()[0].upper() if keyword is not None else None
     if first_word in QUERY_REJECTED_KEYWORDS:
         raise UnsafeSQLError(
             f"{first_word} is not permitted in execute_query, which only runs "
             "statements that return a result set; use execute_write for "
             "INSERT/UPDATE/DELETE (requires CUBRID_MCP_WRITE=1)"
         )
+    if more_by_cubrid:
+        raise _multi_statement_error("execute_query")
 
 
 def ensure_write_allowed(sql: str) -> None:
@@ -173,18 +290,7 @@ def ensure_write_allowed(sql: str) -> None:
     enabling write mode cannot smuggle in DDL or read escapes. The read-only
     default path (:func:`ensure_read_only`) is intentionally left unchanged.
     """
-    if not sql or not sql.strip():
-        raise UnsafeSQLError("empty SQL statement")
-
-    sql = strip_comments(sql)
-
-    statements = [stmt for stmt in sqlparse.parse(sql) if _is_non_empty(stmt)]
-    if len(statements) == 0:
-        raise UnsafeSQLError("empty SQL statement")
-    if len(statements) > 1:
-        raise UnsafeSQLError("multi-statement SQL is not allowed in write mode")
-
-    statement = statements[0]
+    statement, more_by_cubrid = _parse(sql, "write mode")
     keyword = _leading_keyword(statement)
     if keyword is None:
         raise UnsafeSQLError("could not determine the leading SQL keyword")
@@ -193,6 +299,8 @@ def ensure_write_allowed(sql: str) -> None:
             f"{keyword.upper()} is not permitted in write mode; "
             f"allowed statements: {', '.join(sorted(WRITE_KEYWORDS))}"
         )
+    if more_by_cubrid:
+        raise _multi_statement_error("write mode")
 
 
 def _is_non_empty(statement: Statement) -> bool:

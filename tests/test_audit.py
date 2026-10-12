@@ -95,6 +95,35 @@ def test_category_is_leading_keyword_only() -> None:
     assert _category(None) is None
 
 
+@pytest.mark.parametrize(
+    ("sql", "expected"),
+    [
+        ("-- c\nSELECT * FROM t", "SELECT"),
+        ("/* c */ SELECT * FROM t", "SELECT"),
+        ("/*c*/SELECT 1", "SELECT"),
+        ("// c\nSELECT 1", "SELECT"),
+        ("-- c\r\nSELECT 1", "SELECT"),
+        ("-- c\rSELECT 1", "SELECT"),
+        ("  \n\t-- c\n  /* d */\n\tSELECT 1", "SELECT"),
+        ("/* a */ -- b\n /* c */ // d\n WITH x AS (SELECT 1) SELECT * FROM x", "WITH"),
+        ("/*+ RECOMPILE */ SELECT 1", "SELECT"),
+        # A write statement hidden behind a read keyword in a comment is a write.
+        ("-- SELECT\nDELETE FROM t", "DELETE"),
+        ("/* SELECT */ DELETE FROM t", "DELETE"),
+        ("// SELECT\nINSERT INTO t VALUES (1)", "INSERT"),
+        ("/* SELECT */ -- SELECT\n UPDATE t SET a = 1", "UPDATE"),
+        # CUBRID block comments do not nest: the text after the first */ is SQL.
+        ("/* /* SELECT */ DROP TABLE t */", "DROP"),
+        # Comment-only input has no category.
+        ("-- only a comment", None),
+        ("/* only a block comment */", None),
+        ("/* unterminated SELECT", None),
+    ],
+)
+def test_category_ignores_leading_comments(sql: str, expected: str | None) -> None:
+    assert _category(sql) == expected
+
+
 def test_identifiers_strict_and_deduplicated() -> None:
     sql = "SELECT * FROM orders o JOIN customers c ON o.cid = c.id JOIN orders x"
     assert _identifiers(sql) == ["orders", "customers"]
@@ -116,6 +145,15 @@ def test_identifiers_ignore_join_inside_literals_and_comments() -> None:
     assert _identifiers("SELECT * FROM real -- JOIN commented_out\n") == ["real"]
     assert _identifiers("SELECT * FROM real /* JOIN blocked */ WHERE 1=1") == ["real"]
     assert _SECRET not in "".join(_identifiers(f"SELECT 1 FROM t WHERE note = 'FROM {_SECRET}'"))
+
+
+def test_identifiers_ignore_cubrid_and_unterminated_comments_and_literals() -> None:
+    # CUBRID's // line comment, a \r line end, and an unterminated block comment
+    # or literal (which CUBRID reads to the end of the input) never echo text.
+    assert _identifiers("SELECT * FROM real // JOIN commented_out\n") == ["real"]
+    assert _identifiers("SELECT * FROM real -- c\rJOIN other") == ["real", "other"]
+    assert _identifiers(f"SELECT * FROM real /* JOIN {_SECRET}") == ["real"]
+    assert _identifiers(f"SELECT * FROM real WHERE x = 'JOIN {_SECRET}") == ["real"]
 
 
 # --------------------------------------------------------------------------- #

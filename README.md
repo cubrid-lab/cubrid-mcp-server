@@ -255,7 +255,7 @@ Set `CUBRID_MCP_AUDIT_LOG=1` to record every executed statement (`execute_query`
 |-------|-------------|
 | `tool` | The MCP tool that ran the statement (`execute_query` / `explain_query` / `execute_write`). |
 | `status` | `ok` or `error`. |
-| `category` | The leading SQL keyword only (e.g. `SELECT`, `WITH`) — never the full statement. |
+| `category` | The leading SQL keyword only (e.g. `SELECT`, `WITH`), read after comments and string literals are stripped — never the full statement. |
 | `identifiers` | Table names extracted after `FROM`/`JOIN` via a strict identifier regex; anything that is not a bare identifier (values, literals, expressions) is dropped. |
 | `sql_length` | Length of the submitted SQL, in characters. |
 | `row_count`, `truncated` | Result size and whether output was truncated (success only). |

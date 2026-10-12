@@ -220,7 +220,7 @@ cubrid-mcp-server
 |-------|------|
 | `tool` | 문장을 실행한 MCP 도구 |
 | `status` | `ok` 또는 `error` |
-| `category` | 선행 SQL 키워드만 (예: `SELECT`, `WITH`) — 전체 문장은 절대 기록 안 함 |
+| `category` | 선행 SQL 키워드만 (예: `SELECT`, `WITH`), 주석과 문자열 리터럴을 제거한 뒤 읽음 — 전체 문장은 절대 기록 안 함 |
 | `identifiers` | `FROM`/`JOIN` 뒤에서 식별자 정규식으로 추출한 테이블 이름. 식별자가 아닌 것(값, 리터럴, 표현식)은 버려짐 |
 | `sql_length` | 제출된 SQL의 글자 수 |
 | `row_count`, `truncated` | 결과 크기 및 잘림 여부 (성공 시만) |

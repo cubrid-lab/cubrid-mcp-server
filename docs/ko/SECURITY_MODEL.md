@@ -27,7 +27,7 @@ GRANT SELECT ON orders TO mcp_reader;
 
 ## 계층 2 — 읽기 전용 SQL 화이트리스트
 
-서버는 **기본적으로 읽기 전용**입니다. `CUBRID_MCP_READONLY=1`(기본값)이면 모든 문장이 `sqlparse`로 파싱되어 `SELECT`, `SHOW`, `DESC`, `DESCRIBE`, `WITH`(CTE)가 아니면 거부됩니다. CUBRID에는 `EXPLAIN` 문이 없으므로 실행 계획은 `explain_query` 도구를 사용하세요. 다중 문장 입력은 거부됩니다.
+서버는 **기본적으로 읽기 전용**입니다. `CUBRID_MCP_READONLY=1`(기본값)이면 모든 문장이 `sqlparse`로 파싱되어 `SELECT`, `SHOW`, `DESC`, `DESCRIBE`, `WITH`(CTE)가 아니면 거부됩니다. CUBRID에는 `EXPLAIN` 문이 없으므로 실행 계획은 `explain_query` 도구를 사용하세요. 다중 문장 입력은 거부됩니다. 주석, 따옴표, 문장 경계는 `sqlparse`가 아니라 CUBRID 규칙으로 읽습니다. `--`, `//`, `/* ... */`가 주석이고(블록 주석은 중첩되지 않음), `#`은 주석이 아니며, 따옴표 안의 백슬래시는 일반 문자입니다. 백슬래시가 따옴표를 이스케이프하는지(서버 파라미터 `no_backslash_escapes`)에 따라 따옴표 경계가 달라지는 입력과 닫히지 않은 따옴표가 있는 입력은 거부됩니다.
 
 > SQL 키워드 검사는 가드레일이자 심층 방어이며 보안 경계가 아닙니다. 명백한 실수를 막는 클라이언트 측 최선 노력(best-effort) 필터일 뿐이며, 주된 통제는 전용 최소 권한 데이터베이스 계정(계층 1)입니다. 모델에 필요한 테이블에만 `SELECT`를 부여하세요.
 
@@ -60,7 +60,7 @@ GRANT SELECT ON orders TO mcp_reader;
 |-------|------|
 | `tool` | 문장을 실행한 MCP 도구 |
 | `status` | `ok` 또는 `error` |
-| `category` | 선행 SQL 키워드만 (예: `SELECT`, `WITH`) — 전체 문장은 절대 기록 안 함 |
+| `category` | 선행 SQL 키워드만 (예: `SELECT`, `WITH`), 주석과 문자열 리터럴을 제거한 뒤 읽음 — 전체 문장은 절대 기록 안 함 |
 | `identifiers` | `FROM`/`JOIN` 뒤에서 식별자 정규식으로 추출한 테이블 이름. 식별자가 아닌 것(값, 리터럴, 표현식)은 버려짐 |
 | `sql_length` | 제출된 SQL의 글자 수 |
 | `row_count`, `truncated` | 결과 크기 및 잘림 여부 (성공 시만) |

@@ -1,3 +1,5 @@
+from typing import Any
+
 import pytest
 
 from cubrid_mcp_server.safety import (
@@ -6,6 +8,8 @@ from cubrid_mcp_server.safety import (
     UnsafeSQLError,
     ensure_query_statement,
     ensure_read_only,
+    ensure_write_allowed,
+    strip_comments,
 )
 
 
@@ -223,3 +227,135 @@ def test_ensure_query_statement_rejects_empty(sql: str) -> None:
 
 def test_query_rejected_keywords_cover_write_keywords() -> None:
     assert WRITE_KEYWORDS <= QUERY_REJECTED_KEYWORDS
+
+
+# --- CUBRID comment and quote rules ---
+#
+# The checker splits comments, quotes and statements the way the CUBRID server
+# does, not the way sqlparse's generic lexer does: CUBRID has ``//`` line
+# comments, does not treat ``#`` as a comment, and treats a backslash inside a
+# quote as an ordinary character by default (no_backslash_escapes=yes).
+
+CHECKERS = [ensure_read_only, ensure_query_statement, ensure_write_allowed]
+
+
+@pytest.mark.parametrize(
+    "sql",
+    [
+        "-- c\nSELECT 1",
+        "/* c */ SELECT 1",
+        "/*c*/SELECT 1",
+        "// c\nSELECT 1",
+        "-- c\r\nSELECT 1",
+        "-- c\rSELECT 1",
+        "  \n\t-- c\n  /* d */\n\tSELECT 1",
+        "/* a */ -- b\n /* c */ // d\n WITH x AS (SELECT 1) SELECT * FROM x",
+        "/*+ RECOMPILE */ SELECT 1",
+        "SELECT 1 // DELETE FROM t",
+        "SELECT 'a;b' FROM t",
+        "SELECT 'it''s' FROM t",
+        "SELECT 'a//b', 'c--d', 'e/*f*/' FROM t",
+        'SELECT "a;--b" FROM t',
+        "SELECT `a;b`, [c;d] FROM t",
+        "SELECT 'C:\\temp' FROM t",
+    ],
+)
+def test_read_paths_allow_reads_behind_comments_and_in_quotes(sql: str) -> None:
+    ensure_read_only(sql)
+    ensure_query_statement(sql)
+
+
+@pytest.mark.parametrize(
+    "sql",
+    [
+        # A write or DDL statement behind a comment that names a read keyword.
+        "-- SELECT\nDELETE FROM t",
+        "/* SELECT */ DELETE FROM t",
+        "// SELECT\nDELETE FROM t",
+        "// SELECT\nDROP TABLE t",
+        "// SELECT\nSET SYSTEM PARAMETERS 'x=1'",
+        "/* SELECT */ -- SELECT\n // SELECT\n UPDATE t SET a = 1",
+        "-- SELECT\rINSERT INTO t VALUES (1)",
+        # CUBRID block comments do not nest: the text after the first */ is SQL.
+        "/* /* SELECT */ DROP TABLE t */",
+    ],
+)
+def test_read_paths_reject_writes_hidden_behind_comments(sql: str) -> None:
+    for checker in (ensure_read_only, ensure_query_statement):
+        with pytest.raises(UnsafeSQLError, match="is not permitted"):
+            checker(sql)
+
+
+@pytest.mark.parametrize(
+    "sql",
+    [
+        # A DDL statement behind a comment that names a write keyword.
+        "// INSERT\nDROP TABLE t",
+        "-- INSERT\nDROP TABLE t",
+        "/* UPDATE */ CREATE TABLE t (a INT)",
+        "// DELETE\nSELECT * FROM t",
+    ],
+)
+def test_write_path_rejects_statements_hidden_behind_comments(sql: str) -> None:
+    with pytest.raises(UnsafeSQLError, match="is not permitted in write mode"):
+        ensure_write_allowed(sql)
+
+
+@pytest.mark.parametrize(
+    ("checker", "sql"),
+    [
+        # sqlparse reads ``#`` as a comment; CUBRID does not, so ``;`` follows.
+        (ensure_read_only, "SELECT 1 # ; DELETE FROM t"),
+        (ensure_query_statement, "SELECT 1 # ; DELETE FROM t"),
+        (ensure_write_allowed, "DELETE FROM t # ; DROP TABLE t"),
+        # sqlparse reads ``$$ ... $$`` as one string; CUBRID splits on the ``;``.
+        (ensure_read_only, "SELECT $$; DELETE FROM t; $$"),
+        (ensure_query_statement, "SELECT $$; DROP TABLE t; $$"),
+        (ensure_query_statement, "SELECT $a$; DROP TABLE t; $a$"),
+        (ensure_write_allowed, "INSERT INTO t SELECT $$; DROP TABLE t; $$"),
+    ],
+)
+def test_checkers_reject_statements_only_cubrid_splits(checker: Any, sql: str) -> None:
+    with pytest.raises(UnsafeSQLError, match="multi-statement"):
+        checker(sql)
+
+
+@pytest.mark.parametrize(
+    "sql",
+    [
+        "SELECT '\\'; DELETE FROM t; -- '",
+        "SELECT 'a\\' , '; DELETE FROM t; -- '",
+        'SELECT "a\\"; DELETE FROM t; -- "',
+    ],
+)
+def test_checkers_reject_backslash_quote_ambiguity(sql: str) -> None:
+    # Whether a backslash escapes a quote depends on the server parameter
+    # no_backslash_escapes, so the statements CUBRID runs cannot be known here.
+    for checker in CHECKERS:
+        with pytest.raises(UnsafeSQLError, match="ambiguous"):
+            checker(sql)
+
+
+@pytest.mark.parametrize(
+    "sql",
+    ["SELECT 'abc", 'SELECT "abc', "SELECT `abc", "SELECT [abc", "SELECT 'a'' ; DELETE FROM t"],
+)
+def test_checkers_reject_unterminated_quotes(sql: str) -> None:
+    for checker in CHECKERS:
+        with pytest.raises(UnsafeSQLError, match="unterminated"):
+            checker(sql)
+
+
+@pytest.mark.parametrize(
+    "sql", ["/* unterminated SELECT 1", "// SELECT 1", "-- SELECT 1\r", "// a\r-- b\n/* c */"]
+)
+def test_checkers_treat_comment_only_input_as_empty_or_unknown(sql: str) -> None:
+    for checker in CHECKERS:
+        with pytest.raises(UnsafeSQLError, match="empty|leading SQL keyword|not permitted"):
+            checker(sql)
+
+
+def test_strip_comments_uses_cubrid_comment_rules() -> None:
+    assert strip_comments("// c\nSELECT 1").split() == ["SELECT", "1"]
+    assert strip_comments("SELECT 'x -- y' -- z").split() == ["SELECT", "''"]
+    assert strip_comments("SELECT 1 # x").split() == ["SELECT", "1", "x"]

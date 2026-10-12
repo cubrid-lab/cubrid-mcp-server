@@ -45,33 +45,38 @@ _TABLE_REF = re.compile(
 )
 _LEADING_WORD = re.compile(r"[A-Za-z]+")
 
-# SQL noise that must never be inspected for identifiers: single-quoted string
-# literals (with doubled-quote escapes), line comments, and block comments.
-# These are blanked out before the ``FROM``/``JOIN`` scan so a literal or comment
-# such as ``'JOIN secret'`` or ``-- JOIN secret`` can never echo an identifier.
+# SQL noise that must never be inspected for identifiers or the category:
+# single-quoted string literals (with doubled-quote escapes), CUBRID's ``--`` and
+# ``//`` line comments (ended by ``\n`` or ``\r``), and block comments. An
+# unterminated literal or block comment runs to the end of the input. These are
+# blanked out before the ``FROM``/``JOIN`` scan so a literal or comment such as
+# ``'JOIN secret'`` or ``-- JOIN secret`` can never echo an identifier, and
+# before the category is read so a leading comment cannot hide or replace it.
 _SQL_NOISE = re.compile(
-    r"'(?:[^']|'')*'"  # single-quoted string literal
-    r"|--[^\n]*"  # line comment
-    r"|/\*.*?\*/",  # block comment
+    r"'(?:[^']|'')*(?:'|\Z)"  # single-quoted string literal
+    r"|(?:--|//)[^\r\n]*"  # line comment
+    r"|/\*.*?(?:\*/|\Z)",  # block comment
     re.DOTALL,
 )
 
 
 def _strip_noise(sql: str) -> str:
-    """Blank out string literals and comments so identifier extraction never
-    inspects quoted or commented text."""
+    """Blank out string literals and comments so neither identifier extraction
+    nor category detection inspects quoted or commented text."""
     return _SQL_NOISE.sub(" ", sql)
 
 
 def _category(sql: str | None) -> str | None:
     """Return the leading SQL keyword (uppercased) or ``None``.
 
-    Only the first alphabetic run is inspected, so no literal or identifier can
-    be echoed through this field.
+    Comments and string literals are stripped first (:func:`_strip_noise`), so
+    ``-- note\nSELECT ...`` is ``SELECT`` and ``/* SELECT */ DELETE ...`` is
+    ``DELETE``. Only the first alphabetic run is inspected, so no literal or
+    identifier can be echoed through this field.
     """
     if not sql:
         return None
-    match = _LEADING_WORD.match(sql.lstrip())
+    match = _LEADING_WORD.match(_strip_noise(sql).lstrip())
     return match.group(0).upper() if match else None
 
 
