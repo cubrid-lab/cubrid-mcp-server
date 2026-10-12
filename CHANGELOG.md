@@ -54,6 +54,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - README gains a **Related Projects** section linking pycubrid, sqlalchemy-cubrid, and cubrid-cookbook-python, matching the sibling packages' READMEs — every cubrid-lab PyPI page now leads to the runnable examples.
 
 ### CI
+- **The PR-body closing guard catches emphasized, linked, escaped and split
+  closures, and fails closed where Markdown structure is uncertain** — the
+  `PR title` check now rejects:
+  - emphasis or HTML around the keyword or the reference (`**Closes**`, `*Fixes*`,
+    `__Resolves__`, `Closes **owner/repo#N**`, `<b>Closes</b>`), a keyword split by
+    markup (`Close**s**`), and inline comments, processing instructions or CDATA
+    between the keyword and the reference;
+  - `http://`, `www.` and scheme-less `github.com/` issue URLs, autolinks, backslash
+    escapes (`\#`), HTML entities (`&#35;`, `&nbsp;`), a backslash line break,
+    leading zeros, and a foreign issue listed after another one
+    (`Closes #1, owner/repo#2`);
+  - a closing keyword followed by a link (`[text](…)`, `[text][label]`, `<a href>`)
+    when the body links any foreign issue, absolute or relative, since the link
+    text hides its target. This case has its own error message.
+
+  Only fenced and indented code blocks and HTML comment blocks are ignored. Inline
+  code and inline comments are scanned, because hiding them needs inline parsing
+  that link destinations, HTML attributes and autolinks can defeat. Once a fence
+  appears where its extent is unknown (in a list item, a block quote, after a list
+  marker or inside raw HTML), no later fence or comment is hidden, so a closing
+  fence can never be misread as an opener. Raw HTML blocks end where CommonMark
+  ends them, and any other line starting with a tag is treated as raw HTML until
+  a blank line. Comments after raw HTML are scanned, a comment also ends at `--!>`,
+  and after a raw-text element such as `<textarea>` or `<select>` the rest of the
+  body is scanned. Lines split only at CR and LF, a leading byte order mark is
+  dropped, and only spaces and tabs count as blank or indentation. A heading, block
+  quote, fence, thematic break or comment block directly under a list item now ends
+  the list, so indented code after it is ignored instead of blocking the PR.
+  Footnote text is treated like list text. A very long issue number is reported
+  instead of crashing the check, and long adversarial bodies stay fast at GitHub's
+  65,536-character limit.
+  This is the same guard, with the same regression cases, as sqlalchemy-cubrid
+  (cubrid-lab/sqlalchemy-cubrid#816); cubrid-cookbook-python gets it in its own pull
+  request. A test pins the guard block's SHA-256 so every copy changes together.
 - **The PR-body closing guard keeps list context after a lazy continuation line** — a
   list item followed by an unindented continuation line, a blank line and an
   indented `Closes other/repo#N` is still list text on GitHub, so the `PR title`
