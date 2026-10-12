@@ -85,24 +85,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   that link destinations, HTML attributes and autolinks can defeat. Once a fence
   appears where its extent is unknown (in a list item, a block quote, after a list
   marker, inside raw HTML, on an indented line, or a line that only looks like a
-  fence), no later fence or comment is hidden, so a closing
-  fence can never be misread as an opener. Raw HTML blocks end where CommonMark
-  ends them, and any other line starting with a tag is treated as raw HTML until
-  a blank line. Comments after anything that may
-  start an HTML tag are scanned, a comment also ends at `--!>`,
-  and after a raw-text element such as `<textarea>` or `<select>` the rest of the
-  body is scanned. Lines split only at CR and LF, a leading byte order mark is
-  dropped, and only spaces and tabs count as blank or indentation. A heading, block
-  quote, fence, thematic break or comment block directly under a list item now ends
-  the list, so indented code after it is ignored instead of blocking the PR.
+  fence), no later fence or comment is hidden, so a closing fence can never be
+  misread as an opener. Raw HTML blocks end where CommonMark ends them, and any
+  other line starting with a tag is treated as raw HTML until a blank line. Comments
+  after anything that may start an HTML tag are scanned, a comment also ends at
+  `--!>`, and after a raw-text element such as `<textarea>` or `<select>` the rest
+  of the body is scanned. Lines split only at CR and LF, a leading byte order mark
+  is dropped, and only spaces and tabs count as blank or indentation. A heading,
+  block quote, fence, thematic break or comment block directly under a list item now
+  ends the list, so indented code after it is ignored instead of blocking the PR.
   Footnote text is treated like list text. A very long issue number is reported
   instead of crashing the check, and long adversarial bodies stay fast at GitHub's
-  65,536-character limit.
-  This is the same guard, with the same regression cases, as sqlalchemy-cubrid
-  (cubrid-lab/sqlalchemy-cubrid#816) and cubrid-cookbook-python
+  65,536-character limit. This is the same guard, with the same regression cases, as
+  sqlalchemy-cubrid (cubrid-lab/sqlalchemy-cubrid#816) and cubrid-cookbook-python
   (cubrid-lab/cubrid-cookbook-python#293). A test pins the guard block's SHA-256 so
-  every copy changes together. `CONTRIBUTING.md` describes when code and comment blocks
-  are still checked.
+  every copy changes together. `CONTRIBUTING.md` describes when code and comment
+  blocks are still checked.
 - **The PR-body closing guard keeps list context after a lazy continuation line** — a
   list item followed by an unindented continuation line, a blank line and an
   indented `Closes other/repo#N` is still list text on GitHub, so the `PR title`
