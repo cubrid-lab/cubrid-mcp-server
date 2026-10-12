@@ -353,7 +353,7 @@ CUBRID `SERIAL` 시퀀스와 현재값·최솟값·최댓값·증분. (`db_seria
 
 제약: DDL(`CREATE`/`ALTER`/`DROP`/`TRUNCATE`), 독립 실행형 읽기, 트랜잭션 제어, 다중 문장 입력은 거부됩니다. DDL이 제외되는 이유는 DDL 자동 커밋이 아니라, `execute_write`가 DML 도구이고 `execute_query`가 읽기 전용이기 때문입니다. [보안 모델](SECURITY_MODEL.ko.md) 참고.
 
-결과는 커밋 후 반환되는 `{"affected_rows": N}`입니다. 일치하는 행이 없는 문장도 성공하며 `"affected_rows": 0`을 반환합니다. 거부되거나 실패한 문장은 아무것도 변경하지 않습니다.
+결과는 커밋 후 반환되는 `{"affected_rows": N}`입니다. 일치하는 행이 없는 문장도 성공하며 `"affected_rows": 0`을 반환합니다. 거부된 문장은 데이터베이스로 전송되지 않고, 실패한 문장은 롤백됩니다. 커밋 자체가 시간 초과(`CUBRID_MCP_QUERY_TIMEOUT`)되면 연결이 폐기되고 결과를 알 수 없습니다. 응답이 유실되기 전에 서버가 이미 커밋했을 수 있으므로, 다시 시도하기 전에 데이터를 확인하세요.
 
 예시: `execute_write(sql="INSERT INTO note (body) VALUES ('first note')")` 응답
 

@@ -351,7 +351,7 @@ Runs a **single** `INSERT`, `UPDATE`, or `DELETE` statement in an explicit trans
 
 Constraints: DDL (`CREATE`/`ALTER`/`DROP`/`TRUNCATE`), standalone reads, transaction control, and multi-statement input are rejected. DDL is excluded because `execute_write` is a DML tool and `execute_query` is read-only, not because of DDL auto-commit. See the [Security Model](SECURITY_MODEL.md).
 
-The result is `{"affected_rows": N}`, returned after the commit. A statement that matches no rows still succeeds and returns `"affected_rows": 0`; a rejected or failed statement changes nothing.
+The result is `{"affected_rows": N}`, returned after the commit. A statement that matches no rows still succeeds and returns `"affected_rows": 0`. A rejected statement is never sent to the database, and a statement that fails is rolled back. If the commit itself times out (`CUBRID_MCP_QUERY_TIMEOUT`), the connection is discarded and the outcome is unknown: the server may have committed before its reply was lost, so check the data before retrying.
 
 Example: `execute_write(sql="INSERT INTO note (body) VALUES ('first note')")` returns
 
