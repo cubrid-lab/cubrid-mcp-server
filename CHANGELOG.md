@@ -86,9 +86,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   instead of crashing the check, and long adversarial bodies stay fast at GitHub's
   65,536-character limit.
   This is the same guard, with the same regression cases, as sqlalchemy-cubrid
-  (cubrid-lab/sqlalchemy-cubrid#816); cubrid-cookbook-python is to get it in a
-  separate pull request. A test pins the guard block's SHA-256 so every copy changes
-  together.
+  (cubrid-lab/sqlalchemy-cubrid#816) and cubrid-cookbook-python
+  (cubrid-lab/cubrid-cookbook-python#293). A test pins the guard block's SHA-256 so
+  every copy changes together. `CONTRIBUTING.md` lists every case in which code and
+  comment blocks are still checked.
 - **The PR-body closing guard keeps list context after a lazy continuation line** — a
   list item followed by an unindented continuation line, a blank line and an
   indented `Closes other/repo#N` is still list text on GitHub, so the `PR title`
