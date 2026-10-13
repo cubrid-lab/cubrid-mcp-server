@@ -349,8 +349,16 @@ class Database:
             except Exception as exc:
                 if _is_timeout_error(exc):
                     raise self._timeout_error(exc) from exc
-                # Lazy recovery on non-timeout failure, mirroring ``cursor``.
-                self._discard_connection()
+                if _is_server_sql_error(exc):
+                    # As in ``cursor``: the server rejected a statement but the
+                    # session is in sync, so end the transaction and keep the
+                    # connection (a failing rollback still discards it). Skip it
+                    # when cleanup inside the block already discarded it.
+                    if self._connection is connection:
+                        self._rollback_or_discard(connection)
+                else:
+                    # Lazy recovery on any other failure, mirroring ``cursor``.
+                    self._discard_connection()
                 if isinstance(exc, DatabaseError):
                     raise
                 # Raw driver errors can embed SQL, schema or host details.

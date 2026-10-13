@@ -297,6 +297,21 @@ def ensure_read_only(sql: str) -> None:
         raise _multi_statement_error("read-only mode")
 
 
+def statement_keyword(sql: str) -> str | None:
+    """Return the leading keyword of the single statement in ``sql``, in upper case.
+
+    Uses the same reading as the checks: CUBRID's comment, quote and statement
+    rules, the first word of the statement, then the leading ``sqlparse``
+    keyword (so ``(SELECT 1)`` and ``SELECT*FROM t`` read as ``SELECT``). Empty,
+    ambiguous and multi-statement input raise :class:`UnsafeSQLError`.
+    """
+    statement, more_by_cubrid = _parse(sql, "read-only mode")
+    if more_by_cubrid:
+        raise _multi_statement_error("read-only mode")
+    keyword = _first_name(sql) or _leading_keyword(statement)
+    return keyword.split()[0].upper() if keyword is not None else None
+
+
 def ensure_query_statement(sql: str) -> None:
     """Raise :class:`UnsafeSQLError` unless ``sql`` is a single non-write statement.
 

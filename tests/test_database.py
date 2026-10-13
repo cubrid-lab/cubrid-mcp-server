@@ -1171,3 +1171,61 @@ def test_owner_qualified_names_not_cached_when_the_probe_drops_the_connection(
     assert db.owner_qualified_names() is (not owners)
     assert db.owner_qualified_names() is (not owners)
     assert sum(len(c.cursors) for c in created) == 2
+
+
+# --- exclusive() keeps the session after a server-side SQL error (#299) ---
+
+
+@pytest.mark.parametrize(
+    "error", [pycubrid.ProgrammingError, pycubrid.IntegrityError, pycubrid.DataError]
+)
+def test_exclusive_keeps_connection_after_server_sql_error(
+    monkeypatch: pytest.MonkeyPatch, error: type[Exception]
+) -> None:
+    conn = FakeConnection()
+    monkeypatch.setattr(pycubrid, "connect", lambda **_k: conn)
+    db = Database(_TEST_CONFIG)
+    with pytest.raises(DatabaseError, match=f"^query failed: {error.__name__}$"):
+        with db.exclusive():
+            _raise(error("Semantic: bad column"))
+    assert conn.rolled_back is True
+    assert conn.closed is False
+    assert db._connection is conn
+
+
+def test_exclusive_discards_when_rollback_after_sql_error_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    conn = FakeConnection()
+    conn.rollback = lambda: _raise(RuntimeError("rollback failed"))  # type: ignore[method-assign]
+    monkeypatch.setattr(pycubrid, "connect", lambda **_k: conn)
+    db = Database(_TEST_CONFIG)
+    with pytest.raises(DatabaseError, match="ProgrammingError"):
+        with db.exclusive():
+            _raise(pycubrid.ProgrammingError("Semantic: bad column"))
+    assert db._connection is None
+
+
+def test_trace_enabled_keeps_connection_after_server_sql_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    db, created = _trace_cleanup_db(monkeypatch, None)
+    with pytest.raises(DatabaseError, match="ProgrammingError"):
+        with db.trace_enabled():
+            _raise(pycubrid.ProgrammingError("Semantic: bad column"))
+    # SET TRACE OFF and the rollback ran, and the session is reused.
+    assert db._connection is created[0]
+    db.fetch_all("SELECT 2")
+    assert db._connection is created[0]
+
+
+def test_exclusive_skips_rollback_when_the_block_discarded_the_connection(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    db, created = _trace_cleanup_db(monkeypatch, "trace_off")
+    with pytest.raises(DatabaseError, match="ProgrammingError"):
+        with db.trace_enabled():
+            _raise(pycubrid.ProgrammingError("bad sql"))
+    # Trace cleanup failed and discarded the session; no rollback is sent to it.
+    assert db._connection is None
+    assert created[0].rollbacks == 0

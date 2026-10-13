@@ -1355,3 +1355,50 @@ def test_list_class_hierarchy_is_owner_qualified(owner_db: FakeDatabase) -> None
 def test_schema_resource_reads_an_owner_qualified_table(owner_db: FakeDatabase) -> None:
     owner_db.queue(_TWO_OWNERS)
     assert json.loads(server.schema_resource("other.u"))["table"] == "other.u"
+
+
+# --- explain_query matches execute_query (#299) ---
+
+
+@pytest.mark.parametrize(
+    "sql",
+    [
+        "SELECT*FROM t",
+        "(SELECT 1)",
+        "((SELECT 1)) UNION (SELECT 2)",
+        "/* c */ (SELECT 1)",
+        "WITH(x) AS (SELECT 1) SELECT * FROM x",
+    ],
+)
+def test_explain_query_reads_the_leading_keyword_like_the_checks(
+    sql: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fake = FakeConnDatabase()
+    monkeypatch.setattr(server, "_context", AppContext.single(config=_TEST_CONFIG, database=fake))
+    assert server.explain_query(sql)["sql"] == sql
+
+
+@pytest.mark.parametrize("sql", ["SHOW TABLES", "DESC t", "KILL (SELECT 1)", "x (SELECT 1)"])
+def test_explain_query_still_accepts_only_select_and_with(
+    sql: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fake = FakeConnDatabase()
+    monkeypatch.setattr(server, "_context", AppContext.single(config=_TEST_CONFIG, database=fake))
+    with pytest.raises(ValueError, match="only accepts SELECT or WITH"):
+        server.explain_query(sql)
+    assert fake.cursors == []
+
+
+def test_explain_query_caps_the_plan(monkeypatch: pytest.MonkeyPatch) -> None:
+    fake = FakeConnDatabase()
+    config = replace(_TEST_CONFIG, max_chars=10)
+    monkeypatch.setattr(server, "_context", AppContext.single(config=config, database=fake))
+    result = server.explain_query("SELECT 1")
+    assert result["plan"] == "Trace Sta…"
+    assert result["truncated"] is True
+    monkeypatch.setattr(
+        server,
+        "_context",
+        AppContext.single(config=replace(_TEST_CONFIG, max_chars=4000), database=fake),
+    )
+    assert server.explain_query("SELECT 1")["truncated"] is False

@@ -254,14 +254,15 @@ Error calling tool 'execute_query': DELETE is not permitted in read-only mode; a
 
 #### `explain_query(sql, connection=None)`
 
-CUBRID `SHOW TRACE`를 통해 `SELECT`/`WITH` 문의 실행 계획/트레이스를 반환합니다. 문장은 `SET TRACE ON` 아래에서 **실제로 실행**됩니다(실제 데이터베이스 자원을 사용하며 쿼리 자체만큼 오래 걸릴 수 있음). 트레이스를 읽은 뒤 트레이스를 끄고 트랜잭션을 롤백합니다(최선 노력 방식의 정리). 이 정리가 실패하면(정리용 커서를 열 수 없거나 `SET TRACE OFF` 또는 롤백이 실패하면) 실행 계획은 그대로 반환되고, 실패는 stderr에 기록되며, 연결은 폐기되어 다음 호출은 새 연결을 엽니다. 쿼리 시간 초과 후에는 정리 문장을 보내지 않습니다. `CUBRID_MCP_READONLY` 플래그와 무관하게 읽기 전용 검사를 적용하므로, 문장이 실행될 때 데이터를 바꾸는 `INCR`, `DECR`, 시리얼 증가, 클릭 카운터도 거부합니다. 데이터베이스 계정의 권한도 그대로 적용됩니다. CUBRID에는 `EXPLAIN` 문이 없으므로 실행 계획에는 이 도구를 사용하세요.
+CUBRID `SHOW TRACE`를 통해 `SELECT`/`WITH` 문의 실행 계획/트레이스를 반환합니다. 문장은 `SET TRACE ON` 아래에서 **실제로 실행**됩니다(실제 데이터베이스 자원을 사용하며 쿼리 자체만큼 오래 걸릴 수 있음). 트레이스를 읽은 뒤 트레이스를 끄고 트랜잭션을 롤백합니다(최선 노력 방식의 정리). 이 정리가 실패하면(정리용 커서를 열 수 없거나 `SET TRACE OFF` 또는 롤백이 실패하면) 실행 계획은 그대로 반환되고, 실패는 stderr에 기록되며, 연결은 폐기되어 다음 호출은 새 연결을 엽니다. 쿼리 시간 초과 후에는 정리 문장을 보내지 않습니다. `CUBRID_MCP_READONLY` 플래그와 무관하게 읽기 전용 검사를 적용하므로, 문장이 실행될 때 데이터를 바꾸는 `INCR`, `DECR`, 시리얼 증가, 클릭 카운터도 거부합니다. 데이터베이스 계정의 권한도 그대로 적용됩니다. CUBRID에는 `EXPLAIN` 문이 없으므로 실행 계획에는 이 도구를 사용하세요. 선두 키워드는 SQL 검사와 같은 방식으로 읽으므로 `SELECT*FROM t`와 `(SELECT 1)`도 `execute_query`처럼 받아들이며, `SELECT`와 `WITH` 문만 허용합니다. 서버가 거부한 문장(예: 없는 테이블)은 `query failed: ProgrammingError`로 실패하고, `execute_query`처럼 연결을 유지합니다. 실행 계획은 `CUBRID_MCP_MAX_CHARS`자로 제한되며 잘리면 `…`로 끝나고, `truncated`가 잘림 여부를 알려 줍니다. `sql` 반향은 보낸 문장 그대로이며 `CUBRID_MCP_MAX_SQL_LENGTH`로 제한됩니다.
 
 예시: `explain_query(sql="SELECT name, price FROM product WHERE category = 'furniture'")` 응답
 
 ```json
 {
   "sql": "SELECT name, price FROM product WHERE category = 'furniture'",
-  "plan": "Query Plan:\n  INDEX SCAN (dba.product.idx_product_category) (key range: [dba.product].category= ?:0 )\n\n  rewritten query: select [dba.product].[name], [dba.product].price from [dba.product] [dba.product] where [dba.product].category= ?:0 \n\nTrace Statistics:\n  SELECT (time: 0, fetch: 4, fetch_time: 0, ioread: 0)\n    SCAN (index: dba.product.idx_product_category), (btree time: 0, fetch: 3, ioread: 0, readkeys: 1, filteredkeys: 0, rows: 2) (lookup time: 0, rows: 2)"
+  "plan": "Query Plan:\n  INDEX SCAN (dba.product.idx_product_category) (key range: [dba.product].category= ?:0 )\n\n  rewritten query: select [dba.product].[name], [dba.product].price from [dba.product] [dba.product] where [dba.product].category= ?:0 \n\nTrace Statistics:\n  SELECT (time: 0, fetch: 4, fetch_time: 0, ioread: 0)\n    SCAN (index: dba.product.idx_product_category), (btree time: 0, fetch: 3, ioread: 0, readkeys: 1, filteredkeys: 0, rows: 2) (lookup time: 0, rows: 2)",
+  "truncated": false
 }
 ```
 

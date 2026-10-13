@@ -535,6 +535,29 @@ class TestCubridIntegration:
             drop_users()
             admin.close()
 
+    def test_explain_query_matches_execute_query(self) -> None:
+        """Leading keyword, kept session and plan cap in explain_query (#299)."""
+        from dataclasses import replace
+
+        from cubrid_mcp_server import server
+        from cubrid_mcp_server.context import AppContext
+        from cubrid_mcp_server.database import DatabaseError
+
+        for sql in ("SELECT*FROM db_root", "(SELECT 1)"):
+            assert server.explain_query(sql)["sql"] == sql
+        connection = self.db.connect()
+        with pytest.raises(DatabaseError, match="query failed: ProgrammingError"):
+            server.explain_query("SELECT * FROM mcp_it_definitely_missing_table")
+        assert self.db.connect() is connection
+        assert "plan" in server.explain_query("SELECT 1")
+        assert self.db.connect() is connection
+        server._context = AppContext.single(
+            config=replace(self.config, max_chars=20), database=self.db
+        )
+        result = server.explain_query("SELECT * FROM db_class")
+        assert result["truncated"] is True
+        assert len(result["plan"]) == 20
+
     def test_list_serials_tool(self) -> None:
         from cubrid_mcp_server import server
 

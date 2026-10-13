@@ -22,7 +22,7 @@ from cubrid_mcp_server.safety import (
     ensure_query_statement,
     ensure_read_only,
     ensure_write_allowed,
-    strip_comments,
+    statement_keyword,
 )
 
 logger = logging.getLogger(__name__)
@@ -325,9 +325,7 @@ def explain_query(sql: str, connection: str | None = None) -> dict[str, Any]:
                 f"SQL exceeds maximum length of {config.max_sql_length} characters "
                 f"(CUBRID_MCP_MAX_SQL_LENGTH)"
             )
-        normalized = strip_comments(cleaned).strip()
-        leading = normalized.split(None, 1)[0].upper() if normalized else ""
-        if leading not in {"SELECT", "WITH"}:
+        if statement_keyword(cleaned) not in {"SELECT", "WITH"}:
             raise ValueError("explain_query only accepts SELECT or WITH statements")
         # explain_query is *intentionally* always read-only, regardless of
         # ``config.readonly``: it can only ever produce a plan for a SELECT/WITH query,
@@ -344,7 +342,11 @@ def explain_query(sql: str, connection: str | None = None) -> dict[str, Any]:
             if trace_rows and trace_rows[0]:
                 plan = str(trace_rows[0][0] or "").strip()
 
-        return {"sql": cleaned, "plan": plan}
+        # The plan of a large statement can be long; cap it like execute_query.
+        truncated = len(plan) > config.max_chars
+        if truncated:
+            plan = plan[: config.max_chars - 1] + "\u2026"
+        return {"sql": cleaned, "plan": plan, "truncated": truncated}
 
 
 @mcp.tool

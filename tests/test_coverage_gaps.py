@@ -132,7 +132,7 @@ def test_explain_query_swallows_cleanup_errors(monkeypatch: pytest.MonkeyPatch) 
     db = _CleanupFailingDB()
     monkeypatch.setattr(server, "_context", AppContext.single(config=_TEST_CONFIG, database=db))
     result = server.explain_query("SELECT 1")
-    assert result == {"sql": "SELECT 1", "plan": "plan text"}
+    assert result == {"sql": "SELECT 1", "plan": "plan text", "truncated": False}
     assert db.discarded == 1
 
 
