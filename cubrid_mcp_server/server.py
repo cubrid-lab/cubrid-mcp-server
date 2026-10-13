@@ -536,26 +536,52 @@ def schema_resource(table: str) -> str:
 
 
 def _render_rows(rows: list[tuple[Any, ...]], max_chars: int) -> dict[str, Any]:
+    """Render ``rows`` within a budget of ``max_chars`` characters.
+
+    A value counts as ``len(str(value))`` (``None`` counts 4), and the budget
+    runs across every value of every row. Rows are added while they fit whole.
+    If even the first row does not fit, it is still returned, cut to the budget
+    (see :func:`_fit_row`), so callers see *something* instead of an empty
+    result. ``truncated`` is true whenever a row was left out or a value was cut.
+    """
     output: list[list[Any]] = []
     used = 0
-    truncated = False
     for row in rows:
-        serialized = [_truncate_value(_coerce(value), max_chars) for value in row]
-        used += sum(len(str(value)) for value in serialized)
-        # Always include at least one row, even when it alone exceeds max_chars,
-        # so callers see *something* instead of an empty truncated result.
-        if used > max_chars and output:
-            truncated = True
-            break
-        output.append(serialized)
-    return {"rows": output, "truncated": truncated}
+        values = [_coerce(value) for value in row]
+        size = sum(len(str(value)) for value in values)
+        if used + size > max_chars:
+            if not output:
+                output.append(_fit_row(values, max_chars))
+            return {"rows": output, "truncated": True}
+        output.append(values)
+        used += size
+    return {"rows": output, "truncated": False}
 
 
-def _truncate_value(value: Any, limit: int) -> Any:
-    """Truncate an individual string value that alone exceeds ``limit`` characters."""
-    if isinstance(value, str) and limit > 0 and len(value) > limit:
-        return value[: limit - 1] + "\u2026"
-    return value
+def _fit_row(values: list[Any], budget: int) -> list[Any]:
+    """Cut one row to ``budget`` characters, keeping one entry per column.
+
+    Values are kept in column order while they fit. The first value that does
+    not fit is cut: a string to the remaining budget, ending in ``\u2026``; any
+    other value, or a string when at most one character is left, becomes
+    ``\u2026``. Every later value is ``\u2026`` too (an empty string stays
+    empty), so a cut row exceeds the budget by at most one character per column
+    after the cut.
+    """
+    fitted: list[Any] = []
+    remaining = budget
+    for value in values:
+        length = len(str(value))
+        if length <= remaining:
+            fitted.append(value)
+            remaining -= length
+        elif isinstance(value, str) and remaining > 1:
+            fitted.append(value[: remaining - 1] + "\u2026")
+            remaining = 0
+        else:
+            fitted.append("\u2026")
+            remaining = 0
+    return fitted
 
 
 def _coerce(value: Any) -> Any:

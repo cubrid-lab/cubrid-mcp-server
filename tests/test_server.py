@@ -474,6 +474,56 @@ def test_render_rows_returns_first_row_when_oversized() -> None:
     assert out["rows"] == [["a-ve\u2026"]]
 
 
+def test_render_rows_caps_a_wide_first_row() -> None:
+    """The budget runs across the values of the first row, not per value (#298)."""
+    rows = [tuple("x" * 3990 for _ in range(60)), ("next",)]
+    out = server._render_rows(rows, max_chars=4000)
+    assert out["truncated"] is True
+    (row,) = out["rows"]
+    assert len(row) == 60
+    assert row[0] == "x" * 3990
+    assert row[1] == "x" * 9 + "\u2026"
+    assert row[2:] == ["\u2026"] * 58
+    # At most one character per column after the cut beyond the budget.
+    assert sum(len(value) for value in row) <= 4000 + 58
+
+
+def test_render_rows_flags_a_single_cut_value() -> None:
+    out = server._render_rows([("a-very-long-only-row",)], max_chars=5)
+    assert out == {"rows": [["a-ve\u2026"]], "truncated": True}
+
+
+def test_render_rows_keeps_values_that_fit_whole() -> None:
+    out = server._render_rows([("abc", "de", "fghij")], max_chars=6)
+    assert out == {"rows": [["abc", "de", "\u2026"]], "truncated": True}
+
+
+def test_render_rows_replaces_non_strings_that_do_not_fit() -> None:
+    out = server._render_rows([(12345, 67890, None, "")], max_chars=7)
+    assert out == {"rows": [[12345, "\u2026", "\u2026", ""]], "truncated": True}
+
+
+def test_render_rows_stops_at_a_later_row_that_does_not_fit() -> None:
+    # A later row is never cut to fit: it is left out and the result is truncated.
+    out = server._render_rows([("",), ("x" * 50,)], max_chars=10)
+    assert out == {"rows": [[""]], "truncated": True}
+
+
+def test_render_rows_counts_the_budget_across_rows() -> None:
+    out = server._render_rows([("ab", "cd"), ("ef", "gh"), ("ij",)], max_chars=8)
+    assert out == {"rows": [["ab", "cd"], ["ef", "gh"]], "truncated": True}
+    out = server._render_rows([("ab", "cd"), ("ef", "gh")], max_chars=8)
+    assert out == {"rows": [["ab", "cd"], ["ef", "gh"]], "truncated": False}
+
+
+def test_execute_query_caps_a_wide_first_row(fake_db: FakeDatabase) -> None:
+    fake_db.queue([tuple("x" * 3990 for _ in range(60))])
+    result = server.execute_query("SELECT 1")
+    assert result["row_count"] == 1
+    assert result["truncated"] is True
+    assert sum(len(value) for value in result["rows"][0]) <= 4000 + 58
+
+
 # --- MCP schema resources (#124) ---
 
 

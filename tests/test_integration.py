@@ -429,6 +429,25 @@ class TestCubridIntegration:
             admin.commit()
             admin.close()
 
+    def test_execute_query_caps_a_wide_first_row(self) -> None:
+        """A wide first row stays within CUBRID_MCP_MAX_CHARS and is flagged (#298)."""
+        from dataclasses import replace
+
+        from cubrid_mcp_server import server
+        from cubrid_mcp_server.context import AppContext
+
+        server._context = AppContext.single(
+            config=replace(self.config, max_chars=4000), database=self.db
+        )
+        columns = ", ".join(f"REPEAT('x', 3990) AS c{i}" for i in range(60))
+        result = server.execute_query(f"SELECT {columns}")
+        assert result["row_count"] == 1
+        assert result["truncated"] is True
+        (row,) = result["rows"]
+        assert len(row) == 60
+        assert row[0] == "x" * 3990
+        assert sum(len(value) for value in row) <= 4000 + 58
+
     def test_list_serials_tool(self) -> None:
         from cubrid_mcp_server import server
 
