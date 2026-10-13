@@ -154,6 +154,18 @@ def test_ensure_read_only_rejects_hidden_writes(sql: str) -> None:
         "EXECUTE s",
         "DEALLOCATE PREPARE s",
         "DO 1",
+        # Method calls and session control (#297).
+        "CALL my_proc()",
+        "CALL login('dba', '') ON CLASS db_user",
+        "call login('dba', '') on class db_user",
+        "/* note */ CALL login('dba', '') ON CLASS [db_user]",
+        "EVALUATE 1 + 1",
+        "evaluate login('dba', '') ON CLASS db_user",
+        "-- note\nEVALUATE 1",
+        "KILL 3",
+        "KILL QUERY 3",
+        "kill transaction 3",
+        "/* note */ KILL 3",
     ],
 )
 def test_ensure_query_statement_rejects_write_ddl_and_tcl(sql: str) -> None:
@@ -168,8 +180,13 @@ def test_ensure_query_statement_rejects_write_ddl_and_tcl(sql: str) -> None:
         "WITH recent AS (SELECT * FROM users) SELECT * FROM recent",
         "SHOW TABLES",
         "DESC users",
-        "CALL my_proc()",
         "SELECT * FROM users FOR UPDATE",
+        # Names that only start like a rejected keyword, and a column named kill.
+        "SELECT call_count FROM users",
+        "SELECT kill FROM users",
+        # GET only reads a server setting (it returns no result set, so the
+        # database read path rejects it after the keyword check).
+        "GET OPTIMIZATION LEVEL",
     ],
 )
 def test_ensure_query_statement_allows_result_set_statements(sql: str) -> None:
@@ -185,6 +202,10 @@ def test_ensure_query_statement_allows_result_set_statements(sql: str) -> None:
         ("CREATE UNIQUE INDEX i ON users (a)", "CREATE"),
         ("DROP TABLE IF EXISTS users", "DROP"),
         ("ALTER TABLE users ADD COLUMN b INT", "ALTER"),
+        # sqlparse reads KILL and EVALUATE as names; the first word still counts.
+        ("KILL 3", "KILL"),
+        ("EVALUATE 1", "EVALUATE"),
+        ("CALL login('dba', '') ON CLASS db_user", "CALL"),
     ],
 )
 def test_ensure_query_statement_matches_first_word_of_leading_keyword(
@@ -223,6 +244,33 @@ def test_ensure_query_statement_strips_comments_before_matching() -> None:
 def test_ensure_query_statement_rejects_empty(sql: str) -> None:
     with pytest.raises(UnsafeSQLError, match="empty"):
         ensure_query_statement(sql)
+
+
+@pytest.mark.parametrize(
+    ("checker", "sql", "word"),
+    [
+        # sqlparse reads KILL, EVALUATE and other unknown words as names and
+        # returns the SELECT/UPDATE inside the parentheses as the leading
+        # keyword; the first word of the statement decides (#297).
+        (ensure_read_only, "KILL (SELECT 1)", "KILL"),
+        (ensure_read_only, "EVALUATE (SELECT 1)", "EVALUATE"),
+        (ensure_read_only, "/* c */ evaluate (SELECT 1)", "EVALUATE"),
+        (ensure_read_only, "foo SELECT 1", "FOO"),
+        (ensure_write_allowed, "EVALUATE (UPDATE t SET a = 1)", "EVALUATE"),
+        (ensure_write_allowed, "x (DELETE FROM t)", "X"),
+        (ensure_query_statement, "KILL (SELECT 1)", "KILL"),
+        (ensure_query_statement, "EVALUATE (SELECT 1)", "EVALUATE"),
+    ],
+)
+def test_checkers_match_the_first_word_of_the_statement(checker: Any, sql: str, word: str) -> None:
+    with pytest.raises(UnsafeSQLError, match=f"^{word} is not permitted"):
+        checker(sql)
+
+
+@pytest.mark.parametrize("sql", ["(SELECT 1)", "((SELECT 1))", "(SELECT 1) UNION (SELECT 2)"])
+def test_read_paths_allow_parenthesized_queries(sql: str) -> None:
+    ensure_read_only(sql)
+    ensure_query_statement(sql)
 
 
 def test_query_rejected_keywords_cover_write_keywords() -> None:

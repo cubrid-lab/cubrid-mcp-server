@@ -17,7 +17,7 @@
 - `list_indexes`, `list_serials`, and `list_class_hierarchy` expose CUBRID metadata.
 - `explain_query` returns the execution plan for a `SELECT` or `WITH` query by executing it under `SET TRACE ON` and rolling back.
 - `table_row_counts` returns bounded table counts.
-- `execute_query` runs SQL subject to the configured read-only and output limits; it is read-only even with `CUBRID_MCP_READONLY=0`.
+- `execute_query` runs SQL subject to the configured read-only and output limits; it is read-only even with `CUBRID_MCP_READONLY=0`, and it rejects `CALL`, `EVALUATE` and `KILL` there as well.
 - `health_check` verifies connectivity on demand.
 - `execute_write` runs a single `INSERT`, `UPDATE`, or `DELETE` in a transaction; it is registered only when write mode (`CUBRID_MCP_WRITE=1`) is enabled.
 

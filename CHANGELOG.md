@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Upgrade notes
+
+- **`CALL`, `EVALUATE` and `KILL` in `execute_query` with `CUBRID_MCP_READONLY=0`** — these statements now fail before execution. Call stored functions from a `SELECT` (`SELECT my_function(…)`) and evaluate expressions with `SELECT`; `KILL` is not offered by any tool.
+
 ### Fixed
 
 - **MCP `serverInfo.version` is the package version** — the server passes `__version__` to FastMCP, which otherwise reported its own version (for example `4.1.0`) in the `initialize` response.
@@ -17,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Security
 
 - **Read-only mode rejects `INCR`, `DECR`, serial advances and the click counter** — `ensure_read_only` checked only `sqlparse` keyword tokens, so `SELECT INCR(cnt) …`, `DECR(…)`, `serial.NEXT_VALUE`, `serial.NEXTVAL`, `SERIAL_NEXT_VALUE(serial, n)` and `SELECT … WITH INCREMENT FOR col` / `WITH DECREMENT FOR col` passed `execute_query` and `explain_query` and changed data. The rollback after the read does not undo these changes, and a `SELECT`-only grant does not prevent them: on CUBRID 11.4 a user granted only `SELECT` on a table increased a column in it and advanced a serial it had no grant on. Read-only mode now rejects these names when they are called or used as an attribute, in any case, bare or quoted (`"INCR"`, `[incr]`, `` `incr` ``), with whitespace or comments in between, anywhere in the statement, including subqueries and CTEs; string literals and longer names such as `incr_total` are not matched. `CURRENT_VALUE`, `CURRVAL` and `SERIAL_CURRENT_VALUE` stay allowed. A qualified column with one of these names (`t.next_value`) is now rejected. With `CUBRID_MCP_READONLY=0`, `execute_query` still does not reject these forms. `docs/SECURITY_MODEL.md`, `SECURITY.md`, `docs/TOOLS.md` and the README say that a `SELECT`-only grant does not stop them.
+- **No tool can change the session user** — with `CUBRID_MCP_READONLY=0`, `execute_query` accepted `CALL`, `EVALUATE` and `KILL`, because none of them was in its reject list. `CALL login('dba', '') ON CLASS db_user` returned a row and switched the cached shared session to `dba` for every later tool call, including `execute_write`; `KILL` ends other sessions' transactions. `execute_query` now rejects all three with `CUBRID_MCP_READONLY=0`. `execute_write` (`INSERT`/`UPDATE`/`DELETE` only) and `explain_query` (`SELECT`/`WITH` only) already rejected them, and on CUBRID 10.2 and 11.4 the server rejects `login` called inside a `SELECT`, `INSERT`, `UPDATE` or `DELETE`. All three checks now also match the first word of the statement: `sqlparse` reads `KILL` and `EVALUATE` as names, so `KILL (SELECT 1)` and `EVALUATE (SELECT 1)` passed read-only mode as a `SELECT`, and `EVALUATE (UPDATE …)` passed the write check as an `UPDATE`. `LOCK` is not a CUBRID statement (a syntax error on 10.2 and 11.4) and `GET` only reads a server setting, so neither is added. `README.md`, `SECURITY.md`, `docs/SECURITY_MODEL.md`, `docs/TOOLS.md`, `llms.txt` and the Korean translations list the new keywords.
 
 ### Documentation
 

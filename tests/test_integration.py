@@ -351,6 +351,84 @@ class TestCubridIntegration:
             other.close()
             self.db.execute_write(f"DROP TABLE IF EXISTS {table}")
 
+    def test_session_user_cannot_change_through_any_tool(self) -> None:
+        """CALL login, EVALUATE and KILL are rejected with the whitelist off (#297).
+
+        The control call below shows that ``CALL login(...) ON CLASS db_user``
+        switches a session to the given user; through the tools it never runs,
+        so the shared session keeps its user for every later call.
+        """
+        from dataclasses import replace
+
+        import pycubrid
+
+        from cubrid_mcp_server import server
+        from cubrid_mcp_server.context import AppContext
+        from cubrid_mcp_server.database import Database
+        from cubrid_mcp_server.safety import UnsafeSQLError
+
+        user = "mcp_it_login_user"
+        owner, owner_password = self.config.user, self.config.password or ""
+        login = f"CALL login('{owner}', '{owner_password}') ON CLASS db_user"
+        admin = self._second_session()
+        try:
+            cursor = admin.cursor()
+            cursor.execute(f"SELECT COUNT(*) FROM db_user WHERE name = '{user.upper()}'")
+            if cursor.fetchall()[0][0]:
+                cursor.execute(f"DROP USER {user}")
+            cursor.execute(f"CREATE USER {user} PASSWORD 'pw297'")
+            admin.commit()
+
+            # Control: sent directly, CALL login changes the session user.
+            limited = pycubrid.connect(
+                host=self.config.host,
+                port=self.config.port,
+                user=user,
+                password="pw297",
+                database=self.config.database,
+                connect_timeout=10,
+                read_timeout=30,
+            )
+            try:
+                limited_cursor = limited.cursor()
+                limited_cursor.execute(login)
+                limited_cursor.fetchall()
+                limited_cursor.execute("SELECT CURRENT_USER")
+                assert limited_cursor.fetchall() == [(owner.upper(),)]
+            finally:
+                limited.close()
+
+            config = replace(
+                self.config, user=user, password="pw297", readonly=False, write_enabled=True
+            )
+            database = Database(config)
+            server._context = AppContext.single(config=config, database=database)
+            try:
+                for sql in (
+                    login,
+                    f"call LOGIN('{owner}', '{owner_password}') on class [db_user]",
+                    f"EVALUATE login('{owner}', '{owner_password}') ON CLASS db_user",
+                    "EVALUATE 1 + 1",
+                    "KILL 999999",
+                ):
+                    with pytest.raises(UnsafeSQLError, match="not permitted in execute_query"):
+                        server.execute_query(sql)
+                    # sqlparse finds no keyword in KILL or EVALUATE statements.
+                    with pytest.raises(UnsafeSQLError, match="write mode|leading SQL keyword"):
+                        server.execute_write(sql)
+                    with pytest.raises(ValueError, match="only accepts SELECT or WITH"):
+                        server.explain_query(sql)
+                assert server.execute_query("SELECT CURRENT_USER")["rows"] == [[user.upper()]]
+            finally:
+                database.close()
+        finally:
+            cursor = admin.cursor()
+            cursor.execute(f"SELECT COUNT(*) FROM db_user WHERE name = '{user.upper()}'")
+            if cursor.fetchall()[0][0]:
+                cursor.execute(f"DROP USER {user}")
+            admin.commit()
+            admin.close()
+
     def test_list_serials_tool(self) -> None:
         from cubrid_mcp_server import server
 

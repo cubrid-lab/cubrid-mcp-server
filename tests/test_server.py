@@ -1130,8 +1130,8 @@ def test_execute_query_no_result_set_rolls_back_and_keeps_connection(
     # A statement the keyword check lets through but that returns no result set.
     db, conn = _whitelist_off_db(monkeypatch, returns_result_set=False)
     with pytest.raises(ValueError, match="no result set; execute_query is read-only"):
-        server.execute_query("CALL my_proc()")
-    assert conn.executed == ["CALL my_proc()"]
+        server.execute_query("GET OPTIMIZATION LEVEL")
+    assert conn.executed == ["GET OPTIMIZATION LEVEL"]
     assert conn.rollbacks == 1
     assert conn.commits == 0
     assert conn.closed is False

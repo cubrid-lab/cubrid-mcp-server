@@ -32,7 +32,7 @@ Additional hardening:
 
 ## Layer 2 — code-level read-only whitelist
 
-When `CUBRID_MCP_READONLY=1` (the default) the server parses every statement with `sqlparse` and rejects anything that is not `SELECT`, `SHOW`, `DESC`, `DESCRIBE`, or `WITH` (CTE). CUBRID has no `EXPLAIN` statement; use the `explain_query` tool for execution plans. Multi-statement input is rejected. Comments, quotes and statement boundaries are read with CUBRID's rules, not `sqlparse`'s: `--`, `//` and `/* ... */` are comments (block comments do not nest), `#` is not a comment, and a backslash is an ordinary character inside quotes. Input whose quote boundaries depend on whether a backslash escapes a quote (the server parameter `no_backslash_escapes`), or that has an unterminated quote, is rejected.
+When `CUBRID_MCP_READONLY=1` (the default) the server parses every statement with `sqlparse` and rejects anything that is not `SELECT`, `SHOW`, `DESC`, `DESCRIBE`, or `WITH` (CTE). CUBRID has no `EXPLAIN` statement; use the `explain_query` tool for execution plans. Multi-statement input is rejected. Comments, quotes and statement boundaries are read with CUBRID's rules, not `sqlparse`'s: `--`, `//` and `/* ... */` are comments (block comments do not nest), `#` is not a comment, and a backslash is an ordinary character inside quotes. Input whose quote boundaries depend on whether a backslash escapes a quote (the server parameter `no_backslash_escapes`), or that has an unterminated quote, is rejected. The first word of the statement must itself be an allowed keyword, so `KILL (SELECT 1)` or `EVALUATE (SELECT 1)` is not read as a `SELECT`.
 
 Read-only mode also rejects the CUBRID forms that change data inside a `SELECT`, which a `SELECT`-only grant does not prevent (see Layer 1): the functions `INCR` and `DECR`, the serial advances `NEXT_VALUE`, `NEXTVAL` and `SERIAL_NEXT_VALUE`, and the click counter `WITH INCREMENT FOR` / `WITH DECREMENT FOR`. A name is matched when it is called (followed by `(`) or used as an attribute (after `.`, as in `owner.serial.NEXT_VALUE`), in any case, bare or quoted (`"INCR"`, `[incr]`, `` `incr` ``), with any whitespace or comments in between, anywhere in the statement, including subqueries and CTEs. String literals and longer names such as `incr_total` are not matched. `CURRENT_VALUE`, `CURRVAL` and `SERIAL_CURRENT_VALUE` only read a serial and stay allowed. A column that has one of these names is rejected when it is qualified (`t.next_value`); select it unqualified instead.
 
@@ -43,7 +43,7 @@ You can disable this layer by setting `CUBRID_MCP_READONLY=0`, but only do so wh
 - the underlying DB user is already read-only (Layer 1 is in place), **and**
 - you genuinely need statements outside the whitelist (for example, CUBRID administrative `SHOW` variants that confuse the parser).
 
-With `CUBRID_MCP_READONLY=0`, `execute_query` does not reject `INCR`, `DECR`, serial advances or the click counter, so a statement that uses them changes data although it returns a result set; `explain_query` still rejects them.
+With `CUBRID_MCP_READONLY=0`, `execute_query` still rejects statements that lead with a write, DDL or transaction-control keyword, method calls (`CALL`, `EVALUATE`) and `KILL`. `CALL login(...) ON CLASS db_user` would otherwise switch the user of the cached shared session for every later tool call; `execute_write` and `explain_query` reject it too, so no tool can change the session user. It does not reject `INCR`, `DECR`, serial advances or the click counter, so a statement that uses them changes data although it returns a result set; `explain_query` still rejects them.
 
 **`explain_query` always applies the read-only checks**, independent of `CUBRID_MCP_READONLY`; only `execute_query` honors `CUBRID_MCP_READONLY=0`. Note that `explain_query` executes the `SELECT`/`WITH` statement under `SET TRACE ON` to produce the trace and then rolls the transaction back as best-effort cleanup, so it uses real database resources.
 
@@ -86,7 +86,8 @@ Because this server exposes database access to an LLM via MCP, the threat surfac
 - Schema changes — `CREATE`, `DROP`, `ALTER`, `TRUNCATE`, `RENAME`
 - Privilege escalation — `GRANT`, `REVOKE`
 - Transaction control — `COMMIT`, `ROLLBACK`
-- Server-side procedures — `CALL`, `EXECUTE`
+- Server-side procedures and methods — `CALL`, `EXECUTE`, `EVALUATE`, including `CALL login(...) ON CLASS db_user`, which would change the session user
+- Ending other sessions' transactions — `KILL`
 - Row-level locking — `SELECT ... FOR UPDATE`, `LOCK`
 - Multi-statement injection — `;` separated batches are rejected outright
 - Comment-based obfuscation — SQL comments (`--`, `//`, `/* ... */`, read with CUBRID's rules) are stripped before the keyword scan, so a comment cannot hide the real leading keyword

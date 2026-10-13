@@ -34,8 +34,15 @@ WRITE_KEYWORDS: frozenset[str] = frozenset({"INSERT", "UPDATE", "DELETE"})
 # is disabled (CUBRID_MCP_READONLY=0): writes, DDL and transaction control. The
 # tool only serves result-set reads; writes go through ``execute_write``. Consulted
 # by :func:`ensure_query_statement`; the read-only default path is unchanged.
+# ``CALL`` and ``EVALUATE`` run methods, and ``CALL login(...) ON CLASS db_user``
+# changes the user of the shared session for every later tool call; ``KILL`` ends
+# other sessions' transactions. ``LOCK`` is not a CUBRID statement (a syntax error
+# on 10.2 and 11.4) and ``GET`` only reads a server setting, so neither is listed.
 QUERY_REJECTED_KEYWORDS: frozenset[str] = WRITE_KEYWORDS | frozenset(
     {
+        "CALL",
+        "EVALUATE",
+        "KILL",
         "REPLACE",
         "MERGE",
         "CREATE",
@@ -265,7 +272,7 @@ def ensure_read_only(sql: str) -> None:
     # Comments are stripped before parsing, so keywords inside them cannot
     # confuse the checker or hide the leading keyword (defence-in-depth).
     statement, more_by_cubrid = _parse(sql, "read-only mode")
-    keyword = _leading_keyword(statement)
+    keyword = _first_name(sql) or _leading_keyword(statement)
     if keyword is None:
         raise UnsafeSQLError("could not determine the leading SQL keyword")
     if keyword.upper() not in READ_ONLY_KEYWORDS:
@@ -296,20 +303,21 @@ def ensure_query_statement(sql: str) -> None:
     multi-statement input are rejected, as in :func:`ensure_read_only`. The
     first word of the leading keyword is matched against
     :data:`QUERY_REJECTED_KEYWORDS`, so ``CREATE OR REPLACE ...`` is rejected
-    like ``CREATE``. Other statements pass; the database read path still
+    like ``CREATE``. So is the first word of the statement (see
+    :func:`_first_name`). Other statements pass; the database read path still
     rejects any that return no result set.
     """
     # Same parsing as ensure_read_only: a leading comment must not hide the real
     # leading keyword, and comment-only input counts as empty.
     statement, more_by_cubrid = _parse(sql, "execute_query")
     keyword = _leading_keyword(statement)
-    first_word = keyword.split()[0].upper() if keyword is not None else None
-    if first_word in QUERY_REJECTED_KEYWORDS:
-        raise UnsafeSQLError(
-            f"{first_word} is not permitted in execute_query, which only runs "
-            "statements that return a result set; use execute_write for "
-            "INSERT/UPDATE/DELETE (requires CUBRID_MCP_WRITE=1)"
-        )
+    leading_word = keyword.split()[0].upper() if keyword is not None else None
+    for word in (_first_name(sql), leading_word):
+        if word in QUERY_REJECTED_KEYWORDS:
+            raise UnsafeSQLError(
+                f"{word} is not permitted in execute_query, which only runs reads; "
+                "use execute_write for INSERT/UPDATE/DELETE (requires CUBRID_MCP_WRITE=1)"
+            )
     if more_by_cubrid:
         raise _multi_statement_error("execute_query")
 
@@ -324,7 +332,7 @@ def ensure_write_allowed(sql: str) -> None:
     default path (:func:`ensure_read_only`) is intentionally left unchanged.
     """
     statement, more_by_cubrid = _parse(sql, "write mode")
-    keyword = _leading_keyword(statement)
+    keyword = _first_name(sql) or _leading_keyword(statement)
     if keyword is None:
         raise UnsafeSQLError("could not determine the leading SQL keyword")
     if keyword.upper() not in WRITE_KEYWORDS:
@@ -339,6 +347,20 @@ def ensure_write_allowed(sql: str) -> None:
 def _is_non_empty(statement: Statement) -> bool:
     stripped = statement.value.strip().rstrip(";").strip()
     return bool(stripped)
+
+
+def _first_name(sql: str) -> str | None:
+    """Return the first word of ``sql`` in upper case, or ``None`` if it is not a name.
+
+    ``sqlparse`` reads ``KILL`` and ``EVALUATE`` as names, not keywords, so
+    :func:`_leading_keyword` skips them and returns a later keyword, such as the
+    ``SELECT`` of ``KILL (SELECT 1)``. The first word decides which statement
+    CUBRID runs, so the checks read it with CUBRID's lexical rules; ``(`` and
+    other punctuation are not names, so ``(SELECT 1)`` falls back to the
+    leading keyword. Callers have already rejected empty input.
+    """
+    kind, value = _code_tokens(sql)[0]
+    return value if kind == "name" else None
 
 
 def _leading_keyword(statement: Statement) -> str | None:

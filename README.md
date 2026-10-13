@@ -81,7 +81,7 @@ Optional settings:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `CUBRID_MCP_READONLY` | `1` | Enforce read-only SQL whitelist. `0` relaxes the whitelist only; `execute_query` still rejects write, DDL and transaction-control statements (use `execute_write`) |
+| `CUBRID_MCP_READONLY` | `1` | Enforce read-only SQL whitelist. `0` relaxes the whitelist only; `execute_query` still rejects write, DDL, transaction-control, `CALL`, `EVALUATE` and `KILL` statements (use `execute_write`) |
 | `CUBRID_MCP_MAX_CHARS` | `4000` | Max characters in query output |
 | `CUBRID_MCP_MAX_ROWS` | `1000` | Max rows returned by `execute_query` before truncation |
 | `CUBRID_MCP_MAX_SQL_LENGTH` | `65536` | Max length (characters) of a submitted SQL statement |
@@ -242,7 +242,7 @@ Constraints and rationale:
 - **Single-statement DML only.** Standalone reads, DDL (`CREATE`/`ALTER`/`DROP`/`TRUNCATE`), transaction-control, and multi-statement input are rejected. (A single DML statement may still legally contain subqueries, e.g. `INSERT ... SELECT`.)
 - **DDL is intentionally unsupported.** `execute_write` is a DML tool (`INSERT`/`UPDATE`/`DELETE`) and `execute_query` is read-only, so `CREATE`/`ALTER`/`DROP`/`TRUNCATE` are rejected by both. (The server runs pycubrid with autocommit off; on the CUBRID versions tested (10.2, 11.2, 11.4) DDL is transactional and is rolled back if it is not committed, so the exclusion rests on the tool contracts, not on DDL auto-commit.)
 - **Write mode is per-connection.** `execute_write` accepts the same optional `connection` argument as the read tools and runs against that connection; a connection whose `CUBRID_<NAME>_MCP_WRITE` is off refuses the write even when another connection enables it.
-- `execute_query` never becomes a write path through the write-mode flag or `CUBRID_MCP_READONLY`: with `CUBRID_MCP_READONLY=0` it still rejects write, DDL and transaction-control statements before they run, and rolls back any statement that returns no result set, but it does not reject `INCR`, `DECR`, serial advances or the click counter, which change data inside a `SELECT`. Clients that sent writes through `execute_query` with `CUBRID_MCP_READONLY=0` must switch to `execute_write`.
+- `execute_query` never becomes a write path through the write-mode flag or `CUBRID_MCP_READONLY`: with `CUBRID_MCP_READONLY=0` it still rejects write, DDL and transaction-control statements, method calls (`CALL`, `EVALUATE`) and `KILL` before they run, so `CALL login(...)` cannot change the session user, and rolls back any statement that returns no result set, but it does not reject `INCR`, `DECR`, serial advances or the click counter, which change data inside a `SELECT`. Clients that sent writes through `execute_query` with `CUBRID_MCP_READONLY=0` must switch to `execute_write`.
 - Enforcement is defense-in-depth; still run the server as a CUBRID user granted only the privileges it needs. See [`SECURITY.md`](./SECURITY.md).
 
 ## Logging
