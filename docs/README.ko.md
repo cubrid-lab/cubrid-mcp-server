@@ -210,7 +210,7 @@ cubrid-mcp-server
 - **단일 DML 문만 허용.** 독립 실행형 읽기, DDL(`CREATE`/`ALTER`/`DROP`/`TRUNCATE`), 트랜잭션 제어, 다중 문장 입력은 거부됩니다. (단일 DML 안의 서브쿼리는 합법적으로 허용됩니다.)
 - **DDL은 의도적으로 미지원.** `execute_write`는 DML 도구(`INSERT`/`UPDATE`/`DELETE`)이고 `execute_query`는 읽기 전용이므로 `CREATE`/`ALTER`/`DROP`/`TRUNCATE`는 양쪽 모두에서 거부됩니다. (서버는 autocommit을 끈 pycubrid를 사용하며, 테스트한 CUBRID 버전(10.2, 11.2, 11.4)에서 DDL은 트랜잭션에 속해 커밋하지 않으면 롤백됩니다. 따라서 이 제외는 DDL 자동 커밋이 아니라 도구 계약에 근거합니다.)
 - **쓰기 모드는 연결 단위.** 읽기 도구와 동일한 `connection` 인자를 받으며, 대상 연결의 설정으로 강제됩니다.
-- `execute_query`는 쓰기 모드 플래그나 `CUBRID_MCP_READONLY` 때문에 쓰기 경로가 되지 않습니다. `CUBRID_MCP_READONLY=0`이어도 쓰기·DDL·트랜잭션 제어 문장, 메서드 호출(`CALL`, `EVALUATE`)과 `KILL`은 실행 전에 거부되어 `CALL login(...)`으로 세션 사용자를 바꿀 수 없고, 결과 집합을 반환하지 않는 문장은 롤백됩니다. 다만 `SELECT` 안에서 데이터를 바꾸는 `INCR`, `DECR`, 시리얼 증가, 클릭 카운터는 거부하지 않습니다. `CUBRID_MCP_READONLY=0`으로 `execute_query`를 통해 쓰기를 보내던 클라이언트는 `execute_write`로 전환해야 합니다.
+- `execute_query`는 쓰기 모드 플래그나 `CUBRID_MCP_READONLY` 때문에 쓰기 경로가 되지 않습니다. `CUBRID_MCP_READONLY=0`이어도 쓰기·DDL·트랜잭션 제어 문장, 메서드 호출(`CALL`, `EVALUATE`)과 `KILL`은 실행 전에 거부되어 `CALL login(...)`으로 세션 사용자를 바꿀 수 없고, `SELECT` 안에서 데이터를 바꾸는 `INCR`, `DECR`, 시리얼 증가, 클릭 카운터도 거부되며, 결과 집합을 반환하지 않는 문장은 롤백됩니다. `CUBRID_MCP_READONLY=0`으로 `execute_query`를 통해 쓰기를 보내던 클라이언트는 `execute_write`로 전환해야 합니다.
 
 ## 로깅
 

@@ -1165,6 +1165,18 @@ def test_execute_query_rejects_side_effect_functions(fake_db: FakeDatabase, sql:
 
 
 @pytest.mark.parametrize("sql", _SIDE_EFFECT_SELECTS)
+def test_execute_query_rejects_side_effect_functions_when_whitelist_off(
+    monkeypatch: pytest.MonkeyPatch, sql: str
+) -> None:
+    """CUBRID_MCP_READONLY=0 does not let these forms through either (#301)."""
+    _db, conn = _whitelist_off_db(monkeypatch)
+    with pytest.raises(UnsafeSQLError, match="is not permitted in execute_query.*execute_write"):
+        server.execute_query(sql)
+    assert conn.executed == []
+    assert conn.commits == 0
+
+
+@pytest.mark.parametrize("sql", _SIDE_EFFECT_SELECTS)
 def test_explain_query_rejects_side_effect_functions(
     sql: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:

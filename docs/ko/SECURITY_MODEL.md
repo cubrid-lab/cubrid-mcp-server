@@ -23,7 +23,7 @@ GRANT SELECT ON orders TO mcp_reader;
 
 모델에 필요한 테이블에만 `SELECT`를 부여하고, 계정에는 필요한 최소 권한만 부여하고 DDL 권한은 부여하지 마세요.
 
-> **`SELECT` 권한만으로 모든 쓰기를 막을 수는 없습니다.** CUBRID에서는 테이블에 `SELECT`만 할 수 있는 사용자도 읽기 자체로 데이터를 바꿀 수 있습니다. `INCR(col)`과 `DECR(col)`은 읽은 행을 갱신하고, 클릭 카운터 `SELECT ... WITH INCREMENT FOR col`(또는 `WITH DECREMENT FOR col`)도 같으며, `serial.NEXT_VALUE`, `serial.NEXTVAL`, `SERIAL_NEXT_VALUE(serial, n)`은 시리얼을 증가시킵니다. 사용자에게 아무 권한도 부여하지 않은 시리얼도 마찬가지입니다. 이 변경은 유지되며, 모든 읽기를 끝내는 롤백으로 되돌려지지 않습니다. 읽기 전용 검사(계층 2)는 이 형태를 거부하지만, `CUBRID_MCP_READONLY=0`일 때 `execute_query`는 거부하지 않습니다.
+> **`SELECT` 권한만으로 모든 쓰기를 막을 수는 없습니다.** CUBRID에서는 테이블에 `SELECT`만 할 수 있는 사용자도 읽기 자체로 데이터를 바꿀 수 있습니다. `INCR(col)`과 `DECR(col)`은 읽은 행을 갱신하고, 클릭 카운터 `SELECT ... WITH INCREMENT FOR col`(또는 `WITH DECREMENT FOR col`)도 같으며, `serial.NEXT_VALUE`, `serial.NEXTVAL`, `SERIAL_NEXT_VALUE(serial, n)`은 시리얼을 증가시킵니다. 사용자에게 아무 권한도 부여하지 않은 시리얼도 마찬가지입니다. 이 변경은 유지되며, 모든 읽기를 끝내는 롤백으로 되돌려지지 않습니다. 읽기 전용 검사(계층 2)는 이 형태를 거부하며, `CUBRID_MCP_READONLY=0`일 때도 `execute_query`는 이를 거부합니다.
 
 추가 강화: 시크릿 매니저의 긴 무작위 비밀번호 사용, 정기적 로테이션, 스키마 전체가 아닌 테이블 단위 부여, MCP 서버 호스트만 접근 가능한 네트워크에 CUBRID 두기. 전체 정책은 [`SECURITY.md`](https://github.com/cubrid-lab/cubrid-mcp-server/blob/main/SECURITY.md)를 참고하세요.
 
@@ -31,13 +31,13 @@ GRANT SELECT ON orders TO mcp_reader;
 
 서버는 **기본적으로 읽기 전용**입니다. `CUBRID_MCP_READONLY=1`(기본값)이면 모든 문장이 `sqlparse`로 파싱되어 `SELECT`, `SHOW`, `DESC`, `DESCRIBE`, `WITH`(CTE)가 아니면 거부됩니다. CUBRID에는 `EXPLAIN` 문이 없으므로 실행 계획은 `explain_query` 도구를 사용하세요. 다중 문장 입력은 거부됩니다. 주석, 따옴표, 문장 경계는 `sqlparse`가 아니라 CUBRID 규칙으로 읽습니다. `--`, `//`, `/* ... */`가 주석이고(블록 주석은 중첩되지 않음), `#`은 주석이 아니며, 따옴표 안의 백슬래시는 일반 문자입니다. 백슬래시가 따옴표를 이스케이프하는지(서버 파라미터 `no_backslash_escapes`)에 따라 따옴표 경계가 달라지는 입력과 닫히지 않은 따옴표가 있는 입력은 거부됩니다. 문장의 첫 단어 자체도 허용된 키워드여야 합니다. `sqlparse`는 `KILL`, `EVALUATE`처럼 모르는 단어를 이름으로 읽으므로, 그렇지 않으면 `KILL (SELECT 1)`이 `SELECT`로 통과합니다. 쓰기 경로도 같은 방식으로 첫 단어를 `INSERT`, `UPDATE`, `DELETE`와 비교합니다.
 
-읽기 전용 모드는 `SELECT` 안에서 데이터를 바꾸는 CUBRID 형태도 거부합니다. 이 형태는 `SELECT` 권한만으로 막을 수 없습니다(계층 1 참고). 대상은 함수 `INCR`, `DECR`, 시리얼 증가 `NEXT_VALUE`, `NEXTVAL`, `SERIAL_NEXT_VALUE`, 클릭 카운터 `WITH INCREMENT FOR` / `WITH DECREMENT FOR`입니다. 이름은 호출될 때(`(`가 뒤따를 때)나 속성으로 쓰일 때(`owner.serial.NEXT_VALUE`처럼 `.` 뒤에 올 때) 대소문자와 무관하게, 따옴표 없이든 따옴표 안이든(`"INCR"`, `[incr]`, `` `incr` ``), 사이에 공백이나 주석이 있어도, 서브쿼리와 CTE를 포함해 문장 어디에서든 찾습니다. 문자열 리터럴과 `incr_total` 같은 더 긴 이름은 해당하지 않습니다. `CURRENT_VALUE`, `CURRVAL`, `SERIAL_CURRENT_VALUE`는 시리얼을 읽기만 하므로 계속 허용됩니다. 이런 이름의 컬럼은 한정해서(`t.next_value`) 쓰면 거부되므로 한정 없이 선택하세요.
+읽기 전용 모드는 `SELECT` 안에서 데이터를 바꾸는 CUBRID 형태도 거부합니다. 이 형태는 `SELECT` 권한만으로 막을 수 없습니다(계층 1 참고). 대상은 함수 `INCR`, `DECR`, 시리얼 증가 `NEXT_VALUE`, `NEXTVAL`, `SERIAL_NEXT_VALUE`, 클릭 카운터 `WITH INCREMENT FOR` / `WITH DECREMENT FOR`입니다. 이름은 호출될 때(`(`가 뒤따를 때)나 속성으로 쓰일 때(`owner.serial.NEXT_VALUE`처럼 `.` 뒤에 올 때) 대소문자와 무관하게, 따옴표 없이든 따옴표 안이든(`"INCR"`, `[incr]`, `` `incr` ``), 사이에 공백이나 주석이 있어도, 서브쿼리와 CTE를 포함해 문장 어디에서든 찾습니다. 문자열 리터럴과 `incr_total`, `incr#`, `#incr` 같은 더 긴 이름(`#`은 첫 글자로도 쓰이는 식별자 문자)은 해당하지 않습니다. `CURRENT_VALUE`, `CURRVAL`, `SERIAL_CURRENT_VALUE`는 시리얼을 읽기만 하므로 계속 허용됩니다. 이런 이름의 컬럼은 한정해서(`t.next_value`) 쓰면 거부되므로 한정 없이 선택하세요.
 
 > SQL 키워드 검사는 가드레일이자 심층 방어이며 보안 경계가 아닙니다. 명백한 실수를 막는 클라이언트 측 최선 노력(best-effort) 필터일 뿐이며, 주된 통제는 전용 최소 권한 데이터베이스 계정(계층 1)입니다. 모델에 필요한 테이블에만 `SELECT`를 부여하세요.
 
-`CUBRID_MCP_READONLY=0`은 이 화이트리스트를 완화합니다 — 데이터베이스 사용자가 이미 읽기 전용이고 파서가 오판하는 결과 집합 문장이 필요할 때만 사용하세요. 이 설정이 쓰기 키워드로 시작하는 문장에 대해 `execute_query`를 쓰기 경로로 만들지는 **않습니다**: `execute_query`는 쓰기·DDL·트랜잭션 제어 키워드(`INSERT`, `UPDATE`, `DELETE`, `REPLACE`, `MERGE`, `CREATE`, `ALTER`, `DROP`, `TRUNCATE`, `RENAME`, `GRANT`, `REVOKE`, `COMMIT`, `ROLLBACK`, `SAVEPOINT`, `SET`, `PREPARE`, `EXECUTE`, `DEALLOCATE`, `DO`), 메서드 호출(`CALL`, `EVALUATE`)과 `KILL`로 시작하는 문장(선두 키워드와 문장의 첫 단어로 비교)과 다중 문장·빈 입력을 데이터베이스에 도달하기 전에 거부하고, 커밋하지 않으며, 결과 집합을 반환하지 않는 문장(연결은 유지)과 성공한 모든 읽기를 롤백합니다. `explain_query`는 이 플래그와 무관하게 **항상** 읽기 전용 검사를 적용합니다(아래 참고). 이 키워드 검사는 보안 경계가 아니라 가드레일이며, 보안 경계는 여전히 읽기 전용 데이터베이스 계정입니다. 쓰기에는 `execute_write`(옵트인 쓰기 모드)를 사용하세요. `CUBRID_MCP_READONLY=0`으로 `execute_query`를 통해 쓰기를 보내던 클라이언트는 이것으로 전환해야 합니다. `CALL login(...) ON CLASS db_user`는 캐시된 공유 세션의 사용자를 이후의 모든 도구 호출(`execute_write` 포함)에 대해 바꾸므로 `CALL`을 거부합니다. `execute_write`(`INSERT`/`UPDATE`/`DELETE`만)와 `explain_query`(`SELECT`/`WITH`만)도 이를 거부하므로 어떤 도구로도 세션 사용자를 바꿀 수 없습니다. `KILL`은 다른 세션의 트랜잭션을 종료합니다. `LOCK`은 CUBRID 문장이 아니고 `GET`은 서버 설정을 읽기만 하므로 이 검사는 둘을 거부하지 않습니다.
+`CUBRID_MCP_READONLY=0`은 이 화이트리스트를 완화합니다 — 데이터베이스 사용자가 이미 읽기 전용이고 파서가 오판하는 결과 집합 문장이 필요할 때만 사용하세요. 이 설정이 `execute_query`를 쓰기 경로로 만들지는 **않습니다**: `execute_query`는 쓰기·DDL·트랜잭션 제어 키워드(`INSERT`, `UPDATE`, `DELETE`, `REPLACE`, `MERGE`, `CREATE`, `ALTER`, `DROP`, `TRUNCATE`, `RENAME`, `GRANT`, `REVOKE`, `COMMIT`, `ROLLBACK`, `SAVEPOINT`, `SET`, `PREPARE`, `EXECUTE`, `DEALLOCATE`, `DO`), 메서드 호출(`CALL`, `EVALUATE`)과 `KILL`로 시작하는 문장(선두 키워드와 문장의 첫 단어로 비교)과 다중 문장·빈 입력을 데이터베이스에 도달하기 전에 거부하고, 커밋하지 않으며, 결과 집합을 반환하지 않는 문장(연결은 유지)과 성공한 모든 읽기를 롤백합니다. `explain_query`는 이 플래그와 무관하게 **항상** 읽기 전용 검사를 적용합니다(아래 참고). 이 키워드 검사는 보안 경계가 아니라 가드레일이며, 보안 경계는 여전히 읽기 전용 데이터베이스 계정입니다. 쓰기에는 `execute_write`(옵트인 쓰기 모드)를 사용하세요. `CUBRID_MCP_READONLY=0`으로 `execute_query`를 통해 쓰기를 보내던 클라이언트는 이것으로 전환해야 합니다. `CALL login(...) ON CLASS db_user`는 캐시된 공유 세션의 사용자를 이후의 모든 도구 호출(`execute_write` 포함)에 대해 바꾸므로 `CALL`을 거부합니다. `execute_write`(`INSERT`/`UPDATE`/`DELETE`만)와 `explain_query`(`SELECT`/`WITH`만)도 이를 거부하므로 어떤 도구로도 세션 사용자를 바꿀 수 없습니다. `KILL`은 다른 세션의 트랜잭션을 종료합니다. `LOCK`은 CUBRID 문장이 아니고 `GET`은 서버 설정을 읽기만 하므로 이 검사는 둘을 거부하지 않습니다.
 
-`CUBRID_MCP_READONLY=0`이면 `execute_query`는 `INCR`, `DECR`, 시리얼 증가, 클릭 카운터를 거부하지 않으므로, 이를 사용하는 문장은 결과 집합을 반환하더라도 데이터를 바꿉니다. `explain_query`는 여전히 거부합니다.
+`CUBRID_MCP_READONLY=0`이어도 `execute_query`는 읽기 전용 모드와 같은 방식으로 `INCR`, `DECR`, 시리얼 증가, 클릭 카운터를 거부합니다. 이들은 결과 집합을 반환하는 문장에서도 데이터를 바꾸며, 쓰기는 `execute_write`의 몫입니다.
 
 ## 계층 2b — 옵트인 쓰기 모드 (`CUBRID_MCP_WRITE`)
 
@@ -48,7 +48,7 @@ GRANT SELECT ON orders TO mcp_reader;
 - **DDL은 의도적으로 미지원.** `execute_write`는 DML 도구(`INSERT`/`UPDATE`/`DELETE`)이고 `execute_query`는 읽기 전용이므로 `CREATE`/`ALTER`/`DROP`/`TRUNCATE`는 양쪽 모두에서 거부됩니다. (서버는 autocommit을 끈 pycubrid를 사용하며, 테스트한 CUBRID 버전(10.2, 11.2, 11.4)에서 DDL은 트랜잭션에 속해 커밋하지 않으면 롤백됩니다. 따라서 이 제외는 DDL 자동 커밋이 아니라 도구 계약에 근거합니다.)
 - **비활성 시 미등록.** 쓰기 모드가 꺼져 있으면 `execute_write`는 MCP 기능 탐색에 나타나지 않습니다 — 도구 자체가 제공되지 않습니다. SQL 검사는 가드레일이므로 실제로 쓰기를 제한하는 것은 여전히 데이터베이스 계정입니다.
 - **연결별 게이팅.** 멀티커넥션에서 어떤 연결이 쓰기를 켜면 도구가 등록되지만, 매 쓰기는 **대상** 연결의 설정으로 강제됩니다 — 쓰기가 꺼진 연결은 다른 연결이 켜져 있어도 거부합니다.
-- `execute_query`는 쓰기 플래그의 영향을 받지 않으며, 쓰기 모드가 이를 쓰기 경로로 만들지 않습니다(`CUBRID_MCP_READONLY=0`이 허용하는 `SELECT` 부작용은 계층 2 참고).
+- `execute_query`는 쓰기 플래그의 영향을 받지 않으며, 쓰기 모드가 이를 쓰기 경로로 만들지 않습니다(계층 2의 `SELECT` 부작용은 `CUBRID_MCP_READONLY=0`일 때도 거부합니다).
 
 ### `explain_query`는 문장을 실행합니다
 

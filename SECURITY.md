@@ -28,7 +28,7 @@ Additional hardening:
 - If the LLM only needs a subset of tables, grant `SELECT` on those tables specifically rather than the whole schema.
 - Restrict network reachability: run CUBRID on a private network and only expose it to the host running the MCP server.
 
-> **A `SELECT`-only grant does not stop every write.** CUBRID lets a user who may only `SELECT` from a table change data through the read itself: `INCR(col)` and `DECR(col)` update the row they read, the click counter `SELECT ... WITH INCREMENT FOR col` (or `WITH DECREMENT FOR col`) does the same, and `serial.NEXT_VALUE`, `serial.NEXTVAL` and `SERIAL_NEXT_VALUE(serial, n)` advance a serial, even one the user was granted nothing on. These changes persist: the rollback that ends every read does not undo them. The read-only checks (Layer 2) reject these forms; with `CUBRID_MCP_READONLY=0`, `execute_query` does not.
+> **A `SELECT`-only grant does not stop every write.** CUBRID lets a user who may only `SELECT` from a table change data through the read itself: `INCR(col)` and `DECR(col)` update the row they read, the click counter `SELECT ... WITH INCREMENT FOR col` (or `WITH DECREMENT FOR col`) does the same, and `serial.NEXT_VALUE`, `serial.NEXTVAL` and `SERIAL_NEXT_VALUE(serial, n)` advance a serial, even one the user was granted nothing on. These changes persist: the rollback that ends every read does not undo them. The read-only checks (Layer 2) reject these forms, and `execute_query` rejects them with `CUBRID_MCP_READONLY=0` too.
 
 ## Layer 2 — code-level read-only whitelist
 
@@ -43,7 +43,7 @@ You can disable this layer by setting `CUBRID_MCP_READONLY=0`, but only do so wh
 - the underlying DB user is already read-only (Layer 1 is in place), **and**
 - you genuinely need statements outside the whitelist (for example, CUBRID administrative `SHOW` variants that confuse the parser).
 
-With `CUBRID_MCP_READONLY=0`, `execute_query` still rejects statements that lead with a write, DDL or transaction-control keyword, method calls (`CALL`, `EVALUATE`) and `KILL`. `CALL login(...) ON CLASS db_user` would otherwise switch the user of the cached shared session for every later tool call; `execute_write` and `explain_query` reject it too, so no tool can change the session user. It does not reject `INCR`, `DECR`, serial advances or the click counter, so a statement that uses them changes data although it returns a result set; `explain_query` still rejects them.
+With `CUBRID_MCP_READONLY=0`, `execute_query` still rejects statements that lead with a write, DDL or transaction-control keyword, method calls (`CALL`, `EVALUATE`) and `KILL`. `CALL login(...) ON CLASS db_user` would otherwise switch the user of the cached shared session for every later tool call; `execute_write` and `explain_query` reject it too, so no tool can change the session user. It also rejects `INCR`, `DECR`, serial advances and the click counter, as read-only mode does: they change data although the statement returns a result set.
 
 **`explain_query` always applies the read-only checks**, independent of `CUBRID_MCP_READONLY`; only `execute_query` honors `CUBRID_MCP_READONLY=0`. Note that `explain_query` executes the `SELECT`/`WITH` statement under `SET TRACE ON` to produce the trace and then rolls the transaction back as best-effort cleanup, so it uses real database resources.
 

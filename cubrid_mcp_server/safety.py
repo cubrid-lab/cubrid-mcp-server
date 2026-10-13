@@ -5,7 +5,8 @@ to ``execute_query`` is inspected by :func:`ensure_read_only` before reaching
 the database. Only the minimal set of statements needed to inspect data and
 schemas is allowed, and multi-statement input is rejected outright. With the
 whitelist disabled, :func:`ensure_query_statement` still rejects write, DDL and
-transaction-control statements.
+transaction-control statements, and the functions that change data inside a
+``SELECT``.
 
 The checker is a defence-in-depth layer. Operators are still expected to
 configure CUBRID with a read-only user account for production use. See
@@ -110,9 +111,10 @@ SIDE_EFFECT_NAMES: frozenset[str] = frozenset(
 # ``WITH DECREMENT FOR col``) updates ``col`` in the rows it reads.
 CLICK_COUNTER_NAMES: frozenset[str] = frozenset({"INCREMENT", "DECREMENT"})
 
-# A CUBRID identifier (``#`` is an identifier character, so ``incr#`` is one name),
-# a number, or one other non-space character.
-_CODE_TOKEN = re.compile(r"[^\W\d][\w#]*|\d+|[^\w\s]")
+# A CUBRID identifier (``#`` is an identifier character, also as the first one, so
+# ``incr#`` and ``#incr`` are each one name), a number, or one other non-space
+# character.
+_CODE_TOKEN = re.compile(r"(?:[^\W\d]|#)[\w#]*|\d+|[^\w\s]")
 
 
 class UnsafeSQLError(ValueError):
@@ -305,8 +307,11 @@ def ensure_query_statement(sql: str) -> None:
     first word of the leading keyword is matched against
     :data:`QUERY_REJECTED_KEYWORDS`, so ``CREATE OR REPLACE ...`` is rejected
     like ``CREATE``. So is the first word of the statement (see
-    :func:`_first_name`). Other statements pass; the database read path still
-    rejects any that return no result set.
+    :func:`_first_name`). The data-changing functions, serial advances and click
+    counter that read-only mode rejects (see :func:`_side_effect`) are rejected
+    too: they change data inside a ``SELECT`` and the rollback does not undo
+    them. Other statements pass; the database read path still rejects any that
+    return no result set.
     """
     # Same parsing as ensure_read_only: a leading comment must not hide the real
     # leading keyword, and comment-only input counts as empty.
@@ -319,6 +324,13 @@ def ensure_query_statement(sql: str) -> None:
                 f"{word} is not permitted in execute_query, which only runs reads; "
                 "use execute_write for INSERT/UPDATE/DELETE (requires CUBRID_MCP_WRITE=1)"
             )
+    side_effect = _side_effect(sql)
+    if side_effect is not None:
+        raise UnsafeSQLError(
+            f"{side_effect} is not permitted in execute_query: it changes data even "
+            "inside a SELECT, and the rollback after the read does not undo it; "
+            "use execute_write for writes (requires CUBRID_MCP_WRITE=1)"
+        )
     if more_by_cubrid:
         raise _multi_statement_error("execute_query")
 
@@ -421,7 +433,7 @@ def _code_tokens(sql: str) -> list[tuple[str, str]]:
             continue
         for match in _CODE_TOKEN.finditer(text):
             value = match.group().upper()
-            is_name = value[0].isalpha() or value[0] == "_"
+            is_name = value[0].isalpha() or value[0] in "_#"
             tokens.append(("name" if is_name else "code", value))
     return tokens
 

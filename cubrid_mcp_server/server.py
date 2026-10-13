@@ -386,8 +386,9 @@ def execute_query(sql: str, connection: str | None = None) -> dict[str, Any]:
 
     Only statements that return a result set are run, and the read is always
     rolled back. Write, DDL and transaction-control statements, CALL,
-    EVALUATE and KILL, and multi-statement input, are rejected even when
-    CUBRID_MCP_READONLY=0; use execute_write for INSERT/UPDATE/DELETE. CUBRID
+    EVALUATE and KILL, INCR/DECR, serial advances (NEXT_VALUE, NEXTVAL,
+    SERIAL_NEXT_VALUE), WITH INCREMENT/DECREMENT FOR, and multi-statement
+    input, are rejected even when CUBRID_MCP_READONLY=0; use execute_write for INSERT/UPDATE/DELETE. CUBRID
     has no EXPLAIN statement; use explain_query for execution plans.
 
     CUBRID SQL notes: prefer LIMIT n OFFSET m (comma form also works);

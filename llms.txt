@@ -17,7 +17,7 @@
 - `list_indexes`, `list_serials`, and `list_class_hierarchy` expose CUBRID metadata.
 - `explain_query` returns the execution plan for a `SELECT` or `WITH` query by executing it under `SET TRACE ON` and rolling back.
 - `table_row_counts` returns bounded table counts.
-- `execute_query` runs SQL subject to the configured read-only and output limits. With `CUBRID_MCP_READONLY=0` it still rejects write, DDL and transaction-control statements, `CALL`, `EVALUATE` and `KILL`, and rolls back every statement, but it does not reject `INCR`, `DECR`, serial advances or the click counter, which change data inside a `SELECT`.
+- `execute_query` runs SQL subject to the configured read-only and output limits. With `CUBRID_MCP_READONLY=0` it still rejects write, DDL and transaction-control statements, `CALL`, `EVALUATE` and `KILL`, `INCR`, `DECR`, serial advances and the click counter, which change data inside a `SELECT`, and it rolls back every statement, so it stays read-only.
 - `health_check` verifies connectivity on demand.
 - `execute_write` runs a single `INSERT`, `UPDATE`, or `DELETE` in a transaction; it is registered only when write mode (`CUBRID_MCP_WRITE=1`) is enabled.
 

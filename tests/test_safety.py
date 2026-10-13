@@ -464,6 +464,31 @@ def test_ensure_read_only_rejects_side_effect_functions(sql: str, name: str) -> 
         ensure_read_only(sql)
 
 
+@pytest.mark.parametrize(("sql", "name"), _SIDE_EFFECT_SQL)
+def test_ensure_query_statement_rejects_side_effect_functions(sql: str, name: str) -> None:
+    # execute_query with CUBRID_MCP_READONLY=0 stays read-only (#301).
+    with pytest.raises(
+        UnsafeSQLError, match=f"^{name} is not permitted in execute_query.*execute_write"
+    ):
+        ensure_query_statement(sql)
+
+
+@pytest.mark.parametrize(
+    ("sql", "name"),
+    [
+        # A '#'-prefixed name elsewhere does not hide a real side effect (#303).
+        ("SELECT #a, INCR(cnt) FROM t WHERE id = 1", "INCR"),
+        ("SELECT #s.NEXT_VALUE", "NEXT_VALUE"),
+        # A lone '#' is not part of the next name (a syntax error on CUBRID).
+        ("SELECT # incr(cnt) FROM t", "INCR"),
+    ],
+)
+def test_checkers_reject_side_effects_next_to_hash_names(sql: str, name: str) -> None:
+    for checker in (ensure_read_only, ensure_query_statement):
+        with pytest.raises(UnsafeSQLError, match=f"^{name} is not permitted"):
+            checker(sql)
+
+
 @pytest.mark.parametrize(
     "sql",
     [
@@ -485,7 +510,16 @@ def test_ensure_read_only_rejects_side_effect_functions(sql: str, name: str) -> 
         "SELECT /* s.NEXT_VALUE */ 1 FROM t",
         "WITH increment AS (SELECT 1 AS x) SELECT x FROM increment",
         "SELECT * FROM t WHERE increment > 0 FOR x",
+        # '#' may start a CUBRID name, so '#incr' is one name, not '#' + INCR (#303).
+        "SELECT #incr(cnt) FROM t",
+        "SELECT #DECR (cnt) FROM t",
+        "SELECT #serial_next_value(s, 1)",
+        "SELECT s.#next_value",
+        "SELECT s.#nextval FROM t",
+        "SELECT cnt AS #incr FROM t",
+        "SELECT #incr# FROM t",
     ],
 )
 def test_ensure_read_only_allows_lookalikes_of_side_effect_functions(sql: str) -> None:
     ensure_read_only(sql)
+    ensure_query_statement(sql)

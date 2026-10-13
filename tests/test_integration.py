@@ -483,7 +483,8 @@ class TestCubridIntegration:
         """INCR, DECR, serial advances and the click counter are rejected (#295).
 
         A SELECT-only grant does not stop them: the control query below changes
-        data as that user. Both read tools reject every form before execution.
+        data as that user. Both read tools reject every form before execution,
+        and so does execute_query with CUBRID_MCP_READONLY=0 (#301).
         """
         from dataclasses import replace
 
@@ -491,7 +492,7 @@ class TestCubridIntegration:
 
         from cubrid_mcp_server import server
         from cubrid_mcp_server.context import AppContext
-        from cubrid_mcp_server.database import Database
+        from cubrid_mcp_server.database import Database, DatabaseError
         from cubrid_mcp_server.safety import UnsafeSQLError
 
         table, serial, user = "mcp_it_side_effects", "mcp_it_side_serial", "mcp_it_select_only"
@@ -554,6 +555,11 @@ class TestCubridIntegration:
             config = replace(self.config, user=user, password="pw295", readonly=True)
             database = Database(config)
             server._context = AppContext.single(config=config, database=database)
+            # The same session with the whitelist off, for execute_query (#301).
+            whitelist_off = AppContext.single(
+                config=replace(config, readonly=False), database=database
+            )
+            read_only = server._context
             qualified = f"{owner}.{table}"
             forms = [
                 f"SELECT INCR(cnt) FROM {qualified} WHERE id = 1",
@@ -575,7 +581,17 @@ class TestCubridIntegration:
                         server.execute_query(sql)
                     with pytest.raises(UnsafeSQLError, match="not permitted in read-only mode"):
                         server.explain_query(sql)
+                    server._context = whitelist_off
+                    try:
+                        with pytest.raises(UnsafeSQLError, match="not permitted in execute_query"):
+                            server.execute_query(sql)
+                    finally:
+                        server._context = read_only
                 assert state() == before
+                # '#incr' is one name, not '#' + INCR (#303): the check lets it
+                # through and the server rejects it as an undefined function.
+                with pytest.raises(DatabaseError, match="ProgrammingError"):
+                    server.execute_query(f"SELECT #incr(cnt) FROM {qualified} WHERE id = 1")
                 # Reading the serial and the table still works for this user.
                 current = server.execute_query(f"SELECT {serial_ref}.CURRENT_VALUE")["rows"]
                 assert int(current[0][0]) == before[1]
