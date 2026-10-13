@@ -1145,3 +1145,29 @@ def test_owner_qualified_names_not_cached_after_a_lost_connection(
         db.owner_qualified_names()
     backend["lost"] = False
     assert db.owner_qualified_names() is True
+
+
+@pytest.mark.parametrize("owners", [True, False])
+def test_owner_qualified_names_not_cached_when_the_probe_drops_the_connection(
+    monkeypatch: pytest.MonkeyPatch, owners: bool
+) -> None:
+    # The rollback after the probe fails, so the probed connection is discarded;
+    # the answer is returned but re-probed on the next connection.
+    backend: dict[str, Any] = {"owners": owners}
+    created: list[_OwnerProbeConnection] = []
+
+    def _connect(**_k: Any) -> _OwnerProbeConnection:
+        conn = _OwnerProbeConnection(backend)
+        if not created:
+            conn.rollback = lambda: _raise(RuntimeError("rollback failed"))  # type: ignore[method-assign]
+        created.append(conn)
+        return conn
+
+    monkeypatch.setattr(pycubrid, "connect", _connect)
+    db = Database(_TEST_CONFIG)
+    assert db.owner_qualified_names() is owners
+    assert db._connection is None
+    backend["owners"] = not owners
+    assert db.owner_qualified_names() is (not owners)
+    assert db.owner_qualified_names() is (not owners)
+    assert sum(len(c.cursors) for c in created) == 2

@@ -128,18 +128,25 @@ class Database:
         :meth:`serial_attribute_column`.
         """
         with self._lock:
-            if self._owner_qualified_names is None:
-                try:
-                    self.fetch_all('SELECT "owner_name" FROM db_attribute WHERE 1 = 0')
-                except DatabaseError as exc:
-                    # Only the server rejecting the column answers the question;
-                    # a lost connection or a timeout must not be cached as "no".
-                    if exc.__cause__ is None or not _is_server_sql_error(exc.__cause__):
-                        raise
-                    self._owner_qualified_names = False
-                else:
-                    self._owner_qualified_names = True
-            return self._owner_qualified_names
+            if self._owner_qualified_names is not None:
+                return self._owner_qualified_names
+            probed = self.connect()
+            try:
+                self.fetch_all('SELECT "owner_name" FROM db_attribute WHERE 1 = 0')
+            except DatabaseError as exc:
+                # Only the server rejecting the column answers the question;
+                # a lost connection or a timeout must not be cached as "no".
+                if exc.__cause__ is None or not _is_server_sql_error(exc.__cause__):
+                    raise
+                found = False
+            else:
+                found = True
+            # Cache the answer only for the connection it was probed on: if the
+            # rollback after the probe failed, the connection was discarded and
+            # the next one may reach another server version.
+            if self._connection is probed:
+                self._owner_qualified_names = found
+            return found
 
     def serial_attribute_column(self) -> str:
         """Resolve ``db_serial``'s attribute column once per connection.
