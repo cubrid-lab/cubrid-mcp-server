@@ -33,7 +33,8 @@ WRITE_KEYWORDS: frozenset[str] = frozenset({"INSERT", "UPDATE", "DELETE"})
 # Leading keywords that ``execute_query`` rejects even when the read-only whitelist
 # is disabled (CUBRID_MCP_READONLY=0): writes, DDL and transaction control. The
 # tool only serves result-set reads; writes go through ``execute_write``. Consulted
-# by :func:`ensure_query_statement`; the read-only default path is unchanged.
+# by :func:`ensure_query_statement` only; the read-only default path uses
+# :data:`READ_ONLY_KEYWORDS` instead.
 # ``CALL`` and ``EVALUATE`` run methods, and ``CALL login(...) ON CLASS db_user``
 # changes the user of the shared session for every later tool call; ``KILL`` ends
 # other sessions' transactions. ``LOCK`` is not a CUBRID statement (a syntax error
@@ -328,8 +329,9 @@ def ensure_write_allowed(sql: str) -> None:
     Only consulted on the opt-in write path (``CUBRID_MCP_WRITE=1``). Accepts a
     single ``INSERT``/``UPDATE``/``DELETE`` statement; rejects everything else
     (reads, DDL, transaction-control, multi-statement, and empty input) so that
-    enabling write mode cannot smuggle in DDL or read escapes. The read-only
-    default path (:func:`ensure_read_only`) is intentionally left unchanged.
+    enabling write mode cannot smuggle in DDL or read escapes. Like the read
+    checks, it matches the first word of the statement (see :func:`_first_name`)
+    before the leading ``sqlparse`` keyword.
     """
     statement, more_by_cubrid = _parse(sql, "write mode")
     keyword = _first_name(sql) or _leading_keyword(statement)
