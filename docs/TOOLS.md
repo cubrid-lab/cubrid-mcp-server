@@ -216,7 +216,7 @@ Example: `list_class_hierarchy(table_name="car")` returns
 Runs **read-only** SQL (`SELECT`, `SHOW`, `DESC`, `DESCRIBE`, `WITH`) and only statements that return a result set. Use `explain_query` for query plans. Output is automatically truncated to respect the model's context window:
 
 - at most `CUBRID_MCP_MAX_ROWS` rows (default 1000),
-- rendered output capped at `CUBRID_MCP_MAX_CHARS` characters (default 4000), counted as the text length of every value across all rows (JSON quotes and separators are not counted; `null` counts 4). Rows are returned while they fit whole. A first row that alone is longer is still returned, cut to the cap: values that fit are kept, the first that does not is shortened to end in `…` (a non-string value becomes `…`), and every later value becomes `…`, so a cut row can exceed the cap by one character per later column. `truncated` is `true` whenever a row was left out or a value was cut,
+- rendered output capped at `CUBRID_MCP_MAX_CHARS` characters (default 4000), counted as the text length of every value across all rows (JSON quotes and separators are not counted; `null` counts 4). Rows are returned while they fit whole. A first row that alone is longer is still returned, cut to the cap: values that fit are kept, the first that does not is shortened to end in `…` (a non-string value becomes `…`), and every later value becomes `…` (an empty string stays empty), so a cut row can exceed the cap by one character per later column. `truncated` is `true` whenever a row was left out or a value was cut,
 - statement length capped at `CUBRID_MCP_MAX_SQL_LENGTH` (default 65536),
 - per-statement socket read timeout of `CUBRID_MCP_QUERY_TIMEOUT` seconds (default 30).
 
