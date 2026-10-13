@@ -14,6 +14,7 @@ configure CUBRID with a read-only user account for production use. See
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 import sqlparse
@@ -81,6 +82,29 @@ FORBIDDEN_KEYWORDS: frozenset[str] = frozenset(
         "INTO",
     }
 )
+
+
+# CUBRID functions and serial attributes that change data although they appear in
+# a SELECT: ``INCR(col)``/``DECR(col)`` update the row they read, and
+# ``serial.NEXT_VALUE``, ``serial.NEXTVAL`` and ``SERIAL_NEXT_VALUE(serial, n)``
+# advance a serial. The server rollback after a read does not undo either, and a
+# SELECT-only grant does not prevent them. ``sqlparse`` reads these names as
+# ``Name`` tokens (or as a string symbol when double-quoted), so they are never
+# seen by the keyword scan; :func:`_side_effect` finds them instead. A name counts
+# when it is followed by ``(`` or preceded by ``.``, whether bare or quoted, in
+# any case. ``CURRENT_VALUE``, ``CURRVAL`` and ``SERIAL_CURRENT_VALUE`` only read
+# a serial and stay allowed.
+SIDE_EFFECT_NAMES: frozenset[str] = frozenset(
+    {"INCR", "DECR", "NEXT_VALUE", "NEXTVAL", "SERIAL_NEXT_VALUE"}
+)
+
+# The click-counter clause ``SELECT ... WITH INCREMENT FOR col`` (or
+# ``WITH DECREMENT FOR col``) updates ``col`` in the rows it reads.
+CLICK_COUNTER_NAMES: frozenset[str] = frozenset({"INCREMENT", "DECREMENT"})
+
+# A CUBRID identifier (``#`` is an identifier character, so ``incr#`` is one name),
+# a number, or one other non-space character.
+_CODE_TOKEN = re.compile(r"[^\W\d][\w#]*|\d+|[^\w\s]")
 
 
 class UnsafeSQLError(ValueError):
@@ -253,6 +277,12 @@ def ensure_read_only(sql: str) -> None:
     forbidden = _forbidden_keywords(statement)
     if forbidden:
         raise UnsafeSQLError(f"{sorted(forbidden)[0]} is not permitted in read-only mode")
+    side_effect = _side_effect(sql)
+    if side_effect is not None:
+        raise UnsafeSQLError(
+            f"{side_effect} is not permitted in read-only mode: it changes data "
+            "even inside a SELECT, and the rollback after the read does not undo it"
+        )
     if more_by_cubrid:
         raise _multi_statement_error("read-only mode")
 
@@ -339,3 +369,53 @@ def _collect_forbidden(token: Any, found: set[str]) -> None:
                 found.add(upper)
         if hasattr(child, "tokens"):
             _collect_forbidden(child, found)
+
+
+def _code_tokens(sql: str) -> list[tuple[str, str]]:
+    """Return ``(kind, upper_text)`` tokens of ``sql``, without whitespace and comments.
+
+    ``kind`` is ``"name"`` for a bare or quoted identifier (``"..."``, ```...```,
+    ``[...]``, unquoted and with doubled quote characters undone), ``"literal"``
+    for a ``'...'`` string and ``"code"`` for anything else. Comments are dropped,
+    so ``INCR/**/(`` reads as ``INCR (``. Callers have already rejected input whose
+    quote boundaries are ambiguous or unterminated (see :func:`_cubrid_statements`).
+    """
+    tokens: list[tuple[str, str]] = []
+    for kind, text in lex_sql(sql, backslash_escapes=False):
+        if kind == "comment":
+            continue
+        if kind != "code":
+            quote = text[0]
+            if quote == "'":
+                tokens.append(("literal", ""))
+            elif quote == "[":
+                tokens.append(("name", text[1:-1].strip().upper()))
+            else:
+                inner = text[1:-1].replace(quote * 2, quote)
+                tokens.append(("name", inner.strip().upper()))
+            continue
+        for match in _CODE_TOKEN.finditer(text):
+            value = match.group().upper()
+            is_name = value[0].isalpha() or value[0] == "_"
+            tokens.append(("name" if is_name else "code", value))
+    return tokens
+
+
+def _side_effect(sql: str) -> str | None:
+    """Return the first data-changing function, serial advance or click counter in ``sql``.
+
+    See :data:`SIDE_EFFECT_NAMES` and :data:`CLICK_COUNTER_NAMES`. The whole input
+    is scanned, so subqueries and CTEs are covered; string literals are not names,
+    and a longer name such as ``incr_total`` is a different identifier.
+    """
+    tokens = _code_tokens(sql)
+    for i, (kind, value) in enumerate(tokens):
+        if kind != "name":
+            continue
+        before = tokens[i - 1] if i > 0 else ("", "")
+        after = tokens[i + 1] if i + 1 < len(tokens) else ("", "")
+        if value in SIDE_EFFECT_NAMES and (after == ("code", "(") or before == ("code", ".")):
+            return value
+        if value in CLICK_COUNTER_NAMES and before[1] == "WITH" and after[1] == "FOR":
+            return f"WITH {value} FOR"
+    return None

@@ -227,6 +227,8 @@ Add to `.cursor/mcp.json`:
 
 The server is **read-only by default**. A code-level SQL whitelist allows only `SELECT`, `SHOW`, `DESC`, `DESCRIBE`, and `WITH` statements. Multi-statement queries are rejected. CUBRID has no `EXPLAIN` statement; use the `explain_query` tool for execution plans (it executes the statement under `SET TRACE ON` and rolls back).
 
+Read-only mode also rejects `INCR`, `DECR`, serial advances (`NEXT_VALUE`, `NEXTVAL`, `SERIAL_NEXT_VALUE`) and the click counter `WITH INCREMENT FOR`: they change data inside a `SELECT`, the rollback does not undo them, and **a `SELECT`-only grant does not prevent them**. See the [Security Model](docs/SECURITY_MODEL.md).
+
 > **The SQL keyword checks are a guardrail and defense-in-depth, not a security boundary.** The primary control is a dedicated least-privilege database account: **run the server as a CUBRID user that has `SELECT` only on the tables the model needs**, never reuse `dba` or the owner account, and keep the account to the minimum privileges required, with no DDL rights. See [`SECURITY.md`](./SECURITY.md).
 
 For production use, also configure a read-only database user. See [`SECURITY.md`](./SECURITY.md) for the recommended setup.

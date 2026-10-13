@@ -400,3 +400,118 @@ class TestCubridIntegration:
 
         with pytest.raises(UnsafeSQLError):
             ensure_read_only("DROP TABLE nonexistent")
+
+    def test_select_only_user_cannot_change_data_through_read_tools(self) -> None:
+        """INCR, DECR, serial advances and the click counter are rejected (#295).
+
+        A SELECT-only grant does not stop them: the control query below changes
+        data as that user. Both read tools reject every form before execution.
+        """
+        from dataclasses import replace
+
+        import pycubrid
+
+        from cubrid_mcp_server import server
+        from cubrid_mcp_server.context import AppContext
+        from cubrid_mcp_server.database import Database
+        from cubrid_mcp_server.safety import UnsafeSQLError
+
+        table, serial, user = "mcp_it_side_effects", "mcp_it_side_serial", "mcp_it_select_only"
+        owner = self.config.user
+        for sql in (
+            f"DROP TABLE IF EXISTS {table}",
+            f"DROP SERIAL IF EXISTS {serial}",
+            f"CREATE TABLE {table} (id INT PRIMARY KEY, cnt INT)",
+            f"INSERT INTO {table} VALUES (1, 10)",
+            f"CREATE SERIAL {serial} START WITH 100",
+        ):
+            self.db.execute_write(sql)
+        admin = self._second_session()
+        try:
+            cursor = admin.cursor()
+            cursor.execute(f"SELECT COUNT(*) FROM db_user WHERE name = '{user.upper()}'")
+            if cursor.fetchall()[0][0]:
+                cursor.execute(f"DROP USER {user}")
+            cursor.execute(f"CREATE USER {user} PASSWORD 'pw295'")
+            cursor.execute(f"GRANT SELECT ON {table} TO {user}")
+            # Start the serial so later NEXT_VALUE calls visibly advance it.
+            cursor.execute(f"SELECT {serial}.NEXT_VALUE")
+            # Serials are owner-qualified from CUBRID 11.2 on, and global before it.
+            cursor.execute("SELECT VERSION()")
+            version = tuple(int(part) for part in str(cursor.fetchall()[0][0]).split(".")[:2])
+            serial_ref = f"{owner}.{serial}" if version >= (11, 2) else serial
+            admin.commit()
+
+            def state() -> tuple[Any, Any]:
+                cursor.execute(f"SELECT cnt FROM {table} WHERE id = 1")
+                cnt = cursor.fetchall()[0][0]
+                cursor.execute(f"SELECT current_val FROM db_serial WHERE name = '{serial}'")
+                current = cursor.fetchall()[0][0]
+                admin.commit()
+                return cnt, int(current)
+
+            # Control: sent directly, INCR and NEXT_VALUE change data as the
+            # SELECT-only user, and the rollback does not undo either change.
+            limited = pycubrid.connect(
+                host=self.config.host,
+                port=self.config.port,
+                user=user,
+                password="pw295",
+                database=self.config.database,
+                connect_timeout=10,
+                read_timeout=30,
+            )
+            try:
+                before = state()
+                limited_cursor = limited.cursor()
+                limited_cursor.execute(f"SELECT INCR(cnt) FROM {owner}.{table} WHERE id = 1")
+                limited_cursor.fetchall()
+                limited_cursor.execute(f"SELECT {serial_ref}.NEXT_VALUE")
+                limited_cursor.fetchall()
+                limited.rollback()
+                assert state() == (before[0] + 1, before[1] + 1)
+            finally:
+                limited.close()
+
+            config = replace(self.config, user=user, password="pw295", readonly=True)
+            database = Database(config)
+            server._context = AppContext.single(config=config, database=database)
+            qualified = f"{owner}.{table}"
+            forms = [
+                f"SELECT INCR(cnt) FROM {qualified} WHERE id = 1",
+                f"SELECT incr /* c */ (cnt) FROM {qualified} WHERE id = 1",
+                f"SELECT [incr](cnt) FROM {qualified} WHERE id = 1",
+                f"SELECT DECR(cnt) FROM {qualified} WHERE id = 1",
+                f"SELECT * FROM {qualified} WHERE id = 1 WITH INCREMENT FOR cnt",
+                f"SELECT * FROM {qualified} WHERE id = 1 WITH DECREMENT FOR cnt",
+                f"SELECT {serial_ref}.NEXT_VALUE",
+                f"SELECT {serial_ref} . next_value",
+                f"SELECT {serial_ref}.NEXTVAL",
+                f"SELECT SERIAL_NEXT_VALUE({serial_ref}, 3)",
+                f"SELECT (SELECT {serial_ref}.NEXT_VALUE) FROM {qualified}",
+            ]
+            try:
+                before = state()
+                for sql in forms:
+                    with pytest.raises(UnsafeSQLError, match="not permitted in read-only mode"):
+                        server.execute_query(sql)
+                    with pytest.raises(UnsafeSQLError, match="not permitted in read-only mode"):
+                        server.explain_query(sql)
+                assert state() == before
+                # Reading the serial and the table still works for this user.
+                current = server.execute_query(f"SELECT {serial_ref}.CURRENT_VALUE")["rows"]
+                assert int(current[0][0]) == before[1]
+                rows = server.execute_query(f"SELECT cnt FROM {qualified} WHERE id = 1")["rows"]
+                assert rows == [[before[0]]]
+                assert state() == before
+            finally:
+                database.close()
+        finally:
+            cursor = admin.cursor()
+            cursor.execute(f"DROP TABLE IF EXISTS {table}")
+            cursor.execute(f"DROP SERIAL IF EXISTS {serial}")
+            cursor.execute(f"SELECT COUNT(*) FROM db_user WHERE name = '{user.upper()}'")
+            if cursor.fetchall()[0][0]:
+                cursor.execute(f"DROP USER {user}")
+            admin.commit()
+            admin.close()

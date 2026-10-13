@@ -197,6 +197,8 @@ cubrid-mcp-server
 
 서버는 기본적으로 **읽기 전용**입니다. 코드 수준의 SQL 화이트리스트는 `SELECT`, `SHOW`, `DESC`, `DESCRIBE`, `WITH` 문만 허용하며, 다중 문장 쿼리는 거부됩니다. CUBRID에는 `EXPLAIN` 문이 없으므로 실행 계획은 `explain_query` 도구를 사용하세요(`SET TRACE ON` 아래에서 문장을 실행한 뒤 롤백합니다).
 
+읽기 전용 모드는 `INCR`, `DECR`, 시리얼 증가(`NEXT_VALUE`, `NEXTVAL`, `SERIAL_NEXT_VALUE`), 클릭 카운터 `WITH INCREMENT FOR`도 거부합니다. 이들은 `SELECT` 안에서 데이터를 바꾸고, 롤백으로 되돌려지지 않으며, **`SELECT` 권한만으로 막을 수 없습니다**. [보안 모델](ko/SECURITY_MODEL.md)을 참고하세요.
+
 > **SQL 키워드 검사는 가드레일이자 심층 방어이며 보안 경계가 아닙니다.** 주된 통제는 전용 최소 권한 데이터베이스 계정입니다: 모델에 필요한 테이블에만 **SELECT 권한을 가진 CUBRID 사용자**로 서버를 실행하고, `dba`나 소유자 계정을 재사용하지 말며, 계정에는 필요한 최소 권한만 부여하고 DDL 권한은 부여하지 마세요. 자세한 내용은 [`SECURITY.md`](https://github.com/cubrid-lab/cubrid-mcp-server/blob/main/SECURITY.md)를 참고하세요.
 
 ### 쓰기 모드 (옵트인)

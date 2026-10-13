@@ -1142,3 +1142,40 @@ def test_execute_query_readonly_whitelist_error_unchanged(fake_db: FakeDatabase)
     with pytest.raises(UnsafeSQLError, match="INSERT is not permitted in read-only mode"):
         server.execute_query("INSERT INTO t VALUES (1)")
     assert fake_db.calls == []
+
+
+_SIDE_EFFECT_SELECTS = [
+    "SELECT INCR(cnt) FROM t WHERE id = 1",
+    "SELECT DECR/**/(cnt) FROM t WHERE id = 1",
+    "SELECT [incr](cnt) FROM t WHERE id = 1",
+    "SELECT dba.s.NEXT_VALUE",
+    "SELECT s.nextval",
+    "SELECT SERIAL_NEXT_VALUE(s, 2)",
+    "SELECT * FROM t WHERE id = 1 WITH INCREMENT FOR cnt",
+    "WITH q AS (SELECT s.NEXT_VALUE AS v) SELECT v FROM q",
+]
+
+
+@pytest.mark.parametrize("sql", _SIDE_EFFECT_SELECTS)
+def test_execute_query_rejects_side_effect_functions(fake_db: FakeDatabase, sql: str) -> None:
+    """INCR, DECR, serial advances and the click counter never reach the database (#295)."""
+    with pytest.raises(UnsafeSQLError, match="is not permitted in read-only mode"):
+        server.execute_query(sql)
+    assert fake_db.calls == []
+
+
+@pytest.mark.parametrize("sql", _SIDE_EFFECT_SELECTS)
+def test_explain_query_rejects_side_effect_functions(
+    sql: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """explain_query executes its statement, so it rejects the same forms (#295)."""
+    fake = FakeConnDatabase()
+    monkeypatch.setattr(server, "_context", AppContext.single(config=_TEST_CONFIG, database=fake))
+    with pytest.raises(UnsafeSQLError, match="is not permitted in read-only mode"):
+        server.explain_query(sql)
+    assert fake.cursors == []
+
+
+def test_execute_query_allows_current_value(fake_db: FakeDatabase) -> None:
+    fake_db.queue([(1,)])
+    assert server.execute_query("SELECT dba.s.CURRENT_VALUE")["rows"] == [[1]]

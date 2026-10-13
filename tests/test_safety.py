@@ -368,3 +368,74 @@ def test_strip_comments_uses_cubrid_comment_rules() -> None:
     assert strip_comments("// c\nSELECT 1").split() == ["SELECT", "1"]
     assert strip_comments("SELECT 'x -- y' -- z").split() == ["SELECT", "''"]
     assert strip_comments("SELECT 1 # x").split() == ["SELECT", "1", "x"]
+
+
+# Functions, serial attributes and the click counter that change data inside a
+# SELECT (#295). Each form below changed data on a CUBRID 11.4 server, except the
+# NEXT_VALUE(...) / NEXTVAL(...) call forms, which are rejected as a precaution.
+_SIDE_EFFECT_SQL = [
+    ("SELECT INCR(cnt) FROM t WHERE id = 1", "INCR"),
+    ("select incr(cnt) from t where id = 1", "INCR"),
+    ("SELECT DECR(cnt) FROM t WHERE id = 1", "DECR"),
+    ("SELECT InCr (cnt) FROM t WHERE id = 1", "INCR"),
+    ("SELECT INCR\n(cnt) FROM t WHERE id = 1", "INCR"),
+    ("SELECT INCR/**/(cnt) FROM t WHERE id = 1", "INCR"),
+    ("SELECT INCR -- note\n(cnt) FROM t WHERE id = 1", "INCR"),
+    ("SELECT INCR // note\n(cnt) FROM t WHERE id = 1", "INCR"),
+    ('SELECT "INCR"(cnt) FROM t WHERE id = 1', "INCR"),
+    ("SELECT [incr](cnt) FROM t WHERE id = 1", "INCR"),
+    ("SELECT `decr`(cnt) FROM t WHERE id = 1", "DECR"),
+    ("SELECT INCR(t.cnt) FROM t WHERE id = 1", "INCR"),
+    ("SELECT * FROM (SELECT INCR(cnt) FROM t) x", "INCR"),
+    ("WITH q AS (SELECT DECR(cnt) AS c FROM t) SELECT * FROM q", "DECR"),
+    ("SELECT s.NEXT_VALUE", "NEXT_VALUE"),
+    ("SELECT s . next_value", "NEXT_VALUE"),
+    ("SELECT s./* c */next_value", "NEXT_VALUE"),
+    ("SELECT dba.s.NEXT_VALUE", "NEXT_VALUE"),
+    ("SELECT [s].[next_value]", "NEXT_VALUE"),
+    ('SELECT "s"."NEXT_VALUE"', "NEXT_VALUE"),
+    ("SELECT s.NEXTVAL", "NEXTVAL"),
+    ("SELECT dba.s.nextval FROM db_root", "NEXTVAL"),
+    ("SELECT (SELECT s.next_value) FROM t", "NEXT_VALUE"),
+    ("SELECT id FROM t WHERE id < s.next_value", "NEXT_VALUE"),
+    ("SELECT SERIAL_NEXT_VALUE(s, 3)", "SERIAL_NEXT_VALUE"),
+    ("SELECT serial_next_value (s, 1)", "SERIAL_NEXT_VALUE"),
+    ("SELECT [serial_next_value](s, 1)", "SERIAL_NEXT_VALUE"),
+    ("SELECT NEXT_VALUE(s)", "NEXT_VALUE"),
+    ("SELECT NEXTVAL(s)", "NEXTVAL"),
+    ("SELECT * FROM t WHERE id = 1 WITH INCREMENT FOR cnt", "WITH INCREMENT FOR"),
+    ("SELECT * FROM t WHERE id = 1 with decrement for cnt", "WITH DECREMENT FOR"),
+    ("SELECT * FROM t WHERE id = 1 WITH /* c */ INCREMENT\n FOR cnt", "WITH INCREMENT FOR"),
+    ("SELECT * FROM t WHERE id = 1 WITH INCREMENT FOR [cnt]", "WITH INCREMENT FOR"),
+]
+
+
+@pytest.mark.parametrize(("sql", "name"), _SIDE_EFFECT_SQL)
+def test_ensure_read_only_rejects_side_effect_functions(sql: str, name: str) -> None:
+    with pytest.raises(UnsafeSQLError, match=f"^{name} is not permitted in read-only mode"):
+        ensure_read_only(sql)
+
+
+@pytest.mark.parametrize(
+    "sql",
+    [
+        "SELECT s.CURRENT_VALUE",
+        "SELECT dba.s.current_value",
+        "SELECT s.CURRVAL",
+        "SELECT SERIAL_CURRENT_VALUE(s)",
+        "SELECT incr_total, decr_count, next_value_at FROM t",
+        "SELECT t.incr_total FROM t",
+        "SELECT my_incr(cnt) FROM t",
+        "SELECT incr# FROM t",
+        "SELECT 'INCR(cnt)', 's.NEXT_VALUE', 'WITH INCREMENT FOR x' FROM t",
+        "SELECT * FROM t WHERE note = 'incr(' AND label = '.nextval'",
+        "SELECT cnt AS incr FROM t",
+        "SELECT next_value FROM t",
+        "SELECT 1 -- INCR(cnt)\nFROM t",
+        "SELECT /* s.NEXT_VALUE */ 1 FROM t",
+        "WITH increment AS (SELECT 1 AS x) SELECT x FROM increment",
+        "SELECT * FROM t WHERE increment > 0 FOR x",
+    ],
+)
+def test_ensure_read_only_allows_lookalikes_of_side_effect_functions(sql: str) -> None:
+    ensure_read_only(sql)
