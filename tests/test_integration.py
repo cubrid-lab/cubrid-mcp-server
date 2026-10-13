@@ -35,12 +35,12 @@ class TestCubridIntegration:
         from cubrid_mcp_server.config import Config
         from cubrid_mcp_server.database import Database
 
-        from cubrid_mcp_server.context import AppContext
+        from tests.helpers import single_context
 
         self.config = Config.from_env()
         self.db = Database(self.config)
         # Route the server tool functions at the live database.
-        server._context = AppContext.single(config=self.config, database=self.db)
+        server._context = single_context(config=self.config, database=self.db)
 
     def teardown_method(self) -> None:
         from cubrid_mcp_server import server
@@ -323,14 +323,14 @@ class TestCubridIntegration:
         from dataclasses import replace
 
         from cubrid_mcp_server import server
-        from cubrid_mcp_server.context import AppContext
+        from tests.helpers import single_context
         from cubrid_mcp_server.safety import UnsafeSQLError
 
         table = "mcp_it_query_readonly"
         self.db.execute_write(f"DROP TABLE IF EXISTS {table}")
         self.db.execute_write(f"CREATE TABLE {table} (id INT PRIMARY KEY)")
         self.db.execute_write(f"INSERT INTO {table} VALUES (1)")
-        server._context = AppContext.single(
+        server._context = single_context(
             config=replace(self.config, readonly=False), database=self.db
         )
         other = self._second_session()
@@ -363,7 +363,7 @@ class TestCubridIntegration:
         import pycubrid
 
         from cubrid_mcp_server import server
-        from cubrid_mcp_server.context import AppContext
+        from tests.helpers import single_context
         from cubrid_mcp_server.database import Database
         from cubrid_mcp_server.safety import UnsafeSQLError
 
@@ -402,7 +402,7 @@ class TestCubridIntegration:
                 self.config, user=user, password="pw297", readonly=False, write_enabled=True
             )
             database = Database(config)
-            server._context = AppContext.single(config=config, database=database)
+            server._context = single_context(config=config, database=database)
             try:
                 for sql in (
                     login,
@@ -434,9 +434,9 @@ class TestCubridIntegration:
         from dataclasses import replace
 
         from cubrid_mcp_server import server
-        from cubrid_mcp_server.context import AppContext
+        from tests.helpers import single_context
 
-        server._context = AppContext.single(
+        server._context = single_context(
             config=replace(self.config, max_chars=4000), database=self.db
         )
         columns = ", ".join(f"REPEAT('x', 3990) AS c{i}" for i in range(60))
@@ -455,7 +455,7 @@ class TestCubridIntegration:
         import pycubrid
 
         from cubrid_mcp_server import server
-        from cubrid_mcp_server.context import AppContext
+        from tests.helpers import single_context
         from cubrid_mcp_server.database import Database
 
         if not self.db.owner_qualified_names():
@@ -508,7 +508,7 @@ class TestCubridIntegration:
 
             config = replace(self.config, user=reader, password="pw296")
             database = Database(config)
-            server._context = AppContext.single(config=config, database=database)
+            server._context = single_context(config=config, database=database)
             mine, theirs = f"{owner}.{table}", f"{other}.{table}"
             try:
                 names = server.all_table_names()
@@ -540,7 +540,7 @@ class TestCubridIntegration:
         from dataclasses import replace
 
         from cubrid_mcp_server import server
-        from cubrid_mcp_server.context import AppContext
+        from tests.helpers import single_context
         from cubrid_mcp_server.database import DatabaseError
 
         for sql in ("SELECT*FROM db_root", "(SELECT 1)"):
@@ -551,7 +551,7 @@ class TestCubridIntegration:
         assert self.db.connect() is connection
         assert "plan" in server.explain_query("SELECT 1")
         assert self.db.connect() is connection
-        server._context = AppContext.single(
+        server._context = single_context(
             config=replace(self.config, max_chars=20), database=self.db
         )
         result = server.explain_query("SELECT * FROM db_class")
@@ -622,7 +622,7 @@ class TestCubridIntegration:
         import pycubrid
 
         from cubrid_mcp_server import server
-        from cubrid_mcp_server.context import AppContext
+        from tests.helpers import single_context
         from cubrid_mcp_server.database import Database, DatabaseError
         from cubrid_mcp_server.safety import UnsafeSQLError
 
@@ -685,9 +685,9 @@ class TestCubridIntegration:
 
             config = replace(self.config, user=user, password="pw295", readonly=True)
             database = Database(config)
-            server._context = AppContext.single(config=config, database=database)
+            server._context = single_context(config=config, database=database)
             # The same session with the whitelist off, for execute_query (#301).
-            whitelist_off = AppContext.single(
+            whitelist_off = single_context(
                 config=replace(config, readonly=False), database=database
             )
             read_only = server._context

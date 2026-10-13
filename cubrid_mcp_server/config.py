@@ -150,10 +150,6 @@ class ConnectionRegistry:
                 f"unknown connection {name!r}. Available connections: {available}"
             ) from None
 
-    @property
-    def names(self) -> list[str]:
-        return sorted(self.configs)
-
     @classmethod
     def from_env(cls, env: dict[str, str] | None = None) -> "ConnectionRegistry":
         source = env if env is not None else os.environ

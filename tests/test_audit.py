@@ -17,7 +17,7 @@ import pytest
 from cubrid_mcp_server import server
 from cubrid_mcp_server.audit import AuditLogger, _category, _identifiers
 from cubrid_mcp_server.config import Config
-from cubrid_mcp_server.context import AppContext
+from tests.helpers import single_context
 
 _SECRET = "p@ssw0rd-should-never-appear"
 
@@ -274,7 +274,7 @@ def test_execute_query_audits_without_stdout(
     monkeypatch.setattr(
         server,
         "_context",
-        AppContext.single(config=config, database=fake, audit=AuditLogger(True, stream=buf)),
+        single_context(config=config, database=fake, audit=AuditLogger(True, stream=buf)),
     )
 
     sql = f"SELECT id FROM accounts WHERE token = '{_SECRET}'"
@@ -298,7 +298,7 @@ def test_execute_query_no_audit_when_disabled(monkeypatch: pytest.MonkeyPatch) -
     monkeypatch.setattr(
         server,
         "_context",
-        AppContext.single(config=_BASE_CONFIG, database=fake, audit=AuditLogger(False, stream=buf)),
+        single_context(config=_BASE_CONFIG, database=fake, audit=AuditLogger(False, stream=buf)),
     )
     server.execute_query("SELECT 1")
     assert buf.getvalue() == ""

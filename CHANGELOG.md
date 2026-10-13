@@ -13,6 +13,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`CALL`, `EVALUATE` and `KILL` in `execute_query` with `CUBRID_MCP_READONLY=0`** — these statements now fail before execution. Call stored functions from a `SELECT` (`SELECT my_function(…)`) and evaluate expressions with `SELECT`; `KILL` is not offered by any tool.
 - **`INCR`, `DECR`, serial advances and the click counter in `execute_query` with `CUBRID_MCP_READONLY=0`** — these forms now fail before execution, as they already did in read-only mode. Use `execute_write` for writes; read a serial with `CURRENT_VALUE`.
 
+### Removed
+
+- **Test-only helpers left the package** — `AppContext.single()` (`cubrid_mcp_server/context.py`) and `ConnectionRegistry.names` (`cubrid_mcp_server/config.py`) were used only by the tests. The tests now build single-connection contexts with `tests/helpers.py:single_context()` and read `sorted(registry.configs)`. The server never called either helper, so its behavior is unchanged.
+
 ### Fixed
 
 - **MCP `serverInfo.version` is the package version** — the server passes `__version__` to FastMCP, which otherwise reported its own version (for example `4.1.0`) in the `initialize` response.

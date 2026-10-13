@@ -14,9 +14,9 @@ import pytest
 import cubrid_mcp_server.server as server
 from cubrid_mcp_server import context as context_module
 from cubrid_mcp_server.config import Config, ConfigError, ConnectionRegistry
-from cubrid_mcp_server.context import AppContext
 from cubrid_mcp_server.database import Database
 from cubrid_mcp_server.safety import ensure_read_only
+from tests.helpers import single_context
 
 _TEST_CONFIG = Config(
     host="h",
@@ -130,7 +130,7 @@ class _CleanupFailingDB:
 def test_explain_query_swallows_cleanup_errors(monkeypatch: pytest.MonkeyPatch) -> None:
     """A cleanup failure is logged and discards the connection, not raised (#264)."""
     db = _CleanupFailingDB()
-    monkeypatch.setattr(server, "_context", AppContext.single(config=_TEST_CONFIG, database=db))
+    monkeypatch.setattr(server, "_context", single_context(config=_TEST_CONFIG, database=db))
     result = server.explain_query("SELECT 1")
     assert result == {"sql": "SELECT 1", "plan": "plan text", "truncated": False}
     assert db.discarded == 1

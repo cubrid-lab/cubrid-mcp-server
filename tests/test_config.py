@@ -139,7 +139,7 @@ def test_password_not_in_repr() -> None:
 
 def test_registry_default_only_when_no_connections() -> None:
     registry = ConnectionRegistry.from_env(BASE_ENV)
-    assert registry.names == ["default"]
+    assert sorted(registry.configs) == ["default"]
     assert registry.config_for().database == "demodb"
     # None/empty selector resolves to the default connection.
     assert registry.config_for(None) is registry.config_for()
@@ -148,7 +148,7 @@ def test_registry_default_only_when_no_connections() -> None:
 
 def test_registry_empty_connections_behaves_like_unset() -> None:
     registry = ConnectionRegistry.from_env(BASE_ENV | {"CUBRID_CONNECTIONS": "  "})
-    assert registry.names == ["default"]
+    assert sorted(registry.configs) == ["default"]
 
 
 def test_registry_missing_default_vars_still_fails() -> None:
@@ -167,7 +167,7 @@ def test_registry_parses_named_connection() -> None:
         "CUBRID_REPORTING_MCP_MAX_ROWS": "500",
     }
     registry = ConnectionRegistry.from_env(env)
-    assert registry.names == ["default", "reporting"]
+    assert sorted(registry.configs) == ["default", "reporting"]
     reporting = registry.config_for("reporting")
     assert reporting.host == "reporting-db"
     assert reporting.database == "reports"
@@ -235,4 +235,4 @@ def test_registry_blank_names_in_list_are_skipped() -> None:
         "CUBRID_REPORTING_DATABASE": "reports",
     }
     registry = ConnectionRegistry.from_env(env)
-    assert registry.names == ["default", "reporting"]
+    assert sorted(registry.configs) == ["default", "reporting"]

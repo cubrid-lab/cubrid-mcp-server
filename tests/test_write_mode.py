@@ -23,6 +23,7 @@ from cubrid_mcp_server.config import Config, ConfigError, ConnectionRegistry, DE
 from cubrid_mcp_server.context import AppContext
 from cubrid_mcp_server.database import Database, DatabaseError, QueryTimeoutError
 from cubrid_mcp_server.safety import UnsafeSQLError, ensure_read_only, ensure_write_allowed
+from tests.helpers import single_context
 
 _BASE = Config(
     host="h",
@@ -284,7 +285,7 @@ class _FakeWriteDB:
 
 def _inject(monkeypatch: pytest.MonkeyPatch, db: _FakeWriteDB, **cfg: Any) -> None:
     config = replace(_BASE, **cfg)
-    monkeypatch.setattr(server, "_context", AppContext.single(config=config, database=db))
+    monkeypatch.setattr(server, "_context", single_context(config=config, database=db))
 
 
 def test_execute_write_refuses_when_disabled(monkeypatch: pytest.MonkeyPatch) -> None:

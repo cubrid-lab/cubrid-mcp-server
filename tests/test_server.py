@@ -14,6 +14,7 @@ from cubrid_mcp_server.config import Config
 from cubrid_mcp_server.context import AppContext
 from cubrid_mcp_server.database import Database
 from cubrid_mcp_server.safety import UnsafeSQLError
+from tests.helpers import single_context
 
 _TEST_CONFIG = Config(
     host="h",
@@ -67,7 +68,7 @@ class FakeDatabase:
 @pytest.fixture
 def fake_db(monkeypatch: pytest.MonkeyPatch) -> FakeDatabase:
     fake = FakeDatabase()
-    monkeypatch.setattr(server, "_context", AppContext.single(config=_TEST_CONFIG, database=fake))
+    monkeypatch.setattr(server, "_context", single_context(config=_TEST_CONFIG, database=fake))
     return fake
 
 
@@ -250,7 +251,7 @@ class FakeConnDatabase(FakeDatabase):
 
 def test_explain_query_uses_trace(monkeypatch: pytest.MonkeyPatch) -> None:
     fake = FakeConnDatabase()
-    monkeypatch.setattr(server, "_context", AppContext.single(config=_TEST_CONFIG, database=fake))
+    monkeypatch.setattr(server, "_context", single_context(config=_TEST_CONFIG, database=fake))
     result = server.explain_query("SELECT 1")
     assert result["sql"] == "SELECT 1"
     assert "Trace Statistics" in result["plan"]
@@ -271,7 +272,7 @@ def test_explain_query_uses_trace(monkeypatch: pytest.MonkeyPatch) -> None:
 )
 def test_explain_query_accepts_leading_comments(sql: str, monkeypatch: pytest.MonkeyPatch) -> None:
     fake = FakeConnDatabase()
-    monkeypatch.setattr(server, "_context", AppContext.single(config=_TEST_CONFIG, database=fake))
+    monkeypatch.setattr(server, "_context", single_context(config=_TEST_CONFIG, database=fake))
     result = server.explain_query(sql)
     assert result["sql"] == sql
 
@@ -288,7 +289,7 @@ def test_explain_query_rejects_comment_only_and_commented_writes(
     sql: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(
-        server, "_context", AppContext.single(config=_TEST_CONFIG, database=FakeConnDatabase())
+        server, "_context", single_context(config=_TEST_CONFIG, database=FakeConnDatabase())
     )
     with pytest.raises(ValueError):
         server.explain_query(sql)
@@ -296,7 +297,7 @@ def test_explain_query_rejects_comment_only_and_commented_writes(
 
 def test_explain_query_rejects_non_select(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
-        server, "_context", AppContext.single(config=_TEST_CONFIG, database=FakeConnDatabase())
+        server, "_context", single_context(config=_TEST_CONFIG, database=FakeConnDatabase())
     )
     with pytest.raises(ValueError):
         server.explain_query("DROP TABLE users")
@@ -304,7 +305,7 @@ def test_explain_query_rejects_non_select(monkeypatch: pytest.MonkeyPatch) -> No
 
 def test_explain_query_rejects_multistatement(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
-        server, "_context", AppContext.single(config=_TEST_CONFIG, database=FakeConnDatabase())
+        server, "_context", single_context(config=_TEST_CONFIG, database=FakeConnDatabase())
     )
     with pytest.raises((ValueError, UnsafeSQLError)):
         server.explain_query("SELECT 1; DROP TABLE users")
@@ -312,7 +313,7 @@ def test_explain_query_rejects_multistatement(monkeypatch: pytest.MonkeyPatch) -
 
 def test_explain_query_rejects_empty(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
-        server, "_context", AppContext.single(config=_TEST_CONFIG, database=FakeConnDatabase())
+        server, "_context", single_context(config=_TEST_CONFIG, database=FakeConnDatabase())
     )
     with pytest.raises(ValueError):
         server.explain_query("   ")
@@ -323,7 +324,7 @@ _SHORT_SQL_CONFIG = replace(_TEST_CONFIG, max_sql_length=32)
 
 def test_explain_query_rejects_oversized_sql(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
-        server, "_context", AppContext.single(config=_SHORT_SQL_CONFIG, database=FakeConnDatabase())
+        server, "_context", single_context(config=_SHORT_SQL_CONFIG, database=FakeConnDatabase())
     )
     with pytest.raises(ValueError, match="CUBRID_MCP_MAX_SQL_LENGTH"):
         server.explain_query("SELECT " + "a" * 100)
@@ -333,7 +334,7 @@ def test_execute_query_rejects_oversized_sql(
     fake_db: FakeDatabase, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(
-        server, "_context", AppContext.single(config=_SHORT_SQL_CONFIG, database=fake_db)
+        server, "_context", single_context(config=_SHORT_SQL_CONFIG, database=fake_db)
     )
     with pytest.raises(ValueError, match="CUBRID_MCP_MAX_SQL_LENGTH"):
         server.execute_query("SELECT " + "a" * 100)
@@ -464,7 +465,7 @@ def test_execute_query_renders_and_truncates(
         max_chars=10,
         max_rows=1000,
     )
-    monkeypatch.setattr(server, "_context", AppContext.single(config=cfg, database=fake_db))
+    monkeypatch.setattr(server, "_context", single_context(config=cfg, database=fake_db))
     fake_db.queue([("short",), ("a-much-longer-row",)])
     result = server.execute_query("SELECT 1")
     assert result["row_count"] == 1
@@ -697,7 +698,7 @@ def test_connection_selector_unknown_raises(monkeypatch: pytest.MonkeyPatch) -> 
     from cubrid_mcp_server.config import ConfigError
 
     fake = FakeDatabase()
-    monkeypatch.setattr(server, "_context", AppContext.single(config=_TEST_CONFIG, database=fake))
+    monkeypatch.setattr(server, "_context", single_context(config=_TEST_CONFIG, database=fake))
     with pytest.raises(ConfigError, match="unknown connection"):
         server.all_table_names(connection="nope")
 
@@ -1017,9 +1018,7 @@ def leaky_db(monkeypatch: pytest.MonkeyPatch) -> Database:
 
     monkeypatch.setattr(pycubrid, "connect", _connect)
     database = Database(_LEAKY_CONFIG)
-    monkeypatch.setattr(
-        server, "_context", AppContext.single(config=_LEAKY_CONFIG, database=database)
-    )
+    monkeypatch.setattr(server, "_context", single_context(config=_LEAKY_CONFIG, database=database))
     return database
 
 
@@ -1113,7 +1112,7 @@ def _whitelist_off_db(
     monkeypatch.setattr(pycubrid, "connect", lambda **_kwargs: conn)
     db = Database(_WHITELIST_OFF_CONFIG)
     monkeypatch.setattr(
-        server, "_context", AppContext.single(config=_WHITELIST_OFF_CONFIG, database=db)
+        server, "_context", single_context(config=_WHITELIST_OFF_CONFIG, database=db)
     )
     return db, conn
 
@@ -1237,7 +1236,7 @@ def test_explain_query_rejects_side_effect_functions(
 ) -> None:
     """explain_query executes its statement, so it rejects the same forms (#295)."""
     fake = FakeConnDatabase()
-    monkeypatch.setattr(server, "_context", AppContext.single(config=_TEST_CONFIG, database=fake))
+    monkeypatch.setattr(server, "_context", single_context(config=_TEST_CONFIG, database=fake))
     with pytest.raises(UnsafeSQLError, match="is not permitted in read-only mode"):
         server.explain_query(sql)
     assert fake.cursors == []
@@ -1301,7 +1300,7 @@ def test_unqualified_name_prefers_the_configured_users_table(
 ) -> None:
     # CUBRID resolves an unqualified name to the current user's table, too.
     config = replace(_TEST_CONFIG, user="other")
-    monkeypatch.setattr(server, "_context", AppContext.single(config=config, database=owner_db))
+    monkeypatch.setattr(server, "_context", single_context(config=config, database=owner_db))
     owner_db.queue(_TWO_OWNERS)
     server.list_indexes("T")
     assert owner_db.calls[1][1] == ("t", "OTHER")
@@ -1374,7 +1373,7 @@ def test_explain_query_reads_the_leading_keyword_like_the_checks(
     sql: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     fake = FakeConnDatabase()
-    monkeypatch.setattr(server, "_context", AppContext.single(config=_TEST_CONFIG, database=fake))
+    monkeypatch.setattr(server, "_context", single_context(config=_TEST_CONFIG, database=fake))
     assert server.explain_query(sql)["sql"] == sql
 
 
@@ -1383,7 +1382,7 @@ def test_explain_query_still_accepts_only_select_and_with(
     sql: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     fake = FakeConnDatabase()
-    monkeypatch.setattr(server, "_context", AppContext.single(config=_TEST_CONFIG, database=fake))
+    monkeypatch.setattr(server, "_context", single_context(config=_TEST_CONFIG, database=fake))
     with pytest.raises(ValueError, match="only accepts SELECT or WITH"):
         server.explain_query(sql)
     assert fake.cursors == []
@@ -1392,14 +1391,14 @@ def test_explain_query_still_accepts_only_select_and_with(
 def test_explain_query_caps_the_plan(monkeypatch: pytest.MonkeyPatch) -> None:
     fake = FakeConnDatabase()
     config = replace(_TEST_CONFIG, max_chars=10)
-    monkeypatch.setattr(server, "_context", AppContext.single(config=config, database=fake))
+    monkeypatch.setattr(server, "_context", single_context(config=config, database=fake))
     result = server.explain_query("SELECT 1")
     assert result["plan"] == "Trace Sta…"
     assert result["truncated"] is True
     monkeypatch.setattr(
         server,
         "_context",
-        AppContext.single(config=replace(_TEST_CONFIG, max_chars=4000), database=fake),
+        single_context(config=replace(_TEST_CONFIG, max_chars=4000), database=fake),
     )
     assert server.explain_query("SELECT 1")["truncated"] is False
 
@@ -1413,7 +1412,7 @@ def test_explain_query_audits_the_truncated_flag(
     from cubrid_mcp_server.audit import AuditLogger
 
     buf = io.StringIO()
-    context = AppContext.single(
+    context = single_context(
         config=replace(_TEST_CONFIG, max_chars=max_chars),
         database=FakeConnDatabase(),
         audit=AuditLogger(True, stream=buf),

@@ -9,6 +9,7 @@ import pytest
 from cubrid_mcp_server import context as context_module
 from cubrid_mcp_server.config import Config, ConfigError, ConnectionRegistry
 from cubrid_mcp_server.context import AppContext
+from tests.helpers import single_context
 
 _TEST_CONFIG = Config(
     host="h",
@@ -52,10 +53,10 @@ def test_from_env_builds_a_database_per_connection(monkeypatch: pytest.MonkeyPat
 
 def test_single_builds_a_default_only_context() -> None:
     sentinel: Any = object()
-    ctx = AppContext.single(config=_TEST_CONFIG, database=sentinel)
+    ctx = single_context(config=_TEST_CONFIG, database=sentinel)
     assert ctx.config_for() is _TEST_CONFIG
     assert ctx.database_for() is sentinel
-    assert ctx.registry.names == ["default"]
+    assert sorted(ctx.registry.configs) == ["default"]
 
 
 def test_database_for_selects_named_connection() -> None:
@@ -74,7 +75,7 @@ def test_database_for_selects_named_connection() -> None:
 
 
 def test_database_for_unknown_connection_raises() -> None:
-    ctx = AppContext.single(config=_TEST_CONFIG, database=object())  # type: ignore[arg-type]
+    ctx = single_context(config=_TEST_CONFIG, database=object())  # type: ignore[arg-type]
     with pytest.raises(ConfigError) as excinfo:
         ctx.database_for("nope")
     assert "unknown connection" in str(excinfo.value)
@@ -143,7 +144,7 @@ def test_audit_for_is_per_connection() -> None:
 
 
 def test_audit_for_unknown_connection_raises() -> None:
-    ctx = AppContext.single(config=_TEST_CONFIG, database=object())  # type: ignore[arg-type]
+    ctx = single_context(config=_TEST_CONFIG, database=object())  # type: ignore[arg-type]
     with pytest.raises(ConfigError) as excinfo:
         ctx.audit_for("nope")
     assert "unknown connection" in str(excinfo.value)
@@ -153,6 +154,6 @@ def test_injected_audit_is_reused_for_default_slot() -> None:
     from cubrid_mcp_server.audit import AuditLogger
 
     injected = AuditLogger(False)
-    ctx = AppContext.single(config=_TEST_CONFIG, database=object(), audit=injected)  # type: ignore[arg-type]
+    ctx = single_context(config=_TEST_CONFIG, database=object(), audit=injected)  # type: ignore[arg-type]
     assert ctx.audit is injected
     assert ctx.audit_for() is injected
