@@ -206,7 +206,7 @@ class _FakeConnDB:
 
         return _Conn()
 
-    def exclusive(self) -> Any:
+    def exclusive(self, **_kwargs: Any) -> Any:
         from contextlib import contextmanager
 
         @contextmanager

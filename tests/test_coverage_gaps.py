@@ -115,7 +115,7 @@ class _CleanupFailingDB:
         self.discarded = 0
 
     @contextmanager
-    def exclusive(self) -> Any:
+    def exclusive(self, **_kwargs: Any) -> Any:
         yield _CleanupFailingConn()
 
     def _discard_connection(self) -> None:

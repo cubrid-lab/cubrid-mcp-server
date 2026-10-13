@@ -315,7 +315,7 @@ def explain_query(sql: str, connection: str | None = None) -> dict[str, Any]:
     in the output — it indicates a full table scan that may benefit
     from an index. See cubrid://guide/performance for interpretation tips.
     """
-    with _audit(connection).track("explain_query", sql):
+    with _audit(connection).track("explain_query", sql) as outcome:
         cleaned = sql.strip().rstrip(";").strip()
         if not cleaned:
             raise ValueError("empty SQL statement")
@@ -344,6 +344,7 @@ def explain_query(sql: str, connection: str | None = None) -> dict[str, Any]:
 
         # The plan of a large statement can be long; cap it like execute_query.
         truncated = len(plan) > config.max_chars
+        outcome.truncated = truncated
         if truncated:
             plan = plan[: config.max_chars - 1] + "\u2026"
         return {"sql": cleaned, "plan": plan, "truncated": truncated}

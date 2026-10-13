@@ -1213,7 +1213,8 @@ def test_trace_enabled_keeps_connection_after_server_sql_error(
     with pytest.raises(DatabaseError, match="ProgrammingError"):
         with db.trace_enabled():
             _raise(pycubrid.ProgrammingError("Semantic: bad column"))
-    # SET TRACE OFF and the rollback ran, and the session is reused.
+    # SET TRACE OFF and exactly one rollback ran, and the session is reused.
+    assert created[0].rollbacks == 1
     assert db._connection is created[0]
     db.fetch_all("SELECT 2")
     assert db._connection is created[0]

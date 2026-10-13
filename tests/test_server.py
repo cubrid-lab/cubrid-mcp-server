@@ -229,7 +229,7 @@ class FakeConnDatabase(FakeDatabase):
 
         return _Conn()
 
-    def exclusive(self) -> Any:
+    def exclusive(self, **_kwargs: Any) -> Any:
         from contextlib import contextmanager
 
         @contextmanager
@@ -1402,3 +1402,24 @@ def test_explain_query_caps_the_plan(monkeypatch: pytest.MonkeyPatch) -> None:
         AppContext.single(config=replace(_TEST_CONFIG, max_chars=4000), database=fake),
     )
     assert server.explain_query("SELECT 1")["truncated"] is False
+
+
+@pytest.mark.parametrize(("max_chars", "truncated"), [(10, True), (4000, False)])
+def test_explain_query_audits_the_truncated_flag(
+    monkeypatch: pytest.MonkeyPatch, max_chars: int, truncated: bool
+) -> None:
+    import io
+
+    from cubrid_mcp_server.audit import AuditLogger
+
+    buf = io.StringIO()
+    context = AppContext.single(
+        config=replace(_TEST_CONFIG, max_chars=max_chars),
+        database=FakeConnDatabase(),
+        audit=AuditLogger(True, stream=buf),
+    )
+    monkeypatch.setattr(server, "_context", context)
+    assert server.explain_query("SELECT 1")["truncated"] is truncated
+    (record,) = [json.loads(line) for line in buf.getvalue().splitlines()]
+    assert record["tool"] == "explain_query"
+    assert record["truncated"] is truncated
