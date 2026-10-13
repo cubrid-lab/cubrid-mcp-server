@@ -8,7 +8,7 @@ import logging
 import os
 import sys
 import threading
-from typing import Any
+from typing import Any, NamedTuple
 from urllib.parse import quote
 
 from fastmcp import FastMCP
@@ -81,35 +81,105 @@ def _audit(connection: str | None = None) -> AuditLogger:
     return audit
 
 
+class _Table(NamedTuple):
+    """A user table: its name and, on CUBRID 11.2 and later, its owner.
+
+    ``owner`` is ``db_class.owner_name`` as stored (upper case), or ``None``
+    before 11.2, where table names are unique in the database.
+    """
+
+    owner: str | None
+    name: str
+
+    @property
+    def display(self) -> str:
+        """The name tools return: ``owner.table`` on 11.2 and later, else ``table``."""
+        return f"{self.owner.lower()}.{self.name}" if self.owner is not None else self.name
+
+
+def _user_tables(connection: str | None = None) -> list[_Table]:
+    """Every user table (excludes system classes and views), owner-qualified on 11.2+."""
+    database = _db(connection)
+    where = "WHERE is_system_class='NO' AND class_type='CLASS' "
+    if database.owner_qualified_names():
+        rows = database.fetch_all(
+            "SELECT class_name, owner_name FROM db_class "
+            + where
+            + "ORDER BY owner_name, class_name"
+        )
+        return [_Table(owner=row[1], name=row[0]) for row in rows]
+    rows = database.fetch_all("SELECT class_name FROM db_class " + where + "ORDER BY class_name")
+    return [_Table(owner=None, name=row[0]) for row in rows]
+
+
 def _all_table_names(connection: str | None = None) -> list[str]:
-    """Internal helper: list every user table (excludes system classes and views)."""
-    rows = _db(connection).fetch_all(
-        "SELECT class_name FROM db_class "
-        "WHERE is_system_class='NO' AND class_type='CLASS' "
-        "ORDER BY class_name"
-    )
-    return [row[0] for row in rows]
+    """Internal helper: the names of every user table, as tools return them."""
+    return [table.display for table in _user_tables(connection)]
 
 
-def _resolve_table(table_name: str, connection: str | None = None) -> str:
-    """Resolve ``table_name`` to its canonical stored name (case-insensitive).
+def _match_table(
+    tables: list[_Table], table_name: str, connection: str | None = None
+) -> _Table | None:
+    """Find ``table_name`` among ``tables`` (case-insensitive), or return ``None``.
 
-    Raises :class:`ValueError` if no matching user table exists. This both prevents
-    lookups against system classes/views and gives callers a clear error instead of
-    silently returning empty metadata.
+    ``owner.table`` matches that owner's table. On CUBRID 11.2 and later an
+    unqualified name matches a table of that name owned by anyone; when several
+    owners have one, the configured user's own table wins (CUBRID resolves an
+    unqualified name to it as well), and otherwise :class:`ValueError` lists the
+    qualified names to choose from.
     """
     needle = table_name.strip().lower()
-    if not needle:
+    for table in tables:
+        if table.display.lower() == needle:
+            return table
+    candidates = [t for t in tables if t.owner is not None and t.name.lower() == needle]
+    if len(candidates) > 1:
+        user = _cfg(connection).user.lower()
+        own = [t for t in candidates if t.owner is not None and t.owner.lower() == user]
+        if len(own) == 1:
+            return own[0]
+        raise ValueError(
+            f"ambiguous table name {table_name!r}; qualify it with the owner: "
+            + ", ".join(t.display for t in candidates)
+        )
+    return candidates[0] if candidates else None
+
+
+def _resolve_table(table_name: str, connection: str | None = None) -> _Table:
+    """Resolve ``table_name`` to a user table (case-insensitive, see :func:`_match_table`).
+
+    Raises :class:`ValueError` if no matching user table exists, or if an
+    unqualified name is ambiguous. This both prevents lookups against system
+    classes/views and gives callers a clear error instead of silently returning
+    empty or merged metadata.
+    """
+    if not table_name.strip():
         raise ValueError("table name must not be empty")
-    for name in _all_table_names(connection):
-        if name.lower() == needle:
-            return name
-    raise ValueError(f"unknown table: {table_name!r}")
+    table = _match_table(_user_tables(connection), table_name, connection)
+    if table is None:
+        raise ValueError(f"unknown table: {table_name!r}")
+    return table
+
+
+def _same_owner(table: _Table, left: str, right: str) -> str:
+    """Extra join condition matching the owners of two catalog views on 11.2 and later."""
+    return "" if table.owner is None else f" AND {left}.owner_name = {right}.owner_name"
+
+
+def _owner_filter(table: _Table, alias: str) -> tuple[str, tuple[Any, ...]]:
+    """SQL condition and parameters selecting ``table`` in a catalog view aliased ``alias``."""
+    if table.owner is None:
+        return f"{alias}.class_name = ?", (table.name,)
+    return f"{alias}.class_name = ? AND {alias}.owner_name = ?", (table.name, table.owner)
 
 
 @mcp.tool
 def all_table_names(connection: str | None = None) -> list[str]:
-    """Return every user table in the connected CUBRID database."""
+    """Return every user table in the connected CUBRID database.
+
+    From CUBRID 11.2 on, names are ``owner.table`` (owner in lower case); pass
+    them as ``table_name`` to the other schema tools.
+    """
     return _all_table_names(connection)
 
 
@@ -122,26 +192,29 @@ def filter_table_names(substring: str, connection: str | None = None) -> list[st
     return [name for name in _all_table_names(connection) if needle in name.lower()]
 
 
-def _schema_definitions(table_name: str, connection: str | None = None) -> list[dict[str, Any]]:
+def _schema_definitions(table: _Table, connection: str | None = None) -> list[dict[str, Any]]:
+    # The conditions come from _owner_filter (fixed column names); values are bound.
+    attr_filter, params = _owner_filter(table, "a")
     rows = _db(connection).fetch_all(
-        """
+        f"""
         SELECT a.attr_name, a.data_type, a.is_nullable, a.default_value
         FROM db_attribute a
-        WHERE a.class_name = ?
+        WHERE {attr_filter}
         ORDER BY a.def_order
         """,
-        (table_name,),
+        params,
     )
+    index_filter, params = _owner_filter(table, "i")
     pk_rows = _db(connection).fetch_all(
-        """
+        f"""
         SELECT k.key_attr_name
         FROM db_index i, db_index_key k
-        WHERE i.class_name = ?
+        WHERE {index_filter}
           AND i.is_primary_key = 'YES'
           AND i.index_name = k.index_name
-          AND i.class_name = k.class_name
+          AND i.class_name = k.class_name{_same_owner(table, "i", "k")}
         """,
-        (table_name,),
+        params,
     )
     pk_columns: set[str] = {r[0] for r in pk_rows}
     return [
@@ -168,7 +241,7 @@ def describe_table(table_name: str, connection: str | None = None) -> dict[str, 
     return _describe_table(_resolve_table(table_name, connection), connection)
 
 
-def _describe_table(resolved: str, connection: str | None = None) -> dict[str, Any]:
+def _describe_table(resolved: _Table, connection: str | None = None) -> dict[str, Any]:
     """Build the full-metadata payload for an already-resolved table name.
 
     Shared by the ``describe_table`` tool and the ``cubrid://schema/{table}``
@@ -183,25 +256,26 @@ def _describe_table(resolved: str, connection: str | None = None) -> dict[str, A
         [],
     )
     return {
-        "table": resolved,
+        "table": resolved.display,
         "columns": columns,
         "primary_key": primary_key,
         "indexes": indexes,
     }
 
 
-def _list_indexes(table_name: str, connection: str | None = None) -> list[dict[str, Any]]:
+def _list_indexes(table: _Table, connection: str | None = None) -> list[dict[str, Any]]:
+    index_filter, params = _owner_filter(table, "i")
     rows = _db(connection).fetch_all(
-        """
+        f"""
         SELECT i.index_name, i.is_unique, i.is_primary_key, i.is_foreign_key,
                i.is_reverse, i.key_count, k.key_attr_name, k.key_order, k.asc_desc
         FROM db_index i, db_index_key k
-        WHERE i.class_name = ?
+        WHERE {index_filter}
           AND i.index_name = k.index_name
-          AND i.class_name = k.class_name
+          AND i.class_name = k.class_name{_same_owner(table, "i", "k")}
         ORDER BY i.index_name, k.key_order
         """,
-        (table_name,),
+        params,
     )
     indexes: dict[str, dict[str, Any]] = {}
     for r in rows:
@@ -284,11 +358,10 @@ def table_row_counts(
     is the number of user tables. An explicit list of more than 50 names is rejected.
     Passing an empty list (``table_names=[]``) requests zero tables.
     """
-    known = _all_table_names(connection)
-    known_lower = {name.lower(): name for name in known}
+    known = _user_tables(connection)
     truncated = False
     if table_names is None:
-        targets = sorted(known)
+        targets = sorted(table.display for table in known)
         if len(targets) > _MAX_ROW_COUNT_TABLES:
             targets = targets[:_MAX_ROW_COUNT_TABLES]
             truncated = True
@@ -301,16 +374,25 @@ def table_row_counts(
             )
     results: list[dict[str, Any]] = []
     for name in targets:
-        resolved = known_lower.get(name.strip().lower())
+        try:
+            resolved = _match_table(known, name, connection)
+        except ValueError as exc:
+            results.append({"table": name, "row_count": None, "error": str(exc)})
+            continue
         if resolved is None:
             results.append({"table": name, "row_count": None, "error": "unknown table"})
             continue
+        quoted = _quote_ident(resolved.name)
+        if resolved.owner is not None:
+            quoted = _quote_ident(resolved.owner) + "." + quoted
         try:
-            rows = _db(connection).fetch_all("SELECT COUNT(*) FROM " + _quote_ident(resolved))
-            results.append({"table": resolved, "row_count": int(rows[0][0]) if rows else 0})
+            rows = _db(connection).fetch_all("SELECT COUNT(*) FROM " + quoted)
+            results.append({"table": resolved.display, "row_count": int(rows[0][0]) if rows else 0})
         except Exception as exc:
-            logger.error("row count failed for table %s", resolved, exc_info=exc)
-            results.append({"table": resolved, "row_count": None, "error": sanitize_error(exc)})
+            logger.error("row count failed for table %s", resolved.display, exc_info=exc)
+            results.append(
+                {"table": resolved.display, "row_count": None, "error": sanitize_error(exc)}
+            )
     return {"tables": results, "truncated": truncated, "total_tables": len(known)}
 
 
@@ -362,18 +444,24 @@ def list_class_hierarchy(
     ``table_name`` is resolved like the other schema tools: matched
     case-insensitively against user tables, and an unknown name raises an error.
     """
+    database = _db(connection)
+    if database.owner_qualified_names():
+        # On 11.2 and later names are unique per owner, so report them qualified.
+        columns = (
+            "LOWER(owner_name) || '.' || class_name, "
+            "LOWER(super_owner_name) || '.' || super_class_name"
+        )
+        order = "owner_name, class_name, super_owner_name, super_class_name"
+    else:
+        columns, order = "class_name, super_class_name", "class_name, super_class_name"
     if table_name:
-        resolved = _resolve_table(table_name, connection)
-        rows = _db(connection).fetch_all(
-            "SELECT class_name, super_class_name FROM db_direct_super_class "
-            "WHERE class_name = ? ORDER BY super_class_name",
-            (resolved,),
+        condition, params = _owner_filter(_resolve_table(table_name, connection), "d")
+        rows = database.fetch_all(
+            f"SELECT {columns} FROM db_direct_super_class d WHERE {condition} ORDER BY {order}",
+            params,
         )
     else:
-        rows = _db(connection).fetch_all(
-            "SELECT class_name, super_class_name FROM db_direct_super_class "
-            "ORDER BY class_name, super_class_name"
-        )
+        rows = database.fetch_all(f"SELECT {columns} FROM db_direct_super_class ORDER BY {order}")
     hierarchy: dict[str, list[str]] = {}
     for child, parent in rows:
         hierarchy.setdefault(child, []).append(parent)

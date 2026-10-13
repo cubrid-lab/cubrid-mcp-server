@@ -26,6 +26,8 @@ CREATE SERIAL order_no START WITH 1000 INCREMENT BY 10;
 
 ### 스키마 조회
 
+**테이블 이름과 소유자.** CUBRID 11.2부터는 여러 사용자가 같은 이름의 테이블을 각자 소유할 수 있습니다. 이런 서버에서 도구는 테이블 이름을 `owner.table`(소유자는 소문자, 예: `dba.product`)로 반환하고, 메타데이터를 소유자와 테이블 이름으로 선택합니다. `table_name` 인수는 `owner.table`이나 `table`만 쓸 수 있습니다. 소유자 없는 이름은 누가 소유하든 그 이름의 테이블과 일치합니다. 여러 소유자에게 같은 이름이 있으면 SQL에서 CUBRID가 하듯 설정된 사용자 자신의 테이블을 쓰고, 그렇지 않으면 `ambiguous table name '…'; qualify it with the owner: …` 오류로 실패합니다. `filter_table_names`는 부분 문자열을 `owner.table`과 비교합니다. CUBRID 10.2와 11.0에서는 테이블 이름이 데이터베이스 안에서 유일하므로 이전처럼 소유자 없이 반환하고 비교합니다. 아래 예시는 11.4에서 `dba`로 실행했습니다.
+
 #### `all_table_names(connection=None)`
 
 데이터베이스의 모든 사용자 테이블을 나열합니다. 시스템·카탈로그 테이블은 제외됩니다.
@@ -34,10 +36,10 @@ CREATE SERIAL order_no START WITH 1000 INCREMENT BY 10;
 
 ```json
 [
-  "car",
-  "note",
-  "product",
-  "vehicle"
+  "dba.car",
+  "dba.note",
+  "dba.product",
+  "dba.vehicle"
 ]
 ```
 
@@ -49,7 +51,7 @@ CREATE SERIAL order_no START WITH 1000 INCREMENT BY 10;
 
 ```json
 [
-  "product"
+  "dba.product"
 ]
 ```
 
@@ -95,7 +97,7 @@ CREATE SERIAL order_no START WITH 1000 INCREMENT BY 10;
 
 ```json
 {
-  "table": "note",
+  "table": "dba.note",
   "columns": [
     {
       "name": "id",
@@ -198,15 +200,15 @@ CREATE SERIAL order_no START WITH 1000 INCREMENT BY 10;
 
 #### `list_class_hierarchy(table_name=None, connection=None)`
 
-CUBRID `CLASS` 상속 관계 — 어느 테이블이 어느 테이블을 상속하는지. `table_name`을 생략하면 모든 클래스를, 전달하면 해당 테이블의 직접 상위 클래스만 반환합니다. `table_name`은 다른 스키마 도구와 같은 방식으로 해석됩니다. 사용자 테이블과 대소문자 구분 없이 매칭하며, 알 수 없는 테이블(시스템 클래스와 뷰 포함)은 빈 리스트 대신 `unknown table` 오류를 발생시킵니다.
+CUBRID `CLASS` 상속 관계 — 어느 테이블이 어느 테이블을 상속하는지. `table_name`을 생략하면 모든 클래스를, 전달하면 해당 테이블의 직접 상위 클래스만 반환합니다. CUBRID 11.2부터 클래스와 상위 클래스 이름은 `owner.table`입니다. `table_name`은 다른 스키마 도구와 같은 방식으로 해석됩니다. 사용자 테이블과 대소문자 구분 없이 매칭하며, 알 수 없는 테이블(시스템 클래스와 뷰 포함)은 빈 리스트 대신 `unknown table` 오류를 발생시킵니다.
 
 예시: `list_class_hierarchy(table_name="car")` 응답
 
 ```json
 [
   {
-    "class_name": "car",
-    "super_classes": ["vehicle"]
+    "class_name": "dba.car",
+    "super_classes": ["dba.vehicle"]
   }
 ]
 ```
@@ -265,7 +267,7 @@ CUBRID `SHOW TRACE`를 통해 `SELECT`/`WITH` 문의 실행 계획/트레이스�
 
 #### `table_row_counts(table_names=None, connection=None)`
 
-한 테이블 또는 여러 테이블의 `COUNT(*)` — 크기를 추정하려고 행을 샘플링하는 것보다 저렴합니다. `{"tables": [{"table", "row_count"}, …], "truncated": bool, "total_tables": int}`를 반환하며, `total_tables`는 데이터베이스의 사용자 테이블 수입니다. 알 수 없거나 카운트에 실패한 테이블은 `"row_count": null`과 `error`를 가집니다.
+한 테이블 또는 여러 테이블의 `COUNT(*)` — 크기를 추정하려고 행을 샘플링하는 것보다 저렴합니다. `{"tables": [{"table", "row_count"}, …], "truncated": bool, "total_tables": int}`를 반환하며, `total_tables`는 데이터베이스의 사용자 테이블 수입니다. 알 수 없거나 모호하거나(위의 "테이블 이름과 소유자" 참고) 카운트에 실패한 테이블은 `"row_count": null`과 `error`를 가집니다. CUBRID 11.2부터 `COUNT(*)`는 테이블을 `"OWNER"."table"`로 지정하므로, 설정된 사용자에게 같은 이름의 테이블이 있든 없든 다른 사용자가 소유한 테이블도 카운트됩니다.
 
 - 생략하거나 `None`: 이름 순으로 처음 50개 사용자 테이블을 카운트합니다. 테이블이 더 있으면 `truncated`가 `true`이며, 나머지 이름(`all_table_names`로 확인)을 최대 50개씩 나누어 전달하세요.
 - 명시적 리스트: 해당 테이블을 카운트하며, 50개를 넘으면 `too many tables requested (N); limit is 50 per call` 오류가 발생합니다.
@@ -277,11 +279,11 @@ CUBRID `SHOW TRACE`를 통해 `SELECT`/`WITH` 문의 실행 계획/트레이스�
 {
   "tables": [
     {
-      "table": "product",
+      "table": "dba.product",
       "row_count": 5
     },
     {
-      "table": "note",
+      "table": "dba.note",
       "row_count": 2
     },
     {

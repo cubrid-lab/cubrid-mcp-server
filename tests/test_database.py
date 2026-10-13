@@ -1085,3 +1085,63 @@ def test_no_result_set_with_failed_rollback_discards(monkeypatch: pytest.MonkeyP
     assert created[0].rollbacks == 1
     assert created[0].closed is True
     assert db._connection is None
+
+
+# --- owner-qualified catalog probe (#296) ---
+
+
+class _OwnerProbeConnection(FakeConnection):
+    """Fake connection whose ``db_attribute`` has ``owner_name`` only when ``owners``."""
+
+    def __init__(self, backend: dict[str, Any]) -> None:
+        super().__init__()
+        self.backend = backend
+
+    def cursor(self) -> FakeCursor:
+        backend = self.backend
+        cursor = super().cursor()
+        original_execute = cursor.execute
+
+        def _execute(sql: str, params: tuple[Any, ...] = ()) -> None:
+            original_execute(sql, params)
+            if '"owner_name" FROM db_attribute' in sql:
+                if backend.get("lost"):
+                    raise ConnectionResetError("broker restarted")
+                if not backend["owners"]:
+                    raise pycubrid.ProgrammingError("Semantic: owner_name is not defined")
+
+        cursor.execute = _execute  # type: ignore[method-assign]
+        return cursor
+
+
+def test_owner_qualified_names_probed_and_cached(monkeypatch: pytest.MonkeyPatch) -> None:
+    backend: dict[str, Any] = {"owners": True}
+    created: list[_OwnerProbeConnection] = []
+
+    def _connect(**_k: Any) -> _OwnerProbeConnection:
+        created.append(_OwnerProbeConnection(backend))
+        return created[-1]
+
+    monkeypatch.setattr(pycubrid, "connect", _connect)
+    db = Database(_TEST_CONFIG)
+    assert db.owner_qualified_names() is True
+    assert db.owner_qualified_names() is True
+    probes = [sql for conn in created for c in conn.cursors for sql, _ in c.executed]
+    assert len(probes) == 1  # cached while connected
+    db._discard_connection()
+    backend["owners"] = False
+    assert db.owner_qualified_names() is False  # re-probed on the next connection
+    # The server rejecting the column keeps the session.
+    assert created[-1].closed is False
+
+
+def test_owner_qualified_names_not_cached_after_a_lost_connection(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    backend: dict[str, Any] = {"owners": True, "lost": True}
+    monkeypatch.setattr(pycubrid, "connect", lambda **_k: _OwnerProbeConnection(backend))
+    db = Database(_TEST_CONFIG)
+    with pytest.raises(DatabaseError):
+        db.owner_qualified_names()
+    backend["lost"] = False
+    assert db.owner_qualified_names() is True

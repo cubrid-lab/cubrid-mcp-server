@@ -66,6 +66,9 @@ class _NameOnlyDB:
     def __init__(self, names: list[str]) -> None:
         self._names = names
 
+    def owner_qualified_names(self) -> bool:
+        return False
+
     def fetch_all(self, sql: str, params: tuple[Any, ...] | None = None) -> list[tuple[Any, ...]]:
         return [(n,) for n in self._names]
 
@@ -139,6 +142,9 @@ def test_explain_query_swallows_cleanup_errors(monkeypatch: pytest.MonkeyPatch) 
 
 
 class _RowCountErrorDB:
+    def owner_qualified_names(self) -> bool:
+        return False
+
     def fetch_all(self, sql: str, params: tuple[Any, ...] | None = None) -> list[tuple[Any, ...]]:
         if "db_class" in sql:
             return [("users",)]
@@ -165,6 +171,9 @@ class _ManyTablesDB:
     def __init__(self, count: int) -> None:
         self.names = [f"t{i:03d}" for i in range(count)]
         self.counted: list[str] = []
+
+    def owner_qualified_names(self) -> bool:
+        return False
 
     def fetch_all(self, sql: str, params: tuple[Any, ...] | None = None) -> list[tuple[Any, ...]]:
         if "db_class" in sql:

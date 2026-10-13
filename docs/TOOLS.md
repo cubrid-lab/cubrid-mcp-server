@@ -24,6 +24,8 @@ Each response is the tool's JSON text content, pretty-printed. Values such as `s
 
 ### Schema inspection
 
+**Table names and owners.** From CUBRID 11.2 on, two users may each own a table with the same name. On those servers the tools return table names as `owner.table` (owner in lower case, for example `dba.product`) and select metadata by owner and table name. A `table_name` argument may be `owner.table` or just `table`. An unqualified name matches a table of that name owned by anyone. If several owners have one, the configured user's own table is used, as CUBRID does for an unqualified name in SQL; otherwise the call fails with `ambiguous table name '…'; qualify it with the owner: …`. `filter_table_names` matches its substring against `owner.table`. On CUBRID 10.2 and 11.0 table names are unique in the database, so names are returned and matched without an owner, as before. The examples below ran on 11.4 as `dba`.
+
 #### `all_table_names(connection=None)`
 
 Lists every user table in the database. System and catalog tables are excluded.
@@ -32,10 +34,10 @@ Example: `all_table_names()` returns
 
 ```json
 [
-  "car",
-  "note",
-  "product",
-  "vehicle"
+  "dba.car",
+  "dba.note",
+  "dba.product",
+  "dba.vehicle"
 ]
 ```
 
@@ -47,7 +49,7 @@ Example: `filter_table_names(substring="prod")` returns
 
 ```json
 [
-  "product"
+  "dba.product"
 ]
 ```
 
@@ -93,7 +95,7 @@ Example: `describe_table(table_name="note")` returns
 
 ```json
 {
-  "table": "note",
+  "table": "dba.note",
   "columns": [
     {
       "name": "id",
@@ -196,15 +198,15 @@ Example: `list_indexes(table_name="note")` returns
 
 #### `list_class_hierarchy(table_name=None, connection=None)`
 
-CUBRID `CLASS` inheritance relationships — which tables inherit from which. Omit `table_name` for every class, or pass one to get only that table's direct super classes. `table_name` is resolved like the other schema tools: matched case-insensitively against user tables, and an unknown table (including system classes and views) raises `unknown table` instead of returning an empty list.
+CUBRID `CLASS` inheritance relationships — which tables inherit from which. Omit `table_name` for every class, or pass one to get only that table's direct super classes. From CUBRID 11.2 on, class and super class names are `owner.table`. `table_name` is resolved like the other schema tools: matched case-insensitively against user tables, and an unknown table (including system classes and views) raises `unknown table` instead of returning an empty list.
 
 Example: `list_class_hierarchy(table_name="car")` returns
 
 ```json
 [
   {
-    "class_name": "car",
-    "super_classes": ["vehicle"]
+    "class_name": "dba.car",
+    "super_classes": ["dba.vehicle"]
   }
 ]
 ```
@@ -263,7 +265,7 @@ Example: `explain_query(sql="SELECT name, price FROM product WHERE category = 'f
 
 #### `table_row_counts(table_names=None, connection=None)`
 
-`COUNT(*)` for one table or many — cheaper than sampling rows to estimate size. Returns `{"tables": [{"table", "row_count"}, …], "truncated": bool, "total_tables": int}`, where `total_tables` is the number of user tables in the database; a table that is unknown or fails to count has `"row_count": null` and an `error`.
+`COUNT(*)` for one table or many — cheaper than sampling rows to estimate size. Returns `{"tables": [{"table", "row_count"}, …], "truncated": bool, "total_tables": int}`, where `total_tables` is the number of user tables in the database; a table that is unknown, ambiguous (see [Table names and owners](#schema-inspection)) or fails to count has `"row_count": null` and an `error`. From CUBRID 11.2 on, `COUNT(*)` names the table as `"OWNER"."table"`, so a table owned by another user is counted even when the configured user has a table of that name or none.
 
 - Omitted or `None`: counts the first 50 user tables in name order. If the database has more, `truncated` is `true`; pass the remaining names (from `all_table_names`) in batches of up to 50.
 - Explicit list: counts those tables; more than 50 names raises `too many tables requested (N); limit is 50 per call`.
@@ -275,11 +277,11 @@ Example: `table_row_counts(table_names=["product", "note", "missing_table"])` re
 {
   "tables": [
     {
-      "table": "product",
+      "table": "dba.product",
       "row_count": 5
     },
     {
-      "table": "note",
+      "table": "dba.note",
       "row_count": 2
     },
     {

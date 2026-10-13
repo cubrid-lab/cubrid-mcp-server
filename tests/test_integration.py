@@ -448,6 +448,93 @@ class TestCubridIntegration:
         assert row[0] == "x" * 3990
         assert sum(len(value) for value in row) <= 4000 + 58
 
+    def test_metadata_tools_tell_owners_apart(self) -> None:
+        """Two owners' tables with one name stay apart on CUBRID 11.2 and later (#296)."""
+        from dataclasses import replace
+
+        import pycubrid
+
+        from cubrid_mcp_server import server
+        from cubrid_mcp_server.context import AppContext
+        from cubrid_mcp_server.database import Database
+
+        if not self.db.owner_qualified_names():
+            pytest.skip("table names are unique per database before CUBRID 11.2")
+        table, other, reader = "mcp_it_owned", "mcp_it_owner_other", "mcp_it_owner_reader"
+        owner = self.config.user.lower()
+        admin = self._second_session()
+
+        def drop_users() -> None:
+            cursor = admin.cursor()
+            cursor.execute(f"DROP TABLE IF EXISTS {other}.{table}")
+            for user in (other, reader):
+                cursor.execute(f"SELECT COUNT(*) FROM db_user WHERE name = '{user.upper()}'")
+                if cursor.fetchall()[0][0]:
+                    cursor.execute(f"DROP USER {user}")
+            admin.commit()
+
+        try:
+            drop_users()
+            cursor = admin.cursor()
+            for sql in (
+                f"DROP TABLE IF EXISTS {table}",
+                f"CREATE TABLE {table} (id INT PRIMARY KEY, a INT)",
+                f"INSERT INTO {table} VALUES (1, 1)",
+                f"CREATE USER {other} PASSWORD 'pw296'",
+                f"CREATE USER {reader} PASSWORD 'pw296'",
+                f"GRANT SELECT ON {table} TO {reader}",
+            ):
+                cursor.execute(sql)
+            admin.commit()
+            other_session = pycubrid.connect(
+                host=self.config.host,
+                port=self.config.port,
+                user=other,
+                password="pw296",
+                database=self.config.database,
+                connect_timeout=10,
+                read_timeout=30,
+            )
+            try:
+                other_cursor = other_session.cursor()
+                other_cursor.execute(
+                    f"CREATE TABLE {table} (zz INT PRIMARY KEY, secret VARCHAR(10))"
+                )
+                other_cursor.execute(f"INSERT INTO {table} VALUES (5, 's'), (6, 't')")
+                other_cursor.execute(f"GRANT SELECT ON {table} TO {reader}")
+                other_session.commit()
+            finally:
+                other_session.close()
+
+            config = replace(self.config, user=reader, password="pw296")
+            database = Database(config)
+            server._context = AppContext.single(config=config, database=database)
+            mine, theirs = f"{owner}.{table}", f"{other}.{table}"
+            try:
+                names = server.all_table_names()
+                assert mine in names and theirs in names
+                assert table not in names
+                described = server.describe_table(theirs.upper())
+                assert described["table"] == theirs
+                assert [c["name"] for c in described["columns"]] == ["zz", "secret"]
+                assert described["primary_key"] == ["zz"]
+                assert [c["name"] for c in server.schema_definitions(mine)] == ["id", "a"]
+                assert [i["columns"][0]["name"] for i in server.list_indexes(mine)] == ["id"]
+                with pytest.raises(ValueError, match="ambiguous table name"):
+                    server.describe_table(table)
+                counts = server.table_row_counts([mine, theirs, table])["tables"]
+                assert counts[0] == {"table": mine, "row_count": 1}
+                assert counts[1] == {"table": theirs, "row_count": 2}
+                assert counts[2]["row_count"] is None
+                assert "ambiguous" in counts[2]["error"]
+            finally:
+                database.close()
+        finally:
+            admin.cursor().execute(f"DROP TABLE IF EXISTS {table}")
+            admin.commit()
+            drop_users()
+            admin.close()
+
     def test_list_serials_tool(self) -> None:
         from cubrid_mcp_server import server
 
@@ -471,7 +558,9 @@ class TestCubridIntegration:
             self.db.execute_write(f"CREATE TABLE {parent} (id INT)")
             self.db.execute_write(f"CREATE TABLE {child} UNDER {parent} (extra INT)")
             result = server.list_class_hierarchy(child.upper())
-            assert result == [{"class_name": child, "super_classes": [parent]}]
+            # Owner-qualified from CUBRID 11.2 on (#296).
+            prefix = f"{self.config.user.lower()}." if self.db.owner_qualified_names() else ""
+            assert result == [{"class_name": prefix + child, "super_classes": [prefix + parent]}]
             with pytest.raises(ValueError, match="unknown table"):
                 server.list_class_hierarchy("mcp_it_hier_missing")
         finally:

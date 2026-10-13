@@ -31,12 +31,17 @@ class FakeDatabase:
     def __init__(self) -> None:
         self.calls: list[tuple[str, tuple[Any, ...]]] = []
         self.responses: list[list[tuple[Any, ...]]] = []
+        # CUBRID before 11.2 by default; owner-qualified tests switch it on.
+        self.owner_qualified = False
 
     def queue(self, rows: list[tuple[Any, ...]]) -> None:
         self.responses.append(rows)
 
     def serial_attribute_column(self) -> str:
         return "att_name"
+
+    def owner_qualified_names(self) -> bool:
+        return self.owner_qualified
 
     def fetch_all(self, sql: str, params: tuple[Any, ...] | None = None) -> list[tuple[Any, ...]]:
         self.calls.append((sql, params or ()))
@@ -1241,3 +1246,112 @@ def test_explain_query_rejects_side_effect_functions(
 def test_execute_query_allows_current_value(fake_db: FakeDatabase) -> None:
     fake_db.queue([(1,)])
     assert server.execute_query("SELECT dba.s.CURRENT_VALUE")["rows"] == [[1]]
+
+
+# --- owner-qualified table names on CUBRID 11.2 and later (#296) ---
+
+_TWO_OWNERS = [("t", "DBA"), ("t", "OTHER"), ("u", "OTHER")]
+
+
+@pytest.fixture
+def owner_db(fake_db: FakeDatabase) -> FakeDatabase:
+    fake_db.owner_qualified = True
+    return fake_db
+
+
+def test_all_table_names_are_owner_qualified(owner_db: FakeDatabase) -> None:
+    owner_db.queue(_TWO_OWNERS)
+    assert server.all_table_names() == ["dba.t", "other.t", "other.u"]
+    sql, _params = owner_db.calls[0]
+    assert "SELECT class_name, owner_name FROM db_class" in sql
+
+
+def test_describe_table_filters_on_owner(owner_db: FakeDatabase) -> None:
+    owner_db.queue(_TWO_OWNERS)  # _resolve_table lookup
+    owner_db.queue([("zz", "INTEGER", "NO", None), ("secret", "VARCHAR(10)", "YES", None)])
+    owner_db.queue([("zz",)])  # primary key columns
+    owner_db.queue([("pk_t_zz", "YES", "YES", "NO", "NO", 1, "zz", 1, "ASC")])
+    result = server.describe_table("OTHER.T")
+    assert result["table"] == "other.t"
+    assert [column["name"] for column in result["columns"]] == ["zz", "secret"]
+    assert result["primary_key"] == ["zz"]
+    for sql, params in owner_db.calls[1:]:
+        assert params == ("t", "OTHER")
+        assert "owner_name = ?" in sql
+    # The index joins also match the owner of db_index and db_index_key.
+    assert "i.owner_name = k.owner_name" in owner_db.calls[2][0]
+    assert "i.owner_name = k.owner_name" in owner_db.calls[3][0]
+
+
+def test_unqualified_name_resolves_when_one_owner_has_it(owner_db: FakeDatabase) -> None:
+    owner_db.queue(_TWO_OWNERS)
+    server.list_indexes("u")
+    assert owner_db.calls[1][1] == ("u", "OTHER")
+
+
+def test_unqualified_name_is_ambiguous_across_owners(owner_db: FakeDatabase) -> None:
+    owner_db.queue(_TWO_OWNERS)
+    with pytest.raises(ValueError, match=r"ambiguous table name 't'.*dba\.t, other\.t"):
+        server.describe_table("t")
+    assert len(owner_db.calls) == 1
+
+
+def test_unqualified_name_prefers_the_configured_users_table(
+    owner_db: FakeDatabase, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # CUBRID resolves an unqualified name to the current user's table, too.
+    config = replace(_TEST_CONFIG, user="other")
+    monkeypatch.setattr(server, "_context", AppContext.single(config=config, database=owner_db))
+    owner_db.queue(_TWO_OWNERS)
+    server.list_indexes("T")
+    assert owner_db.calls[1][1] == ("t", "OTHER")
+
+
+def test_table_row_counts_quote_owner_and_table(owner_db: FakeDatabase) -> None:
+    owner_db.queue(_TWO_OWNERS)
+    owner_db.queue([(1,)])
+    owner_db.queue([(2,)])
+    result = server.table_row_counts(["dba.t", "other.T", "t", "missing"])
+    assert result["tables"] == [
+        {"table": "dba.t", "row_count": 1},
+        {"table": "other.t", "row_count": 2},
+        {
+            "table": "t",
+            "row_count": None,
+            "error": "ambiguous table name 't'; qualify it with the owner: dba.t, other.t",
+        },
+        {"table": "missing", "row_count": None, "error": "unknown table"},
+    ]
+    assert [sql for sql, _ in owner_db.calls[1:]] == [
+        'SELECT COUNT(*) FROM "DBA"."t"',
+        'SELECT COUNT(*) FROM "OTHER"."t"',
+    ]
+
+
+def test_table_row_counts_default_lists_qualified_names(owner_db: FakeDatabase) -> None:
+    owner_db.queue(_TWO_OWNERS)
+    owner_db.queue([(1,)])
+    owner_db.queue([(2,)])
+    owner_db.queue([(3,)])
+    result = server.table_row_counts()
+    assert [entry["table"] for entry in result["tables"]] == ["dba.t", "other.t", "other.u"]
+    assert result["total_tables"] == 3
+
+
+def test_list_class_hierarchy_is_owner_qualified(owner_db: FakeDatabase) -> None:
+    owner_db.queue([("other.t", "dba.base")])
+    assert server.list_class_hierarchy() == [
+        {"class_name": "other.t", "super_classes": ["dba.base"]}
+    ]
+    assert "LOWER(super_owner_name)" in owner_db.calls[0][0]
+    owner_db.queue(_TWO_OWNERS)
+    owner_db.queue([("other.t", "dba.base")])
+    server.list_class_hierarchy("other.t")
+    sql, params = owner_db.calls[-1]
+    assert "d.class_name = ? AND d.owner_name = ?" in sql
+    assert params == ("t", "OTHER")
+
+
+def test_schema_resource_reads_an_owner_qualified_table(owner_db: FakeDatabase) -> None:
+    owner_db.queue(_TWO_OWNERS)
+    assert json.loads(server.schema_resource("other.u"))["table"] == "other.u"
