@@ -35,7 +35,7 @@ GRANT SELECT ON orders TO mcp_reader;
 
 > SQL 키워드 검사는 가드레일이자 심층 방어이며 보안 경계가 아닙니다. 명백한 실수를 막는 클라이언트 측 최선 노력(best-effort) 필터일 뿐이며, 주된 통제는 전용 최소 권한 데이터베이스 계정(계층 1)입니다. 모델에 필요한 테이블에만 `SELECT`를 부여하세요.
 
-`CUBRID_MCP_READONLY=0`은 이 화이트리스트를 완화합니다 — 데이터베이스 사용자가 이미 읽기 전용이고 파서가 오판하는 결과 집합 문장이 필요할 때만 사용하세요. 이 설정이 `execute_query`를 쓰기 경로로 만들지는 **않습니다**: `execute_query`는 쓰기·DDL·트랜잭션 제어 키워드(`INSERT`, `UPDATE`, `DELETE`, `REPLACE`, `MERGE`, `CREATE`, `ALTER`, `DROP`, `TRUNCATE`, `RENAME`, `GRANT`, `REVOKE`, `COMMIT`, `ROLLBACK`, `SAVEPOINT`, `SET`, `PREPARE`, `EXECUTE`, `DEALLOCATE`, `DO`)로 시작하는 문장(선두 키워드의 첫 단어로 비교)과 다중 문장·빈 입력을 데이터베이스에 도달하기 전에 거부하고, 커밋하지 않으며, 결과 집합을 반환하지 않는 문장(연결은 유지)과 성공한 모든 읽기를 롤백합니다. `explain_query`는 이 플래그와 무관하게 **항상** 읽기 전용 검사를 적용합니다(아래 참고). 이 키워드 검사는 보안 경계가 아니라 가드레일이며, 보안 경계는 여전히 읽기 전용 데이터베이스 계정입니다. 쓰기에는 `execute_write`(옵트인 쓰기 모드)를 사용하세요. `CUBRID_MCP_READONLY=0`으로 `execute_query`를 통해 쓰기를 보내던 클라이언트는 이것으로 전환해야 합니다.
+`CUBRID_MCP_READONLY=0`은 이 화이트리스트를 완화합니다 — 데이터베이스 사용자가 이미 읽기 전용이고 파서가 오판하는 결과 집합 문장이 필요할 때만 사용하세요. 이 설정이 쓰기 키워드로 시작하는 문장에 대해 `execute_query`를 쓰기 경로로 만들지는 **않습니다**: `execute_query`는 쓰기·DDL·트랜잭션 제어 키워드(`INSERT`, `UPDATE`, `DELETE`, `REPLACE`, `MERGE`, `CREATE`, `ALTER`, `DROP`, `TRUNCATE`, `RENAME`, `GRANT`, `REVOKE`, `COMMIT`, `ROLLBACK`, `SAVEPOINT`, `SET`, `PREPARE`, `EXECUTE`, `DEALLOCATE`, `DO`)로 시작하는 문장(선두 키워드의 첫 단어로 비교)과 다중 문장·빈 입력을 데이터베이스에 도달하기 전에 거부하고, 커밋하지 않으며, 결과 집합을 반환하지 않는 문장(연결은 유지)과 성공한 모든 읽기를 롤백합니다. `explain_query`는 이 플래그와 무관하게 **항상** 읽기 전용 검사를 적용합니다(아래 참고). 이 키워드 검사는 보안 경계가 아니라 가드레일이며, 보안 경계는 여전히 읽기 전용 데이터베이스 계정입니다. 쓰기에는 `execute_write`(옵트인 쓰기 모드)를 사용하세요. `CUBRID_MCP_READONLY=0`으로 `execute_query`를 통해 쓰기를 보내던 클라이언트는 이것으로 전환해야 합니다.
 
 `CUBRID_MCP_READONLY=0`이면 `execute_query`는 `INCR`, `DECR`, 시리얼 증가, 클릭 카운터를 거부하지 않으므로, 이를 사용하는 문장은 결과 집합을 반환하더라도 데이터를 바꿉니다. `explain_query`는 여전히 거부합니다.
 
@@ -48,7 +48,7 @@ GRANT SELECT ON orders TO mcp_reader;
 - **DDL은 의도적으로 미지원.** `execute_write`는 DML 도구(`INSERT`/`UPDATE`/`DELETE`)이고 `execute_query`는 읽기 전용이므로 `CREATE`/`ALTER`/`DROP`/`TRUNCATE`는 양쪽 모두에서 거부됩니다. (서버는 autocommit을 끈 pycubrid를 사용하며, 테스트한 CUBRID 버전(10.2, 11.2, 11.4)에서 DDL은 트랜잭션에 속해 커밋하지 않으면 롤백됩니다. 따라서 이 제외는 DDL 자동 커밋이 아니라 도구 계약에 근거합니다.)
 - **비활성 시 미등록.** 쓰기 모드가 꺼져 있으면 `execute_write`는 MCP 기능 탐색에 나타나지 않습니다 — 도구 자체가 제공되지 않습니다. SQL 검사는 가드레일이므로 실제로 쓰기를 제한하는 것은 여전히 데이터베이스 계정입니다.
 - **연결별 게이팅.** 멀티커넥션에서 어떤 연결이 쓰기를 켜면 도구가 등록되지만, 매 쓰기는 **대상** 연결의 설정으로 강제됩니다 — 쓰기가 꺼진 연결은 다른 연결이 켜져 있어도 거부합니다.
-- `execute_query`는 쓰기 플래그와 무관하게 **항상 읽기 전용**입니다.
+- `execute_query`는 쓰기 플래그의 영향을 받지 않으며, 쓰기 모드가 이를 쓰기 경로로 만들지 않습니다(`CUBRID_MCP_READONLY=0`이 허용하는 `SELECT` 부작용은 계층 2 참고).
 
 ### `explain_query`는 문장을 실행합니다
 

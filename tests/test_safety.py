@@ -427,6 +427,8 @@ def test_ensure_read_only_rejects_side_effect_functions(sql: str, name: str) -> 
         "SELECT t.incr_total FROM t",
         "SELECT my_incr(cnt) FROM t",
         "SELECT incr# FROM t",
+        'SELECT "incr "(cnt) FROM t',
+        "SELECT [ incr](cnt) FROM t",
         "SELECT 'INCR(cnt)', 's.NEXT_VALUE', 'WITH INCREMENT FOR x' FROM t",
         "SELECT * FROM t WHERE note = 'incr(' AND label = '.nextval'",
         "SELECT cnt AS incr FROM t",

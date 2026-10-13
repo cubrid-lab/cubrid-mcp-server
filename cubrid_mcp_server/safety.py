@@ -375,7 +375,8 @@ def _code_tokens(sql: str) -> list[tuple[str, str]]:
     """Return ``(kind, upper_text)`` tokens of ``sql``, without whitespace and comments.
 
     ``kind`` is ``"name"`` for a bare or quoted identifier (``"..."``, ```...```,
-    ``[...]``, unquoted and with doubled quote characters undone), ``"literal"``
+    ``[...]``, unquoted with doubled quote characters undone and whitespace kept, since
+    CUBRID reads ``"incr "`` as a different name), ``"literal"``
     for a ``'...'`` string and ``"code"`` for anything else. Comments are dropped,
     so ``INCR/**/(`` reads as ``INCR (``. Callers have already rejected input whose
     quote boundaries are ambiguous or unterminated (see :func:`_cubrid_statements`).
@@ -389,10 +390,10 @@ def _code_tokens(sql: str) -> list[tuple[str, str]]:
             if quote == "'":
                 tokens.append(("literal", ""))
             elif quote == "[":
-                tokens.append(("name", text[1:-1].strip().upper()))
+                tokens.append(("name", text[1:-1].upper()))
             else:
                 inner = text[1:-1].replace(quote * 2, quote)
-                tokens.append(("name", inner.strip().upper()))
+                tokens.append(("name", inner.upper()))
             continue
         for match in _CODE_TOKEN.finditer(text):
             value = match.group().upper()
