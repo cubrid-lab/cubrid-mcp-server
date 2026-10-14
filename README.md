@@ -1,3 +1,9 @@
+<!-- CUBRID-LAB-ICON:START -->
+<p align="center">
+  <a href="https://github.com/cubrid-lab/brand"><img src="https://raw.githubusercontent.com/cubrid-lab/brand/94e2bf6b915d7ef6a1111e06376f693f70bf6c4e/dist/icons/cubrid-mcp-server.svg" alt="cubrid-mcp-server icon (CUBRID Lab brand repository)" width="120"></a>
+</p>
+<!-- CUBRID-LAB-ICON:END -->
+
 # cubrid-mcp-server
 
 [![PyPI](https://img.shields.io/pypi/v/cubrid-mcp-server.svg)](https://pypi.org/project/cubrid-mcp-server/)
