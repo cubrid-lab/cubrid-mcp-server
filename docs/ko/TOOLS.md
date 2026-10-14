@@ -2,7 +2,7 @@
 
 > 🌐 [TOOLS.md](https://github.com/cubrid-lab/cubrid-mcp-server/blob/main/docs/TOOLS.md)의 번역입니다. 영어 원문이 표준이며, 페이지 번역은 경고 수준의 동기화 규칙을 따릅니다.
 
-`cubrid-mcp-server`는 MCP **도구**·**리소스**·**프롬프트**로 기능을 노출합니다. 모든 도구는 선택적 `connection` 인자를 받으며( [멀티커넥션](MULTI_CONNECTION.ko.md) 참고), 생략하면 `default` 연결을 대상으로 합니다.
+`cubrid-mcp-server`는 MCP **도구**·**리소스**·**프롬프트**로 기능을 노출합니다. 모든 도구는 선택적 `connection` 인자를 받으며( [멀티커넥션](MULTI_CONNECTION.md) 참고), 생략하면 `default` 연결을 대상으로 합니다.
 
 ## 도구
 
@@ -356,7 +356,7 @@ CUBRID `SERIAL` 시퀀스와 현재값·최솟값·최댓값·증분. (`db_seria
 
 **단일** `INSERT`/`UPDATE`/`DELETE` 문을 명시적 트랜잭션(성공 시 커밋, 실패 시 롤백)으로 실행합니다. **쓰기 모드가 활성화된 경우에만 등록**됩니다(`CUBRID_MCP_WRITE=1` 또는 특정 연결의 `CUBRID_<NAME>_MCP_WRITE=1`) — 쓰기 모드가 꺼져 있으면 MCP 기능 탐색에 이 도구가 아예 존재하지 않습니다.
 
-제약: DDL(`CREATE`/`ALTER`/`DROP`/`TRUNCATE`), 독립 실행형 읽기, 트랜잭션 제어, 다중 문장 입력은 거부됩니다. DDL이 제외되는 이유는 DDL 자동 커밋이 아니라, `execute_write`가 DML 도구이고 `execute_query`가 읽기 전용이기 때문입니다. [보안 모델](SECURITY_MODEL.ko.md) 참고.
+제약: DDL(`CREATE`/`ALTER`/`DROP`/`TRUNCATE`), 독립 실행형 읽기, 트랜잭션 제어, 다중 문장 입력은 거부됩니다. DDL이 제외되는 이유는 DDL 자동 커밋이 아니라, `execute_write`가 DML 도구이고 `execute_query`가 읽기 전용이기 때문입니다. [보안 모델](SECURITY_MODEL.md) 참고.
 
 결과는 커밋 후 반환되는 `{"affected_rows": N}`입니다. 일치하는 행이 없는 문장도 성공하며 `"affected_rows": 0`을 반환합니다. 거부된 문장은 데이터베이스로 전송되지 않고, 실패한 문장은 롤백됩니다. 커밋 자체가 시간 초과(`CUBRID_MCP_QUERY_TIMEOUT`)되면 연결이 폐기되고 결과를 알 수 없습니다. 응답이 유실되기 전에 서버가 이미 커밋했을 수 있으므로, 다시 시도하기 전에 데이터를 확인하세요.
 
@@ -396,7 +396,7 @@ Error calling tool 'execute_write': DROP is not permitted in write mode; allowed
 | `cubrid://schema` | `application/json` | 전체 스키마 인덱스: 모든 사용자 테이블과 테이블별 리소스 URI |
 | `cubrid://schema/{table}` | `application/json` | 테이블별 메타데이터(컬럼, 기본 키, 인덱스) — `describe_table`과 동일 |
 
-`cubrid://guide/*`와 에이전트 가이드는 정적 Markdown입니다. 스키마 리소스는 항상 `default` 연결을 읽으며 `connection` 인자를 받지 않습니다([멀티커넥션](MULTI_CONNECTION.ko.md) 참고). `{table}`의 테이블 이름은 URI 템플릿 매칭으로 퍼센트 디코딩되며, 알 수 없거나 시스템 테이블이면 리소스 읽기 오류가 발생합니다(`describe_table` 도구와 동일한 동작).
+`cubrid://guide/*`와 에이전트 가이드는 정적 Markdown입니다. 스키마 리소스는 항상 `default` 연결을 읽으며 `connection` 인자를 받지 않습니다([멀티커넥션](MULTI_CONNECTION.md) 참고). `{table}`의 테이블 이름은 URI 템플릿 매칭으로 퍼센트 디코딩되며, 알 수 없거나 시스템 테이블이면 리소스 읽기 오류가 발생합니다(`describe_table` 도구와 동일한 동작).
 
 ## 프롬프트
 

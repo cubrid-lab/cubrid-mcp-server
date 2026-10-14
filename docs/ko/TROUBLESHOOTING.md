@@ -25,7 +25,7 @@
 
 **증상:** `SELECT` 문에서 권한 오류.
 
-CUBRID 사용자에게 권한이 없습니다. CUBRID는 **테이블 단위**로 권한을 부여합니다 — 스키마 전체 `db.*` 부여는 없습니다. 사용자를 만들고 모델이 읽을 각 테이블에 `SELECT`를 부여하세요. [보안 모델](SECURITY_MODEL.ko.md#계층-1--데이터베이스-권한-필수) 참고.
+CUBRID 사용자에게 권한이 없습니다. CUBRID는 **테이블 단위**로 권한을 부여합니다 — 스키마 전체 `db.*` 부여는 없습니다. 사용자를 만들고 모델이 읽을 각 테이블에 `SELECT`를 부여하세요. [보안 모델](SECURITY_MODEL.md#계층-1--데이터베이스-권한-필수) 참고.
 
 ## 읽기 전용 거부
 
@@ -51,4 +51,4 @@ CUBRID 사용자에게 권한이 없습니다. CUBRID는 **테이블 단위**로
 
 ## 감사 로그가 안 남음
 
-`CUBRID_MCP_AUDIT_LOG=1`을 설정하세요(옵트인, 기본 꺼짐). 멀티커넥션에서는 연결별로 `CUBRID_<NAME>_MCP_AUDIT_LOG`로 켭니다. 기록은 **stderr**의 JSON 라인입니다 — stdout에는 절대 나오지 않습니다. [보안 모델](SECURITY_MODEL.ko.md#계층-4--감사-로그-옵트인) 참고.
+`CUBRID_MCP_AUDIT_LOG=1`을 설정하세요(옵트인, 기본 꺼짐). 멀티커넥션에서는 연결별로 `CUBRID_<NAME>_MCP_AUDIT_LOG`로 켭니다. 기록은 **stderr**의 JSON 라인입니다 — stdout에는 절대 나오지 않습니다. [보안 모델](SECURITY_MODEL.md#계층-4--감사-로그-옵트인) 참고.

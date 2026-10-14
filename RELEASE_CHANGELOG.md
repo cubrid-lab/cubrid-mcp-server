@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.5.1](https://github.com/cubrid-lab/cubrid-mcp-server/compare/v0.5.0...v0.5.1) (2026-10-14)
+
+
+### Fixed
+
+* **audit:** determine SQL category after stripping leading comments ([#283](https://github.com/cubrid-lab/cubrid-mcp-server/issues/283)) ([2c64d0f](https://github.com/cubrid-lab/cubrid-mcp-server/commit/2c64d0f74d4a3bb6fa9cc0619e4e5b05a559f492))
+* **safety:** reject CALL and KILL in execute_query when read-only mode is off ([#304](https://github.com/cubrid-lab/cubrid-mcp-server/issues/304)) ([49bb56f](https://github.com/cubrid-lab/cubrid-mcp-server/commit/49bb56f3d196ce3f73de45e809da2e78a38bb4ca))
+* **safety:** reject INCR and serial advances in execute_query with the whitelist off ([#305](https://github.com/cubrid-lab/cubrid-mcp-server/issues/305)) ([56c97eb](https://github.com/cubrid-lab/cubrid-mcp-server/commit/56c97eb99052f231d8103d7dbb6002153ddc03e3)), closes [#301](https://github.com/cubrid-lab/cubrid-mcp-server/issues/301) [#303](https://github.com/cubrid-lab/cubrid-mcp-server/issues/303)
+* **safety:** reject INCR, DECR and serial advances in read-only queries ([#302](https://github.com/cubrid-lab/cubrid-mcp-server/issues/302)) ([d17bf58](https://github.com/cubrid-lab/cubrid-mcp-server/commit/d17bf584d9987f39752357398e5f0d05ee23f23a))
+* **server:** report the package version in MCP serverInfo ([#288](https://github.com/cubrid-lab/cubrid-mcp-server/issues/288)) ([55fea91](https://github.com/cubrid-lab/cubrid-mcp-server/commit/55fea91d9428fe7b421f25564dcef0864de85b6b))
+* **tools:** cap the first result row at the configured character limit ([#306](https://github.com/cubrid-lab/cubrid-mcp-server/issues/306)) ([094b3c6](https://github.com/cubrid-lab/cubrid-mcp-server/commit/094b3c6fbe74892e629284c48fe87a8e735e6578))
+* **tools:** parse, keep connections and cap output in explain_query like execute_query ([#308](https://github.com/cubrid-lab/cubrid-mcp-server/issues/308)) ([75dd0cc](https://github.com/cubrid-lab/cubrid-mcp-server/commit/75dd0cc4de2dcb9d16fa40811edd154e96142c69))
+* **tools:** qualify table metadata by owner on CUBRID 11.2 and later ([#307](https://github.com/cubrid-lab/cubrid-mcp-server/issues/307)) ([6f8a60f](https://github.com/cubrid-lab/cubrid-mcp-server/commit/6f8a60f602f657b42ed27836fe025836ffc13f28))
+
+
+### Documentation
+
+* add per-tool JSON response examples to TOOLS.md ([#285](https://github.com/cubrid-lab/cubrid-mcp-server/issues/285)) ([d88b998](https://github.com/cubrid-lab/cubrid-mcp-server/commit/d88b99820ed1afa6392bb574762d6917dbdc7aad))
+* add Related Projects to the Korean README and test the empty password ([#293](https://github.com/cubrid-lab/cubrid-mcp-server/issues/293)) ([908f834](https://github.com/cubrid-lab/cubrid-mcp-server/commit/908f8348650b298db257c65c1639869e07b3709e))
+* **agents:** refresh the module list and tool surface in AGENTS.md ([#289](https://github.com/cubrid-lab/cubrid-mcp-server/issues/289)) ([d10f0bc](https://github.com/cubrid-lab/cubrid-mcp-server/commit/d10f0bc46cbcbef3a3a94393a1317f3a61c6c64d))
+* **brand:** show the centered repository icon in the README and docs site ([#316](https://github.com/cubrid-lab/cubrid-mcp-server/issues/316)) ([666174d](https://github.com/cubrid-lab/cubrid-mcp-server/commit/666174d30abeab16b561551bd938bed0bd7b7669)), closes [#310](https://github.com/cubrid-lab/cubrid-mcp-server/issues/310)
+* record the README demo GIF from a real MCP session ([#287](https://github.com/cubrid-lab/cubrid-mcp-server/issues/287)) ([f46426b](https://github.com/cubrid-lab/cubrid-mcp-server/commit/f46426b30a9637537f93102a9d62c8e5087acb7f))
+* **release:** set last-release-sha when an abandoned release has no tag ([#323](https://github.com/cubrid-lab/cubrid-mcp-server/issues/323)) ([a4ffb9b](https://github.com/cubrid-lab/cubrid-mcp-server/commit/a4ffb9ba3dac79c7afb4c94f5bc9b189298b9f65))
+
 ## [0.5.0](https://github.com/cubrid-lab/cubrid-mcp-server/compare/v0.4.0...v0.5.0) (2026-10-12)
 
 

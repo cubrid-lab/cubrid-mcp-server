@@ -427,6 +427,12 @@ def test_list_class_hierarchy_all(fake_db: FakeDatabase) -> None:
     assert set(child["super_classes"]) == {"parent", "mixin"}
 
 
+def test_list_class_hierarchy_empty(fake_db: FakeDatabase) -> None:
+    fake_db.queue([])
+    result = server.list_class_hierarchy()
+    assert result == []
+
+
 def test_list_class_hierarchy_single(fake_db: FakeDatabase) -> None:
     fake_db.queue([("users",)])
     fake_db.queue([("users", "base")])

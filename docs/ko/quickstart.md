@@ -24,7 +24,7 @@ export CUBRID_DATABASE=mydb
 | `CUBRID_MCP_MAX_CHARS` | `4000` | 쿼리 출력 최대 글자 수 |
 | `CUBRID_MCP_MAX_ROWS` | `1000` | `execute_query` 최대 행 수 (초과 시 잘림) |
 | `CUBRID_MCP_MAX_SQL_LENGTH` | `65536` | 제출 가능한 SQL 최대 길이 (글자 수) |
-| `CUBRID_MCP_QUERY_TIMEOUT` | `30` | 문장별 소켓 읽기 타임아아웃(초). 서버가 이 시간 내에 데이터를 보내지 않으면 쿼리가 중단되고 연결이 재설정됩니다. 서버 측 문장 타임아웃이 아닙니다. |
+| `CUBRID_MCP_QUERY_TIMEOUT` | `30` | 문장별 소켓 읽기 타임아웃(초). 서버가 이 시간 내에 데이터를 보내지 않으면 쿼리가 중단되고 연결이 재설정됩니다. 서버 측 문장 타임아웃이 아닙니다. |
 | `CUBRID_MCP_AUDIT_LOG` | `0` | 옵트인 감사 로그. 활성화 시 실행된 문장마다 재던션-safe JSON 기록을 **stderr**에 출력 (연결별 적용: `CUBRID_<NAME>_MCP_AUDIT_LOG`) |
 | `CUBRID_MCP_WRITE` | `0` | 옵트인 쓰기 모드. `1`로 설정하면 단일 DML용 `execute_write` 도구가 등록됩니다 (연결별 적용: `CUBRID_<NAME>_MCP_WRITE`). 기본은 꺼짐 |
 
@@ -127,10 +127,10 @@ cubrid-mcp-server
 2. *"`orders` 테이블 구조 보여줘"* — `describe_table`이 컬럼·기본 키·인덱스를 반환합니다.
 3. *"매출 상위 5개 상품은?"* — `execute_query`가 `SELECT`를 실행하고 잘림 처리된, 컨텍스트 안전한 출력을 반환합니다.
 
-모델에게 테이블 삭제를 요청하면 읽기 전용 화이트리스트가 거부합니다 — 이 강제는 프롬프트가 아니라 서버에 있습니다. 전체 설계는 [보안 모델](SECURITY_MODEL.ko.md)을 참고하세요.
+모델에게 테이블 삭제를 요청하면 읽기 전용 화이트리스트가 거부합니다 — 이 강제는 프롬프트가 아니라 서버에 있습니다. 전체 설계는 [보안 모델](SECURITY_MODEL.md)을 참고하세요.
 
 ## 다음 단계
 
-- [도구 참조](TOOLS.ko.md) — 모든 도구·리소스·프롬프트
-- [멀티커넥션](MULTI_CONNECTION.ko.md) — 하나의 프로세스로 여러 데이터베이스 서빙
-- [문제 해결](TROUBLESHOOTING.ko.md) — 연결이 안 될 때
+- [도구 참조](TOOLS.md) — 모든 도구·리소스·프롬프트
+- [멀티커넥션](MULTI_CONNECTION.md) — 하나의 프로세스로 여러 데이터베이스 서빙
+- [문제 해결](TROUBLESHOOTING.md) — 연결이 안 될 때
