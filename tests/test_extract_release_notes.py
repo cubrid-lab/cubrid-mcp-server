@@ -62,17 +62,21 @@ def test_missing_section_still_fails_closed(tmp_path: Path) -> None:
     assert result.returncode == 1
     assert not (tmp_path / "RELEASE_NOTES.md").exists()
 
+<<<<<<< HEAD
 
 def test_usage_error_on_missing_argument(tmp_path: Path) -> None:
     (tmp_path / "CHANGELOG.md").write_text(CHANGELOG, encoding="utf-8")
     result = subprocess.run(
         [sys.executable, str(SCRIPT)], cwd=tmp_path, capture_output=True, text=True
     )
+
+>>>>>>> 01e12c2 (test(release): cover release-note CLI usage errors)
     assert result.returncode == 2
     assert "usage: extract_release_notes.py vX.Y.Z" in result.stderr
     assert not (tmp_path / "RELEASE_NOTES.md").exists()
 
 
+<<<<<<< HEAD
 def test_usage_error_on_extra_arguments(tmp_path: Path) -> None:
     (tmp_path / "CHANGELOG.md").write_text(CHANGELOG, encoding="utf-8")
     result = subprocess.run(
@@ -81,6 +85,12 @@ def test_usage_error_on_extra_arguments(tmp_path: Path) -> None:
         capture_output=True,
         text=True,
     )
+>>>>>>> 01e12c2 (test(release): cover release-note CLI usage errors)
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+    )
+<<<<<<< HEAD
     assert result.returncode == 2
     assert "usage: extract_release_notes.py vX.Y.Z" in result.stderr
     assert not (tmp_path / "RELEASE_NOTES.md").exists()
@@ -107,3 +117,9 @@ def test_empty_section_fails_closed(tmp_path: Path) -> None:
     assert result.returncode == 1
     assert "ERROR: Empty CHANGELOG section for 1.2.0" in result.stderr
     assert not (tmp_path / "RELEASE_NOTES.md").exists()
+=======
+
+    assert result.returncode == 2
+    assert "usage: extract_release_notes.py vX.Y.Z" in result.stderr
+    assert not (tmp_path / "RELEASE_NOTES.md").exists()
+>>>>>>> 01e12c2 (test(release): cover release-note CLI usage errors)
