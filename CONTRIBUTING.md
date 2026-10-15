@@ -262,8 +262,8 @@ evaluated the same way, whichever tool or person wrote it, except the two
 exemptions below.
 
 A review counts only when it is submitted (not pending or dismissed), is not a
-self-review (the reviewer is not the PR author and authored no commit in the PR),
-covers the current head, and comes from GitHub Copilot code review or a trusted
+self-review (the reviewer is not the PR author and authored no commit in the PR
+other than a merge commit that only brings in `main`), covers the current head, and comes from GitHub Copilot code review or a trusted
 person (author association `OWNER`, `MEMBER` or `COLLABORATOR`). Other bots and
 other accounts are listed in the summary but never count.
 
@@ -281,15 +281,20 @@ other accounts are listed in the summary but never count.
   a verdict, an assessment sentence and an open-findings count. A summary of what
   changed, or an error or quota notice, is not an assessment. A notice is not an
   AI review round, so a quota failure may be re-requested.
-- **Stale reviews.** A review of an older commit does not count. It is carried
-  forward only when every later commit is a merge commit that changes no file the
-  PR changes (an "Update branch" sync, needed because `main` requires branches to
-  be up to date). Any other new commit needs a new review of the final head.
+- **Stale reviews.** A review of an older commit counts only when the PR's change
+  against `main` is identical at that commit and at the head: the same files,
+  statuses and patch lines (hunk line numbers may move). An "Update branch" sync,
+  needed because `main` requires branches to be up to date, or a rebase that
+  changes nothing of the PR carries the review forward. When `main` changed lines
+  next to the PR's own change, the patch context differs and the review is stale,
+  and so is the merge commit's author as a reviewer: fail closed, and ask for a
+  new review of the final head. Any other new commit needs a new review too.
 - **AI review budget.** Each published Copilot review is one round, stale or not
   (error and quota notices excepted). Rounds 1 and 2 can satisfy the gate. A
-  Copilot review after round 2 does not count on its own: at the budget limit the
-  final head needs a trusted person's review, which records the maintainer
-  decision `AGENTS.md` asks for. A base-sync carry-forward spends no round.
+  Copilot review does not count on its own once a PR has more than two Copilot
+  rounds, even an earlier round of the same head: at the budget limit the final
+  head needs a trusted person's review, which records the maintainer decision
+  `AGENTS.md` asks for. A carry-forward spends no round.
 - **Protected paths (no bypass).** A change to `cubrid_mcp_server/safety.py`,
   `database.py`, `audit.py` or `server.py`, to a workflow that holds write
   permissions or releases (`codeql.yml`, `dependabot-auto-merge.yml`, `docs.yml`,
@@ -299,9 +304,9 @@ other accounts are listed in the summary but never count.
   permissions without joining the list.
 - **Blocking findings.** A trusted reviewer whose latest decision is
   `CHANGES_REQUESTED` blocks, and so does an unresolved review thread that is a
-  Copilot critical or high-severity finding or mentions security, a
-  vulnerability, an injection, credentials, secrets, privileges or a bypass, even
-  when the thread is outdated. A security finding resolved by the PR author is
+  Copilot critical or high-severity finding, or whose comments (replies included)
+  mention security, a vulnerability, an injection, credentials, secrets,
+  privileges or a bypass, even when the thread is outdated. A security finding resolved by the PR author is
   flagged for a maintainer. Resolving a thread sends no workflow event: re-run the
   `agent-review` job afterwards.
 - **Missing data fails closed.** Any API error, missing field or truncated

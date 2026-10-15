@@ -106,13 +106,27 @@ def copilot(body: str = COPILOT_OVERVIEW, sha: str = HEAD, **kw: Any) -> dict[st
     return review(COPILOT, "COMMENTED", sha, body, **kw)
 
 
-def commit(sha: str, author: str = AUTHOR, parents: int = 1) -> dict[str, Any]:
+def commit(sha: str, author: str = AUTHOR, parents: int = 1, first: str = "") -> dict[str, Any]:
+    shas = [first or "p0"] + [f"p{i}" for i in range(1, parents)]
     return {
         "sha": sha,
         "author": user(author),
         "committer": user("web-flow"),
-        "parents": [{"sha": f"p{i}"} for i in range(parents)],
+        "parents": [{"sha": s} for s in shas[:parents]],
     }
+
+
+def change(
+    patch: str = "@@ -1,2 +1,3 @@\n x\n+y", path: str = "cubrid_mcp_server/config.py"
+) -> Any:
+    """The fingerprint of a ``base...commit`` compare that changes one file."""
+    compare = {"files": [{"filename": path, "status": "modified", "patch": patch, "changes": 1}]}
+    return gate.diff_fingerprint(compare)
+
+
+SAME = change()
+MOVED = change("@@ -40,2 +41,3 @@\n x\n+y")  # same lines, shifted by a base change
+OTHER = change("@@ -1,2 +1,3 @@\n x\n+z")
 
 
 def data(
@@ -147,7 +161,7 @@ def data(
         "commits": commits,
         "files": [{"filename": f} for f in files],
         "threads": extra.pop("threads", []),
-        "compares": extra.pop("compares", {}),
+        "diffs": extra.pop("diffs", {}),
     }
 
 
@@ -312,14 +326,15 @@ def test_rename_away_from_a_protected_path_is_protected() -> None:
 
 
 def test_every_write_or_release_workflow_is_protected() -> None:
-    for path in sorted((ROOT / ".github" / "workflows").glob("*.yml")):
+    folder = ROOT / ".github" / "workflows"
+    for path in sorted([*folder.glob("*.yml"), *folder.glob("*.yaml")]):
         text = path.read_text()
         workflow = yaml.safe_load(text)
         scopes = [workflow.get("permissions") or {}]
         scopes += [job.get("permissions") or {} for job in workflow["jobs"].values()]
-        writes = (
-            any(isinstance(scope, dict) and "write" in scope.values() for scope in scopes)
-            or scopes[0] == "write-all"
+        writes = any(
+            scope == "write-all" or (isinstance(scope, dict) and "write" in scope.values())
+            for scope in scopes
         )
         releases = "release" in path.name or "publish" in path.name
         if writes or releases:
@@ -330,45 +345,55 @@ def test_every_write_or_release_workflow_is_protected() -> None:
 
 
 def test_review_of_an_older_commit_is_stale() -> None:
-    commits = [commit(OLD), commit(HEAD)]
-    compare = {
-        "status": "ahead",
-        "total_commits": 1,
-        "commits": [commit(HEAD)],
-        "files": [{"filename": "cubrid_mcp_server/config.py"}],
-    }
-    records = data([copilot(sha=OLD)], commits=commits, compares={OLD: compare})
+    records = data([copilot(sha=OLD)], diffs={OLD: SAME, HEAD: OTHER})
     verdict = evaluate(records)
     assert not verdict.passed
     assert any("Stale" in n for n in verdict.notes)
 
 
-def test_base_sync_merge_carries_a_review_forward() -> None:
-    commits = [commit(OLD), commit(HEAD, MAINTAINER, parents=2)]
-    compare = {
-        "status": "ahead",
-        "total_commits": 1,
-        "commits": [commit(HEAD, MAINTAINER, parents=2)],
-        "files": [{"filename": "README.md"}],
-    }
-    records = data([copilot(sha=OLD)], commits=commits, compares={OLD: compare})
-    assert evaluate(records).passed
+@pytest.mark.parametrize("reviewed", [SAME, MOVED])
+def test_unchanged_pr_change_carries_a_review_forward(reviewed: Any) -> None:
+    # An "Update branch" merge (with the base commits it imports) or a rebase that
+    # leaves the PR's own change as it was, hunks moved or not.
+    merge = commit(HEAD, MAINTAINER, parents=2, first=OLD)
+    records = data(
+        [copilot(sha=OLD)], commits=[commit(OLD), merge], diffs={OLD: reviewed, HEAD: SAME}
+    )
+    verdict = evaluate(records)
+    assert verdict.passed
+    assert any("carried forward" in e for e in verdict.evidence)
 
 
-def test_merge_that_touches_a_pr_file_does_not_carry_forward() -> None:
-    compare = {
-        "status": "ahead",
-        "total_commits": 1,
-        "commits": [commit(HEAD, parents=2)],
-        "files": [{"filename": "cubrid_mcp_server/config.py"}],
-    }
-    records = data([copilot(sha=OLD)], compares={OLD: compare})
+@pytest.mark.parametrize("fingerprint", [None, []])
+def test_unknown_or_empty_change_is_not_carried_forward(fingerprint: Any) -> None:
+    records = data([copilot(sha=OLD)], diffs={OLD: fingerprint, HEAD: SAME})
     assert not evaluate(records).passed
 
 
-@pytest.mark.parametrize("compare", [None, {"status": "diverged"}])
-def test_force_pushed_review_commit_is_stale(compare: Any) -> None:
-    assert not evaluate(data([copilot(sha=OLD)], compares={OLD: compare})).passed
+def test_force_pushed_review_commit_is_stale() -> None:
+    assert not evaluate(data([copilot(sha=OLD)], diffs={HEAD: SAME})).passed
+
+
+def test_fingerprint_rejects_incomplete_compares() -> None:
+    assert gate.diff_fingerprint(None) is None
+    assert gate.diff_fingerprint({"files": [{"filename": "a.bin", "changes": 4}]}) is None
+    assert gate.diff_fingerprint({"files": [{"filename": "x"}] * 300}) is None
+    renamed = {"files": [{"filename": "b", "status": "renamed", "changes": 0}]}
+    assert gate.diff_fingerprint(renamed) == [["b", "renamed", "", ""]]
+
+
+def test_author_of_a_code_changing_merge_cannot_approve() -> None:
+    merge = commit(HEAD, MAINTAINER, parents=2, first=OLD)
+    records = data(
+        [review(MAINTAINER, "APPROVED")],
+        commits=[commit(OLD), merge],
+        diffs={OLD: SAME, HEAD: OTHER},
+    )
+    verdict = evaluate(records)
+    assert not verdict.passed
+    assert any("authored commits" in w for w in verdict.warnings)
+    records["diffs"] = {OLD: SAME, HEAD: MOVED}
+    assert evaluate(records).passed
 
 
 def test_event_for_an_older_head_fails() -> None:
@@ -377,17 +402,24 @@ def test_event_for_an_older_head_fails() -> None:
     assert any("no longer the PR head" in e for e in verdict.errors)
 
 
+def test_three_copilot_reviews_of_the_same_head_need_a_person() -> None:
+    reviews = [copilot(review_id=i, at=f"2026-10-15T0{i}:00:00Z") for i in (1, 2, 3)]
+    verdict = evaluate(data(reviews))
+    assert not verdict.passed
+    assert not verdict.evidence
+
+
 def test_third_copilot_round_needs_a_person() -> None:
     reviews = [
         copilot(sha=OLD, review_id=1, at="2026-10-15T01:00:00Z"),
         copilot(sha=OLD, review_id=2, at="2026-10-15T02:00:00Z"),
         copilot(sha=HEAD, review_id=3, at="2026-10-15T03:00:00Z"),
     ]
-    verdict = evaluate(data(reviews, compares={OLD: None}))
+    verdict = evaluate(data(reviews))
     assert not verdict.passed
     assert any("past the 2-round" in w for w in verdict.warnings)
     reviews.append(review(MAINTAINER, "APPROVED", review_id=4, at="2026-10-15T04:00:00Z"))
-    assert evaluate(data(reviews, compares={OLD: None})).passed
+    assert evaluate(data(reviews)).passed
 
 
 # ------------------------------------------------------------ review threads
@@ -416,7 +448,7 @@ def test_unresolved_high_severity_copilot_finding_blocks() -> None:
     records = data([copilot(COPILOT_FINDING)], threads=[thread(901, "Echoes a value.")])
     verdict = evaluate(records)
     assert not verdict.passed
-    assert any("Unresolved high finding" in e for e in verdict.errors)
+    assert any("Unresolved high-severity finding" in e for e in verdict.errors)
 
 
 def test_unresolved_security_thread_blocks_and_ordinary_one_is_noted() -> None:
@@ -428,6 +460,17 @@ def test_unresolved_security_thread_blocks_and_ordinary_one_is_noted() -> None:
     assert not verdict.passed
     assert len(verdict.errors) == 1
     assert any("Unresolved thread" in n for n in verdict.notes)
+
+
+def test_security_reply_makes_a_thread_blocking() -> None:
+    reply = {"pull_request_review_id": 8, "in_reply_to_id": 3, "body": "It leaks credentials."}
+    records = data([copilot()], threads=[thread(3, "Nit: naming.")], comments=[reply])
+    assert not evaluate(records).passed
+
+
+def test_plural_privileges_is_a_security_word() -> None:
+    records = data([copilot()], threads=[thread(4, "This grants excessive privileges.")])
+    assert not evaluate(records).passed
 
 
 def test_security_thread_resolved_by_the_author_is_flagged() -> None:
@@ -457,8 +500,12 @@ def test_dependabot_update_with_branch_sync_is_exempt() -> None:
         branch="dependabot/github_actions/x",
         commits=[commit(OLD, "dependabot[bot]"), commit(HEAD, MAINTAINER, parents=2)],
         files=(".github/workflows/publish-pypi.yml",),
+        diffs={OLD: SAME, HEAD: SAME},
     )
+    records["commits"][1]["parents"][0]["sha"] = OLD
     assert evaluate(records).passed
+    records["diffs"] = {OLD: SAME, HEAD: OTHER}
+    assert not evaluate(records).passed
 
 
 def test_dependabot_pr_with_a_human_commit_is_evaluated() -> None:
@@ -509,7 +556,8 @@ class FakeClient:
 
     def get_optional(self, path: str) -> Any:
         self._check(path)
-        return self.records["compares"].get(path.rsplit("/", 1)[1].split("...")[0])
+        assert path.startswith(f"repos/{REPO}/compare/main...")
+        return None
 
     def paginate(self, path: str) -> list[Any]:
         self._check(path)
@@ -556,6 +604,19 @@ def test_api_error_fails_closed(fail: str, capsys: pytest.CaptureFixture[str]) -
 def test_missing_field_fails_closed() -> None:
     records = data([copilot()])
     del records["reviews"][0]["state"]
+    assert run_main(records) == 1
+
+
+@pytest.mark.parametrize(
+    "broken",
+    [
+        {"state": "CHANGES_REQUESTED", "submitted_at": None},
+        {"state": "APPROVED", "user": {"type": "User"}},
+    ],
+)
+def test_incomplete_review_record_fails_closed(broken: dict[str, Any]) -> None:
+    records = data([copilot(review_id=1), review(MAINTAINER, review_id=2)])
+    records["reviews"][1].update(broken)
     assert run_main(records) == 1
 
 

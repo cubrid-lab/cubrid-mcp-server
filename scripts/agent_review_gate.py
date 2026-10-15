@@ -13,10 +13,12 @@ review requests and CI results are never evidence. A review counts only when:
 
 * it is submitted (not ``PENDING``) and not ``DISMISSED``;
 * its reviewer is not the PR author and authored or committed no commit in the
-  PR (self-review);
-* it is current: its ``commit_id`` is the PR head, or every commit after it is a
-  merge commit that changes no file the PR changes (a base sync, which carries
-  the review forward without spending an AI review round);
+  PR (self-review), other than a merge commit that only brings in the base
+  branch (an "Update branch" sync);
+* it is current: its ``commit_id`` is the PR head, or the PR's change against
+  the base branch is identical at both commits (file names, statuses and patch
+  lines; hunk line numbers may move). A base sync or a rebase that changes
+  nothing of the PR carries the review forward without spending an AI round;
 * it comes from GitHub Copilot code review or from a trusted person (author
   association ``OWNER``, ``MEMBER`` or ``COLLABORATOR``). Other bots and
   untrusted accounts are reported but never count.
@@ -60,7 +62,9 @@ import os
 import re
 import sys
 import urllib.error
+import urllib.parse
 import urllib.request
+from http.client import HTTPException
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from typing import Any
@@ -111,7 +115,7 @@ COPILOT_SEVERITY = re.compile(
 BLOCKING_SEVERITIES = frozenset({"critical", "high"})
 SECURITY_WORDS = re.compile(
     r"\b(?:critical|security|vulnerab\w*|exploit\w*|injection|cve-\d+|credentials?"
-    r"|secrets?|privilege|bypass\w*)\b",
+    r"|secrets?|privileges?|bypass\w*)\b",
     re.I,
 )
 ROUTE_LINE = re.compile(r"^[-*\s]*Development route:\s*(?P<route>.+)$", re.I | re.M)
@@ -164,7 +168,7 @@ class Client:
                 return json.load(response), response.headers.get("Link", "")
         except urllib.error.HTTPError as exc:
             raise GateError(f"HTTP {exc.code} for {url}") from exc
-        except (urllib.error.URLError, TimeoutError, ValueError) as exc:
+        except (OSError, HTTPException, ValueError) as exc:
             raise GateError(f"request failed for {url}: {exc}") from exc
 
     def get(self, path: str) -> Any:
@@ -227,11 +231,20 @@ def fetch(client: Client, repo: str, number: int) -> dict[str, Any]:
         except (KeyError, TypeError) as exc:
             raise GateError(f"unexpected review-thread data: {exc}") from exc
     head = _require(pr, "head", "sha")
-    compares: dict[str, Any] = {}
-    for review in reviews:
-        sha = review.get("commit_id")
-        if sha and sha != head and sha not in compares:
-            compares[sha] = client.get_optional(f"repos/{repo}/compare/{sha}...{head}")
+    # The PR's change (its diff against the base branch) as of the head, each
+    # reviewed commit, and each merge commit and its first parent.
+    base = urllib.parse.quote(_require(pr, "base", "ref"), safe="")
+    wanted = [head, *(r.get("commit_id") for r in reviews)]
+    for item in commits:
+        parents = item.get("parents") or []
+        if len(parents) >= 2:
+            wanted += [_require(item, "sha"), _require(parents[0], "sha")]
+    diffs: dict[str, Any] = {}
+    for sha in wanted:
+        if sha and sha not in diffs:
+            diffs[sha] = diff_fingerprint(
+                client.get_optional(f"repos/{repo}/compare/{base}...{sha}")
+            )
     return {
         "repo": repo,
         "pr": pr,
@@ -240,7 +253,7 @@ def fetch(client: Client, repo: str, number: int) -> dict[str, Any]:
         "commits": commits,
         "files": files,
         "threads": threads,
-        "compares": compares,
+        "diffs": diffs,
     }
 
 
@@ -301,20 +314,44 @@ def copilot_assessment(body: str, inline_comments: int) -> tuple[str, str]:
     return "summary", "a change summary without an assessment"
 
 
-def _carried_forward(compare: Any, pr_paths: set[str]) -> bool:
-    """A review at an older commit still covers the head when every later commit
-    is a merge commit and no later change touches a file the PR changes."""
-    if not isinstance(compare, dict) or compare.get("status") != "ahead":
-        return False
-    commits = compare.get("commits")
+def diff_fingerprint(compare: Any) -> list[list[str]] | None:
+    """The PR's change as of one commit, from a ``base...commit`` compare: per
+    file its name, status, previous name and patch without hunk line numbers (a
+    base change elsewhere in the file only moves the hunks). None when the
+    compare is missing or cannot show the whole change."""
+    if not isinstance(compare, dict):
+        return None
     files = compare.get("files")
-    if not isinstance(commits, list) or not isinstance(files, list):
+    if not isinstance(files, list) or len(files) >= COMPARE_FILE_LIMIT:
+        return None
+    result = []
+    for item in files:
+        patch = item.get("patch")
+        if not isinstance(item.get("filename"), str):
+            return None
+        if patch is None and item.get("changes", 1):
+            return None  # Binary or too large to show: cannot be compared.
+        lines = (patch or "").splitlines()
+        hunks = "\n".join(re.sub(r"^@@ [^@]* @@", "@@", line) for line in lines)
+        result.append(
+            [item["filename"], str(item.get("status")), item.get("previous_filename") or "", hunks]
+        )
+    return sorted(result)
+
+
+def _same_change(data: dict[str, Any], one: str, other: str) -> bool:
+    """Whether two commits carry exactly the same PR change."""
+    first = data["diffs"].get(one)
+    return first is not None and first == data["diffs"].get(other)
+
+
+def _neutral_merge(commit: dict[str, Any], data: dict[str, Any]) -> bool:
+    """A merge commit that only brings in the base branch: the PR's change is the
+    same before (its first parent) and after it."""
+    parents = commit.get("parents") or []
+    if len(parents) < 2:
         return False
-    if compare.get("total_commits") != len(commits) or len(files) >= COMPARE_FILE_LIMIT:
-        return False
-    if not all(len(c.get("parents") or []) >= 2 for c in commits):
-        return False
-    return not (_paths(files) & pr_paths)
+    return _same_change(data, commit.get("sha", ""), parents[0].get("sha", ""))
 
 
 def _exemption(data: dict[str, Any]) -> str:
@@ -327,7 +364,7 @@ def _exemption(data: dict[str, Any]) -> str:
         return "release-please candidate: review and CI follow RELEASING.md"
     if author == DEPENDABOT and branch.startswith(DEPENDABOT_BRANCH_PREFIX) and same_repo:
         if all(
-            _login(c.get("author")) == DEPENDABOT or len(c.get("parents") or []) >= 2
+            _login(c.get("author")) == DEPENDABOT or _neutral_merge(c, data)
             for c in data["commits"]
         ):
             return "Dependabot update: dependency-only, merged by its required checks"
@@ -382,7 +419,7 @@ def evaluate(data: dict[str, Any], event_head: str = "") -> Verdict:
 
     committers = set()
     for commit in data["commits"]:
-        if len(commit.get("parents") or []) < 2:
+        if not _neutral_merge(commit, data):
             committers.update({_login(commit.get("author")), _login(commit.get("committer"))})
     committers -= {"", "web-flow"}
 
@@ -400,7 +437,16 @@ def evaluate(data: dict[str, Any], event_head: str = "") -> Verdict:
     ai_current: list[tuple[int, str]] = []
     decisions: dict[str, str] = {}
     rounds = self_reviews = 0
-    reviews = [r for r in data["reviews"] if r.get("state") != "PENDING" and r.get("submitted_at")]
+    reviews = []
+    for item in data["reviews"]:
+        state = _require(item, "state")
+        if not _login(_require(item, "user")):
+            raise GateError("a review has no reviewer login")
+        if state == "PENDING":
+            continue
+        if not item.get("submitted_at"):
+            raise GateError(f"a {state} review has no submission time")
+        reviews.append(item)
     for review in sorted(reviews, key=lambda r: (r["submitted_at"], r.get("id", 0))):
         state = _require(review, "state")
         user = _require(review, "user")
@@ -408,10 +454,10 @@ def evaluate(data: dict[str, Any], event_head: str = "") -> Verdict:
         sha = review.get("commit_id") or ""
         body = review.get("body") or ""
         comments = inline.get(review.get("id", -1), 0)
-        current = sha == head or _carried_forward(data["compares"].get(sha), pr_paths)
+        current = sha == head or _same_change(data, sha, head)
         where = "the head" if sha == head else sha[:12]
         if sha != head and current:
-            where += " (carried forward over base syncs)"
+            where += " (same change as the head, carried forward)"
         label = f"{state} review by {login} at {where}"
 
         if login in COPILOT_LOGINS:
@@ -472,28 +518,37 @@ def evaluate(data: dict[str, Any], event_head: str = "") -> Verdict:
         if state == "CHANGES_REQUESTED":
             verdict.errors.append(f"{login} requested changes; their latest decision blocks.")
 
-    within = [text for number, text in ai_current if number <= AI_REVIEW_BUDGET]
-    beyond = [text for number, text in ai_current if number > AI_REVIEW_BUDGET]
+    # Past the budget, no Copilot review counts alone, not even an earlier round.
+    over = rounds > AI_REVIEW_BUDGET
+    within = [] if over else [text for _, text in ai_current]
+    beyond = [text for _, text in ai_current] if over else []
     verdict.evidence.extend(within)
     for text in beyond:
         verdict.warnings.append(
-            f"Not counted alone: {text}; it is past the {AI_REVIEW_BUDGET}-round AI review "
-            "budget, so the head needs a trusted person's review."
+            f"Not counted alone: {text}; this PR has {rounds} Copilot rounds, past the "
+            f"{AI_REVIEW_BUDGET}-round AI review budget, so the head needs a trusted "
+            "person's review."
         )
 
+    replies: dict[int, list[str]] = {}
+    for comment in data["comments"]:
+        if comment.get("in_reply_to_id") is not None:
+            replies.setdefault(comment["in_reply_to_id"], []).append(comment.get("body") or "")
     for thread in data["threads"]:
         first = ((thread.get("comments") or {}).get("nodes") or [None])[0]
         if not isinstance(first, dict):
             raise GateError("a review thread has no first comment")
-        severity = severities.get(first.get("databaseId") or -1, "")
-        serious = severity in BLOCKING_SEVERITIES or bool(
-            SECURITY_WORDS.search(first.get("body") or "")
-        )
+        root = first.get("databaseId") or -1
+        severity = severities.get(root, "")
+        texts = [first.get("body") or "", *replies.get(root, [])]
+        serious = severity in BLOCKING_SEVERITIES or any(SECURITY_WORDS.search(t) for t in texts)
         place = f"{first.get('path')} ({first.get('url')})"
         if not thread.get("isResolved"):
             if serious:
                 verdict.errors.append(
-                    f"Unresolved {severity or 'security-relevant'} finding by "
+                    f"Unresolved {severity + '-severity ' if severity else ''}"
+                    + ("" if severity in BLOCKING_SEVERITIES else "security-relevant ")
+                    + f"finding by "
                     f"{_login(first.get('author'))} at {place}"
                     + (" (outdated, still unresolved)" if thread.get("isOutdated") else "")
                 )

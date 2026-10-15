@@ -143,7 +143,7 @@ substantive submitted Copilot review of the head within the two-round budget,
 or a trusted person's (`OWNER`/`MEMBER`/`COLLABORATOR`) `APPROVED` or
 substantive `COMMENTED` review of the head; never PR-body checkboxes, pending
 requests, self-review, summary-only bot text or a review of an older commit
-(base-sync merge commits excepted). Oracle output is private and is not GitHub
+(unless the PR's change against `main` is identical at both commits). Oracle output is private and is not GitHub
 evidence: an OpenCode + Oracle PR passes when a maintainer, after checking the
 recorded Oracle reviews, submits an `APPROVED` review of the head (or another
 qualifying review exists). **No bypass:** changes to `safety.py`,
@@ -229,9 +229,10 @@ docs tasks need only the applicable fields.
 - Apply the existing two-published-AI-review-round budget. If review is still
   pending or unresolved at that limit, retain Draft and request a maintainer
   decision rather than bypassing review or endlessly revising. A stale Copilot
-  review still spends its round; after round 2 the `agent-review` check needs a
-  trusted person's review of the final head (Copilot error/quota notices are not
-  rounds, and base-sync merges carry a review forward without spending one).
+  review still spends its round; once a PR has more than two Copilot rounds the
+  `agent-review` check needs a trusted person's review of the final head
+  (Copilot error/quota notices are not rounds, and a sync that leaves the PR's
+  change identical carries a review forward without spending one).
 - Never merge with the required GitHub review still pending, failed required
   CI, or unresolved critical/security findings. Record a maintainer decision
   for any other open finding. These are process rules, not an auto-merge or
