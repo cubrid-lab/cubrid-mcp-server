@@ -1,1 +1,2 @@
 Non-production pilot for the agent-review gate (#317). Never merge.
+Second pilot commit: makes the Copilot review stale.
