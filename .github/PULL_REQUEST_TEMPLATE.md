@@ -47,7 +47,7 @@ See CONTRIBUTING.md#pull-request-and-commit-titles.
 <!-- Record the route actually used; human contributors do not need a specific AI tool. -->
 - Development route: OpenCode + Oracle pre/post / trivial OpenCode with recorded Oracle skip / standalone Claude Code / standalone Codex / standalone ChatGPT or other agent (name it) / human (select one).
 - Trivial OpenCode exception, if used: skipped Oracle phases and reason, or not applicable.
-- Actual review evidence: Oracle review references or submitted GitHub review URL, reviewer, reviewed head SHA, or **pending**.
+- Actual review evidence: Oracle review references, or the review by someone other than the author (Copilot review URL, a person's review URL, or the PR comment recording an independent separate-context reviewer agent), reviewer, reviewed head SHA, or **pending**. Copilot is optional.
 - Findings: fixed commit + tests / rejected with reason / deferred issue.
 - Open review threads and why, or "none" after verification.
 - Maintainer merge decision: **pending**; complete only after checking the applicable review, final code, required CI and thread dispositions.

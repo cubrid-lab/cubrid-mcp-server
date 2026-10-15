@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Documentation
+
+- **Agent PR review route accepts any independent reviewer** — maintainer decision of 2026-10-15: a standalone-agent PR needs a substantive review by someone other than its author, which can be a submitted Copilot review, a person's review, or a review by an independent reviewer agent in a separate context recorded on the PR. Copilot review is optional and no CI check enforces review evidence. The two-round AI review budget stays, and changes to `safety.py`, `database.py`, `audit.py`, `server.py` and the write-permission or release workflows still need a review of their invariants confirmed by a maintainer. `AGENTS.md`, `CONTRIBUTING.md` and the PR template are updated; the Korean docs carry no review rules, so nothing there changes. Refs #317.
+
 ## [0.5.1] - 2026-10-14
 
 ### Upgrade notes
