@@ -1,0 +1,583 @@
+#!/usr/bin/env python3
+"""Agent-review evidence gate: decide from GitHub review records whether a PR
+has the review that AGENTS.md requires before merging (#317).
+
+``.github/workflows/agent-review.yml`` runs this file from the **base branch**
+(never the PR's copy, except for the bootstrap run described below) with a
+read-only token. It only reads the GitHub REST and GraphQL APIs; it never checks
+out or runs PR code. Exit status 0 passes the ``agent-review`` check and 1 fails
+it; any API error, missing field or truncated listing fails closed.
+
+Evidence is only what GitHub records for the PR. The PR body, its checkboxes,
+review requests and CI results are never evidence. A review counts only when:
+
+* it is submitted (not ``PENDING``) and not ``DISMISSED``;
+* its reviewer is not the PR author and authored or committed no commit in the
+  PR (self-review);
+* it is current: its ``commit_id`` is the PR head, or every commit after it is a
+  merge commit that changes no file the PR changes (a base sync, which carries
+  the review forward without spending an AI review round);
+* it comes from GitHub Copilot code review or from a trusted person (author
+  association ``OWNER``, ``MEMBER`` or ``COLLABORATOR``). Other bots and
+  untrusted accounts are reported but never count.
+
+``APPROVED`` and ``COMMENTED`` are different evidence:
+
+* A trusted person's ``APPROVED`` review is formal approval. It satisfies every
+  PR, and it is the only evidence that authorizes a change to a protected path
+  (``PROTECTED_PATHS``, the no-bypass list).
+* A ``COMMENTED`` review is an assessment, not approval. A trusted person's
+  ``COMMENTED`` review needs text or an inline comment. A Copilot review counts
+  only when it is substantive: it has inline comments, or its overview states a
+  verdict, an assessment sentence and an open-findings count. A summary of what
+  changed, or an error or quota notice, is not an assessment. A Copilot review
+  satisfies only a PR that changes no protected path, and only within the AI
+  review budget (``AI_REVIEW_BUDGET`` published Copilot rounds); past it the
+  final head needs a trusted person's review.
+
+Any trusted reviewer whose latest decision is ``CHANGES_REQUESTED`` blocks the
+gate, and so does an unresolved review thread that is a critical, high-severity
+or security finding (resolution is required even when the thread is outdated).
+
+Exempt PRs pass with a notice: release-please candidates (author
+``github-actions[bot]``, branch ``release-please--``, same repository), governed
+by RELEASING.md, and Dependabot PRs (author ``dependabot[bot]``, branch
+``dependabot/``, same repository) whose commits are Dependabot's or merge
+commits. Every other PR, human or agent, is evaluated the same way.
+
+``--bootstrap`` is used only while the base branch does not contain this file
+yet (the PR that adds it): the verdict is printed but the step always exits 0,
+because the PR's own copy is not trusted to enforce.
+"""
+
+from __future__ import annotations
+
+import argparse
+import fnmatch
+import json
+import os
+import re
+import sys
+import urllib.error
+import urllib.request
+from collections.abc import Callable, Iterable
+from dataclasses import dataclass, field
+from typing import Any
+
+# Repository policy. Mirrors of this gate in sibling repositories change only
+# these constants.
+PROTECTED_PATHS = (
+    # Read-only enforcement, write tools, audit and the MCP stdout boundary.
+    "cubrid_mcp_server/safety.py",
+    "cubrid_mcp_server/database.py",
+    "cubrid_mcp_server/audit.py",
+    "cubrid_mcp_server/server.py",
+    # Workflows that hold write permissions or release (tests keep this complete).
+    ".github/workflows/codeql.yml",
+    ".github/workflows/dependabot-auto-merge.yml",
+    ".github/workflows/docs.yml",
+    ".github/workflows/publish-pypi.yml",
+    ".github/workflows/release-please.yml",
+    # The gate itself decides merge permission.
+    ".github/workflows/agent-review.yml",
+    "scripts/agent_review_gate.py",
+)
+AI_REVIEW_BUDGET = 2
+COPILOT_LOGINS = frozenset({"copilot-pull-request-reviewer[bot]"})
+TRUSTED_ASSOCIATIONS = frozenset({"OWNER", "MEMBER", "COLLABORATOR"})
+RELEASE_AUTHOR = "github-actions[bot]"
+RELEASE_BRANCH_PREFIX = "release-please--"
+DEPENDABOT = "dependabot[bot]"
+DEPENDABOT_BRANCH_PREFIX = "dependabot/"
+
+API = "https://api.github.com"
+PAGE = 100
+MAX_LISTED_FILES = 3000  # GitHub lists at most 3000 files of a PR.
+MAX_LISTED_COMMITS = 250  # ... and 250 commits.
+COMPARE_FILE_LIMIT = 300  # A compare lists at most 300 files.
+MIN_COMMENT_CHARS = 20
+
+COPILOT_VERDICT = re.compile(r"^###\s+\S+\s+(?P<verdict>[A-Za-z][^\n]*?)\s*$", re.M)
+COPILOT_FINDINGS = re.compile(r"\b(?P<count>\d+)\s+open\s+findings?\b", re.I)
+COPILOT_NOTICE = re.compile(
+    r"wasn't able to review|was unable to review|unable to review|could not review"
+    r"|encountered an error|quota|rate limit|usage limit",
+    re.I,
+)
+COPILOT_SEVERITY = re.compile(
+    r'alt="(?P<severity>[A-Za-z]+) severity".*?#discussion_r(?P<comment>\d+)', re.I
+)
+BLOCKING_SEVERITIES = frozenset({"critical", "high"})
+SECURITY_WORDS = re.compile(
+    r"\b(?:critical|security|vulnerab\w*|exploit\w*|injection|cve-\d+|credentials?"
+    r"|secrets?|privilege|bypass\w*)\b",
+    re.I,
+)
+ROUTE_LINE = re.compile(r"^[-*\s]*Development route:\s*(?P<route>.+)$", re.I | re.M)
+
+THREADS_QUERY = """
+query($owner: String!, $name: String!, $number: Int!, $after: String) {
+  repository(owner: $owner, name: $name) {
+    pullRequest(number: $number) {
+      reviewThreads(first: 100, after: $after) {
+        pageInfo { hasNextPage endCursor }
+        nodes {
+          isResolved
+          isOutdated
+          resolvedBy { login }
+          comments(first: 1) {
+            nodes { databaseId body url path author { login } }
+          }
+        }
+      }
+    }
+  }
+}
+"""
+
+
+class GateError(Exception):
+    """Missing or unreadable API data: the gate fails closed."""
+
+
+# --------------------------------------------------------------------------- fetch
+
+
+class Client:
+    """Minimal read-only GitHub API client (stdlib only)."""
+
+    def __init__(self, token: str) -> None:
+        if not token:
+            raise GateError("no API token (GH_TOKEN) is set")
+        self.token = token
+
+    def _request(self, url: str, data: bytes | None = None) -> tuple[Any, str]:
+        request = urllib.request.Request(url, data=data, method="POST" if data else "GET")
+        request.add_header("Authorization", f"Bearer {self.token}")
+        request.add_header("Accept", "application/vnd.github+json")
+        request.add_header("X-GitHub-Api-Version", "2022-11-28")
+        if data is not None:
+            request.add_header("Content-Type", "application/json")
+        try:
+            with urllib.request.urlopen(request, timeout=30) as response:
+                return json.load(response), response.headers.get("Link", "")
+        except urllib.error.HTTPError as exc:
+            raise GateError(f"HTTP {exc.code} for {url}") from exc
+        except (urllib.error.URLError, TimeoutError, ValueError) as exc:
+            raise GateError(f"request failed for {url}: {exc}") from exc
+
+    def get(self, path: str) -> Any:
+        return self._request(f"{API}/{path}")[0]
+
+    def get_optional(self, path: str) -> Any:
+        """Like get(), but None for a 404 or 422 (for example a commit that a
+        force push removed)."""
+        try:
+            return self.get(path)
+        except GateError as exc:
+            if re.match(r"HTTP (?:404|422) ", str(exc)):
+                return None
+            raise
+
+    def paginate(self, path: str) -> list[Any]:
+        sep = "&" if "?" in path else "?"
+        url: str | None = f"{API}/{path}{sep}per_page={PAGE}"
+        items: list[Any] = []
+        while url:
+            page, link = self._request(url)
+            if not isinstance(page, list):
+                raise GateError(f"expected a list from {url}")
+            items.extend(page)
+            match = re.search(r'<([^>]+)>;\s*rel="next"', link)
+            url = match.group(1) if match else None
+        return items
+
+    def graphql(self, query: str, variables: dict[str, Any]) -> Any:
+        body = json.dumps({"query": query, "variables": variables}).encode()
+        result, _ = self._request(f"{API}/graphql", body)
+        if not isinstance(result, dict) or result.get("errors") or "data" not in result:
+            raise GateError(
+                f"GraphQL error: {result.get('errors') if isinstance(result, dict) else result}"
+            )
+        return result["data"]
+
+
+def fetch(client: Client, repo: str, number: int) -> dict[str, Any]:
+    """Collect every record the decision needs. Raises GateError when any is
+    missing or truncated."""
+    owner, name = repo.split("/", 1)
+    pr = client.get(f"repos/{repo}/pulls/{number}")
+    reviews = client.paginate(f"repos/{repo}/pulls/{number}/reviews")
+    comments = client.paginate(f"repos/{repo}/pulls/{number}/comments")
+    commits = client.paginate(f"repos/{repo}/pulls/{number}/commits")
+    files = client.paginate(f"repos/{repo}/pulls/{number}/files")
+    threads: list[Any] = []
+    after: str | None = None
+    while True:
+        data = client.graphql(
+            THREADS_QUERY, {"owner": owner, "name": name, "number": number, "after": after}
+        )
+        try:
+            block = data["repository"]["pullRequest"]["reviewThreads"]
+            threads.extend(block["nodes"])
+            if not block["pageInfo"]["hasNextPage"]:
+                break
+            after = block["pageInfo"]["endCursor"]
+        except (KeyError, TypeError) as exc:
+            raise GateError(f"unexpected review-thread data: {exc}") from exc
+    head = _require(pr, "head", "sha")
+    compares: dict[str, Any] = {}
+    for review in reviews:
+        sha = review.get("commit_id")
+        if sha and sha != head and sha not in compares:
+            compares[sha] = client.get_optional(f"repos/{repo}/compare/{sha}...{head}")
+    return {
+        "repo": repo,
+        "pr": pr,
+        "reviews": reviews,
+        "comments": comments,
+        "commits": commits,
+        "files": files,
+        "threads": threads,
+        "compares": compares,
+    }
+
+
+# ------------------------------------------------------------------------ evaluate
+
+
+@dataclass
+class Verdict:
+    passed: bool = False
+    exempt: str = ""
+    errors: list[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
+    notes: list[str] = field(default_factory=list)
+    evidence: list[str] = field(default_factory=list)
+
+
+def _require(record: Any, *keys: str) -> Any:
+    value = record
+    for key in keys:
+        if not isinstance(value, dict) or key not in value:
+            raise GateError(f"API data lacks {'.'.join(keys)}")
+        value = value[key]
+    return value
+
+
+def _login(user: Any) -> str:
+    return user.get("login", "") if isinstance(user, dict) else ""
+
+
+def _paths(files: Iterable[dict[str, Any]]) -> set[str]:
+    paths = set()
+    for item in files:
+        paths.add(_require(item, "filename"))
+        if item.get("previous_filename"):
+            paths.add(item["previous_filename"])
+    return paths
+
+
+def protected_paths(paths: Iterable[str]) -> list[str]:
+    return sorted(p for p in paths if any(fnmatch.fnmatchcase(p, g) for g in PROTECTED_PATHS))
+
+
+def copilot_assessment(body: str, inline_comments: int) -> tuple[str, str]:
+    """Classify a Copilot review as "substantive", "summary" or "notice", and why."""
+    verdict = COPILOT_VERDICT.search(body)
+    findings = COPILOT_FINDINGS.search(body)
+    if verdict and findings and verdict.end() < findings.start():
+        between = re.sub(r"<[^>]*>|[*_`]", " ", body[verdict.end() : findings.start()])
+        if re.search(r"[A-Za-z]{3,}.*[A-Za-z]{3,}", between):
+            return "substantive", (
+                f"verdict '{verdict['verdict']}' with an assessment and "
+                f"{findings['count']} open finding(s)"
+            )
+    if inline_comments:
+        return "substantive", f"{inline_comments} inline comment(s)"
+    if COPILOT_NOTICE.search(body):
+        return "notice", "an error or quota notice, not a review"
+    return "summary", "a change summary without an assessment"
+
+
+def _carried_forward(compare: Any, pr_paths: set[str]) -> bool:
+    """A review at an older commit still covers the head when every later commit
+    is a merge commit and no later change touches a file the PR changes."""
+    if not isinstance(compare, dict) or compare.get("status") != "ahead":
+        return False
+    commits = compare.get("commits")
+    files = compare.get("files")
+    if not isinstance(commits, list) or not isinstance(files, list):
+        return False
+    if compare.get("total_commits") != len(commits) or len(files) >= COMPARE_FILE_LIMIT:
+        return False
+    if not all(len(c.get("parents") or []) >= 2 for c in commits):
+        return False
+    return not (_paths(files) & pr_paths)
+
+
+def _exemption(data: dict[str, Any]) -> str:
+    pr = data["pr"]
+    author = _login(pr.get("user"))
+    head_repo = (pr.get("head") or {}).get("repo") or {}
+    same_repo = head_repo.get("full_name") == data["repo"]
+    branch = _require(pr, "head", "ref")
+    if author == RELEASE_AUTHOR and branch.startswith(RELEASE_BRANCH_PREFIX) and same_repo:
+        return "release-please candidate: review and CI follow RELEASING.md"
+    if author == DEPENDABOT and branch.startswith(DEPENDABOT_BRANCH_PREFIX) and same_repo:
+        if all(
+            _login(c.get("author")) == DEPENDABOT or len(c.get("parents") or []) >= 2
+            for c in data["commits"]
+        ):
+            return "Dependabot update: dependency-only, merged by its required checks"
+    return ""
+
+
+def evaluate(data: dict[str, Any], event_head: str = "") -> Verdict:
+    verdict = Verdict()
+    pr = data["pr"]
+    head = _require(pr, "head", "sha")
+    author = _login(_require(pr, "user"))
+    if not author:
+        raise GateError("API data lacks the PR author")
+    if event_head and event_head != head:
+        verdict.errors.append(
+            f"the event head {event_head[:12]} is no longer the PR head {head[:12]}; "
+            "the run for the current head decides"
+        )
+        return verdict
+    if int(_require(pr, "commits")) > len(data["commits"]) or len(data["commits"]) >= (
+        MAX_LISTED_COMMITS
+    ):
+        raise GateError("the commit listing is incomplete (GitHub lists at most 250)")
+    if int(_require(pr, "changed_files")) > len(data["files"]) or len(data["files"]) >= (
+        MAX_LISTED_FILES
+    ):
+        raise GateError("the changed-file listing is incomplete (GitHub lists at most 3000)")
+
+    exempt = _exemption(data)
+    if exempt:
+        verdict.passed, verdict.exempt = True, exempt
+        verdict.notes.append(f"Exempt: {exempt}.")
+        return verdict
+
+    route = ROUTE_LINE.search(pr.get("body") or "")
+    verdict.notes.append(
+        "Declared development route (reported only, never evidence): "
+        + (route["route"].strip() if route else "not stated")
+    )
+    for login in sorted(_login(u) for u in pr.get("requested_reviewers") or []):
+        verdict.notes.append(f"Pending review request for {login}: not evidence.")
+    for team in pr.get("requested_teams") or []:
+        verdict.notes.append(f"Pending review request for team {team.get('slug')}: not evidence.")
+
+    pr_paths = _paths(data["files"])
+    protected = protected_paths(pr_paths)
+    if protected:
+        verdict.notes.append(
+            "Protected (no-bypass) paths changed; a trusted person's APPROVED review "
+            "of the head is required: " + ", ".join(protected)
+        )
+
+    committers = set()
+    for commit in data["commits"]:
+        if len(commit.get("parents") or []) < 2:
+            committers.update({_login(commit.get("author")), _login(commit.get("committer"))})
+    committers -= {"", "web-flow"}
+
+    inline: dict[int, int] = {}
+    for comment in data["comments"]:
+        review_id = comment.get("pull_request_review_id")
+        if review_id is not None:
+            inline[review_id] = inline.get(review_id, 0) + 1
+
+    severities: dict[int, str] = {}
+    approved: list[str] = []
+    commented: list[str] = []
+    ai_current: list[tuple[int, str]] = []
+    decisions: dict[str, str] = {}
+    rounds = self_reviews = 0
+    reviews = [r for r in data["reviews"] if r.get("state") != "PENDING" and r.get("submitted_at")]
+    for review in sorted(reviews, key=lambda r: (r["submitted_at"], r.get("id", 0))):
+        state = _require(review, "state")
+        user = _require(review, "user")
+        login = _login(user)
+        sha = review.get("commit_id") or ""
+        body = review.get("body") or ""
+        comments = inline.get(review.get("id", -1), 0)
+        current = sha == head or _carried_forward(data["compares"].get(sha), pr_paths)
+        where = "the head" if sha == head else sha[:12]
+        if sha != head and current:
+            where += " (carried forward over base syncs)"
+        label = f"{state} review by {login} at {where}"
+
+        if login in COPILOT_LOGINS:
+            for match in COPILOT_SEVERITY.finditer(body):
+                severities[int(match["comment"])] = match["severity"].lower()
+            kind, why = copilot_assessment(body, comments)
+            if kind == "notice":
+                verdict.notes.append(f"Ignored {label}: {why}; not a review round.")
+                continue
+            rounds += 1
+            if kind != "substantive":
+                verdict.warnings.append(f"Rejected {label} (AI round {rounds}): {why}.")
+            elif not current:
+                verdict.notes.append(
+                    f"Stale {label} (AI round {rounds}): the code changed after it."
+                )
+            else:
+                ai_current.append((rounds, f"{label} (AI round {rounds}): {why}"))
+            continue
+        if login == author:
+            self_reviews += 1
+            continue
+        if login in committers:
+            verdict.warnings.append(f"Rejected {label}: the reviewer authored commits in this PR.")
+            continue
+        if user.get("type") != "User":
+            verdict.warnings.append(f"Rejected {label}: a bot other than Copilot code review.")
+            continue
+        association = review.get("author_association", "")
+        if association not in TRUSTED_ASSOCIATIONS:
+            verdict.warnings.append(
+                f"Rejected {label}: author association {association or 'unknown'} is not "
+                "OWNER, MEMBER or COLLABORATOR."
+            )
+            continue
+        if state in {"APPROVED", "CHANGES_REQUESTED", "DISMISSED"}:
+            decisions[login] = state
+        if state == "APPROVED" and current:
+            approved.append(login)
+            verdict.evidence.append(f"{label}: formal approval.")
+        elif state == "COMMENTED" and current:
+            text = re.sub(r"\s+", "", body)
+            if comments or len(text) >= MIN_COMMENT_CHARS:
+                commented.append(login)
+                verdict.evidence.append(f"{label}: assessment (COMMENTED is not approval).")
+            else:
+                verdict.warnings.append(f"Rejected {label}: no text and no inline comment.")
+        elif state in {"APPROVED", "COMMENTED"}:
+            verdict.notes.append(f"Stale {label}: the code changed after it.")
+
+    if self_reviews:
+        verdict.warnings.append(
+            f"Rejected {self_reviews} review(s) by the PR author {author}: self-review "
+            "(replies to review threads are recorded as reviews too)."
+        )
+    approvers = [login for login in approved if decisions.get(login) == "APPROVED"]
+    for login, state in sorted(decisions.items()):
+        if state == "CHANGES_REQUESTED":
+            verdict.errors.append(f"{login} requested changes; their latest decision blocks.")
+
+    within = [text for number, text in ai_current if number <= AI_REVIEW_BUDGET]
+    beyond = [text for number, text in ai_current if number > AI_REVIEW_BUDGET]
+    verdict.evidence.extend(within)
+    for text in beyond:
+        verdict.warnings.append(
+            f"Not counted alone: {text}; it is past the {AI_REVIEW_BUDGET}-round AI review "
+            "budget, so the head needs a trusted person's review."
+        )
+
+    for thread in data["threads"]:
+        first = ((thread.get("comments") or {}).get("nodes") or [None])[0]
+        if not isinstance(first, dict):
+            raise GateError("a review thread has no first comment")
+        severity = severities.get(first.get("databaseId") or -1, "")
+        serious = severity in BLOCKING_SEVERITIES or bool(
+            SECURITY_WORDS.search(first.get("body") or "")
+        )
+        place = f"{first.get('path')} ({first.get('url')})"
+        if not thread.get("isResolved"):
+            if serious:
+                verdict.errors.append(
+                    f"Unresolved {severity or 'security-relevant'} finding by "
+                    f"{_login(first.get('author'))} at {place}"
+                    + (" (outdated, still unresolved)" if thread.get("isOutdated") else "")
+                )
+            else:
+                verdict.notes.append(f"Unresolved thread at {place}.")
+        elif serious and _login(thread.get("resolvedBy")) == author:
+            verdict.warnings.append(
+                f"The {severity or 'security-relevant'} finding at {place} was resolved by "
+                "the PR author; a maintainer should confirm it."
+            )
+
+    if protected:
+        satisfied = bool(approvers)
+        if not satisfied:
+            verdict.errors.append(
+                "Protected paths changed without a trusted person's APPROVED review of the "
+                "head. COMMENTED and Copilot reviews do not authorize them."
+            )
+    else:
+        satisfied = bool(approvers or commented or within)
+        if not satisfied:
+            verdict.errors.append(
+                "No qualifying review of the head: needs a substantive submitted Copilot review "
+                f"(within {AI_REVIEW_BUDGET} rounds) or a trusted person's APPROVED or "
+                "substantive COMMENTED review."
+            )
+    verdict.passed = satisfied and not verdict.errors
+    return verdict
+
+
+# ---------------------------------------------------------------------------- main
+
+
+def render(verdict: Verdict, number: int, bootstrap: bool) -> str:
+    status = "exempt" if verdict.exempt else ("passed" if verdict.passed else "failed")
+    lines = [f"### agent-review: {status} (PR #{number})", ""]
+    if bootstrap:
+        lines += [
+            "> Bootstrap run: the base branch has no gate yet, so this verdict is advisory.",
+            "",
+        ]
+    for title, items in (
+        ("Blocking", verdict.errors),
+        ("Counted evidence", verdict.evidence),
+        ("Rejected or attention", verdict.warnings),
+        ("Notes", verdict.notes),
+    ):
+        if items:
+            lines.append(f"**{title}**")
+            lines += [f"- {item}" for item in items]
+            lines.append("")
+    lines.append("Re-run this check after resolving a thread; thread resolution sends no event.")
+    return "\n".join(lines) + "\n"
+
+
+def main(
+    argv: list[str] | None = None,
+    client_factory: Callable[[str], Client] = Client,
+) -> int:
+    parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
+    parser.add_argument("--repo", required=True, help="owner/name")
+    parser.add_argument("--pr", required=True, type=int)
+    parser.add_argument("--event-head-sha", default="")
+    parser.add_argument("--bootstrap", action="store_true")
+    args = parser.parse_args(argv)
+
+    try:
+        data = fetch(client_factory(os.environ.get("GH_TOKEN", "")), args.repo, args.pr)
+        verdict = evaluate(data, args.event_head_sha)
+    except GateError as exc:
+        verdict = Verdict(errors=[f"Failing closed on missing API data: {exc}"])
+
+    report = render(verdict, args.pr, args.bootstrap)
+    sys.stdout.write(report)
+    summary = os.environ.get("GITHUB_STEP_SUMMARY")
+    if summary:
+        with open(summary, "a", encoding="utf-8") as handle:
+            handle.write(report)
+    for message in verdict.errors:
+        print(f"::error title=agent-review::{message}")
+    for message in verdict.warnings:
+        print(f"::warning title=agent-review::{message}")
+    if args.bootstrap:
+        print("::warning title=agent-review::Bootstrap run: advisory only.")
+        return 0
+    return 0 if verdict.passed else 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

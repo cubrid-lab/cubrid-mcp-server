@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### CI
+
+- **`agent-review` check for review evidence** — `.github/workflows/agent-review.yml` runs `scripts/agent_review_gate.py` from the base branch with a read-only token on every pull request and review event. It passes only when GitHub's own review records show a submitted, non-self, current review: a substantive Copilot review within the two-round AI review budget, or a trusted person's `APPROVED` or substantive `COMMENTED` review. Changes to `safety.py`, `database.py`, `audit.py`, `server.py`, write-permission or release workflows and the gate itself need a trusted person's `APPROVED` review. Pending requests, PR-body checkboxes, summary-only bot text and stale reviews never count; unresolved critical or security threads and missing API data fail the check. release-please and Dependabot pull requests are exempt. The check is not required until a maintainer adds it to the `main` ruleset. `CONTRIBUTING.md` documents the rules (#317).
+
 ## [0.5.1] - 2026-10-14
 
 ### Upgrade notes

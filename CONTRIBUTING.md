@@ -191,7 +191,10 @@ an issue, not a pull request:
   squash merges, so the pull request title becomes the commit title.
 - **Required checks:** `ci-gate` (the aggregate gate described above) and
   `PR title` (from `pr-title.yml`). The branch must be up to date with `main`
-  before merging.
+  before merging. The `agent-review` check (see
+  [Agent-review evidence gate](#agent-review-evidence-gate)) runs on every pull
+  request but is **not** a required check yet; until a maintainer adds it to the
+  ruleset, a failing `agent-review` blocks a merge by policy only.
 - **No required human approval and no required code-owner approval.** The
   project has a small maintainer team. A mandatory approval would block a
   maintainer's own pull request whenever the other maintainers are away, and
@@ -247,6 +250,94 @@ Record dispositions at the final relevant head and close inline threads only
 after verification. Human contributions follow ordinary contributor review;
 no contributor must install internal agent or Oracle tooling. Existing safety,
 integration and release checks remain mandatory.
+
+### Agent-review evidence gate
+
+`.github/workflows/agent-review.yml` publishes the `agent-review` check. It runs
+`scripts/agent_review_gate.py` from the base branch and decides only from the
+review records GitHub keeps for the pull request. The PR body, its checkboxes and
+its declared development route, review requests, and CI results are never
+evidence; the route is only shown in the check summary. Every pull request is
+evaluated the same way, whichever tool or person wrote it, except the two
+exemptions below.
+
+A review counts only when it is submitted (not pending or dismissed), is not a
+self-review (the reviewer is not the PR author and authored no commit in the PR),
+covers the current head, and comes from GitHub Copilot code review or a trusted
+person (author association `OWNER`, `MEMBER` or `COLLABORATOR`). Other bots and
+other accounts are listed in the summary but never count.
+
+| Evidence at the head | Ordinary change | Protected path changed |
+|---|---|---|
+| Trusted person, `APPROVED` | passes | passes (the explicit authorization) |
+| Trusted person, `COMMENTED` with text or an inline comment | passes | not enough |
+| Copilot `COMMENTED`, substantive, AI round 1 or 2 | passes | not enough |
+| Copilot past the AI review budget, summary-only, or error/quota notice | not enough | not enough |
+| Nothing, a pending request, PR-body checkboxes, a self-review | fails | fails |
+
+- **COMMENTED is not APPROVED.** A `COMMENTED` review is an assessment; only a
+  trusted person's `APPROVED` review is formal approval.
+- **Substantive Copilot review.** It has inline comments, or its overview states
+  a verdict, an assessment sentence and an open-findings count. A summary of what
+  changed, or an error or quota notice, is not an assessment. A notice is not an
+  AI review round, so a quota failure may be re-requested.
+- **Stale reviews.** A review of an older commit does not count. It is carried
+  forward only when every later commit is a merge commit that changes no file the
+  PR changes (an "Update branch" sync, needed because `main` requires branches to
+  be up to date). Any other new commit needs a new review of the final head.
+- **AI review budget.** Each published Copilot review is one round, stale or not
+  (error and quota notices excepted). Rounds 1 and 2 can satisfy the gate. A
+  Copilot review after round 2 does not count on its own: at the budget limit the
+  final head needs a trusted person's review, which records the maintainer
+  decision `AGENTS.md` asks for. A base-sync carry-forward spends no round.
+- **Protected paths (no bypass).** A change to `cubrid_mcp_server/safety.py`,
+  `database.py`, `audit.py` or `server.py`, to a workflow that holds write
+  permissions or releases (`codeql.yml`, `dependabot-auto-merge.yml`, `docs.yml`,
+  `publish-pypi.yml`, `release-please.yml`), or to the gate itself
+  (`agent-review.yml`, `scripts/agent_review_gate.py`) needs a trusted person's
+  `APPROVED` review of the head. A unit test fails when a workflow gains write
+  permissions without joining the list.
+- **Blocking findings.** A trusted reviewer whose latest decision is
+  `CHANGES_REQUESTED` blocks, and so does an unresolved review thread that is a
+  Copilot critical or high-severity finding or mentions security, a
+  vulnerability, an injection, credentials, secrets, privileges or a bypass, even
+  when the thread is outdated. A security finding resolved by the PR author is
+  flagged for a maintainer. Resolving a thread sends no workflow event: re-run the
+  `agent-review` job afterwards.
+- **Missing data fails closed.** Any API error, missing field or truncated
+  listing (over 250 commits or 3000 files) fails the check; re-run it.
+
+Exemptions, so release and dependency automation behave as before:
+
+- **release-please candidates** (author `github-actions[bot]`, a
+  `release-please--` branch in this repository) pass with a notice. Their review,
+  freeze and CI rules stay in [`RELEASING.md`](RELEASING.md); closing and
+  reopening the candidate, which RELEASING.md already requires to start CI, also
+  starts this check.
+- **Dependabot updates** (author `dependabot[bot]`, a `dependabot/` branch in this
+  repository) pass when every commit is Dependabot's or a merge commit, so
+  auto-merge is unchanged. A pushed non-merge commit by anyone else makes the
+  pull request an ordinary one.
+
+Human contributors are evaluated like everyone else: their pull requests pass
+with the maintainer review they receive anyway. A maintainer's own pull request
+needs Copilot code review or another maintainer.
+
+**Fork pull requests and the trust model.** The workflow uses `pull_request` and
+`pull_request_review` with a read-only token, never `pull_request_target`, and
+checks out nothing: no fork code runs with write access or secrets. Fork pull
+requests never get an exemption and never run their own copy of the script.
+`pull_request_target` would read the workflow from the base branch (so a PR could
+not edit it), but it runs with the repository's secrets and, unless every job
+narrows it, a write-capable token next to attacker-controlled input, and review
+events do not trigger it; a
+`workflow_run` relay would need a status-writing token and loses the PR number
+for forks. The trade-off accepted here: GitHub reads `agent-review.yml` from the
+PR's merge commit, so a PR that edits the workflow can change what the check
+runs, as it could for `ci.yml`. The base-branch script treats the workflow as a
+protected path, and `.github/CODEOWNERS` routes workflow changes to the
+maintainers, who must read such a diff before merging. A first-time fork
+contributor's runs wait for a maintainer's approval as usual.
 
 ## Repository-local issue ownership
 

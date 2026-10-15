@@ -22,6 +22,7 @@
 /scripts/ci_scope.py              @yeongseon @paikend
 /scripts/lint_changelog.py        @yeongseon @paikend
 /scripts/check_translation_sync.py @yeongseon @paikend
+/scripts/agent_review_gate.py      @yeongseon @paikend
 /pyproject.toml                   @yeongseon @paikend
 /RELEASING.md                     @yeongseon @paikend
 /SECURITY.md                      @yeongseon @paikend
