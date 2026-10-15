@@ -471,3 +471,4 @@ def _side_effect(sql: str) -> str | None:
         if value in CLICK_COUNTER_NAMES and before[1] == "WITH" and after[1] == "FOR":
             return f"WITH {value} FOR"
     return None
+# Pilot-only comment for the agent-review gate (#317); this PR is never merged.
