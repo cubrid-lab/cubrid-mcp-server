@@ -27,8 +27,9 @@ review requests and CI results are never evidence. A review counts only when:
   PR, and it is the only evidence that authorizes a change to a protected path
   (``PROTECTED_PATHS``, the no-bypass list).
 * A ``COMMENTED`` review is an assessment, not approval. A trusted person's
-  ``COMMENTED`` review needs text or an inline comment. A Copilot review counts
-  only when it is substantive: it has inline comments, or its overview states a
+  ``COMMENTED`` review needs text or an inline comment that opens a thread. A
+  Copilot review counts only when it is substantive: it has inline comments, or
+  its overview states a
   verdict, an assessment sentence and an open-findings count. A summary of what
   changed, or an error or quota notice, is not an assessment. A Copilot review
   satisfies only a PR that changes no protected path, and only within the AI
@@ -385,10 +386,12 @@ def evaluate(data: dict[str, Any], event_head: str = "") -> Verdict:
             committers.update({_login(commit.get("author")), _login(commit.get("committer"))})
     committers -= {"", "web-flow"}
 
+    # Inline comments that open a thread; a reply to an existing thread is not an
+    # assessment of the change (GitHub records each reply as a COMMENTED review).
     inline: dict[int, int] = {}
     for comment in data["comments"]:
         review_id = comment.get("pull_request_review_id")
-        if review_id is not None:
+        if review_id is not None and comment.get("in_reply_to_id") is None:
             inline[review_id] = inline.get(review_id, 0) + 1
 
     severities: dict[int, str] = {}

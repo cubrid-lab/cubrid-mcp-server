@@ -270,7 +270,7 @@ other accounts are listed in the summary but never count.
 | Evidence at the head | Ordinary change | Protected path changed |
 |---|---|---|
 | Trusted person, `APPROVED` | passes | passes (the explicit authorization) |
-| Trusted person, `COMMENTED` with text or an inline comment | passes | not enough |
+| Trusted person, `COMMENTED` with text or a new inline comment (thread replies alone do not count) | passes | not enough |
 | Copilot `COMMENTED`, substantive, AI round 1 or 2 | passes | not enough |
 | Copilot past the AI review budget, summary-only, or error/quota notice | not enough | not enough |
 | Nothing, a pending request, PR-body checkboxes, a self-review | fails | fails |

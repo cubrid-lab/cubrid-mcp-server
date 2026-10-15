@@ -251,6 +251,16 @@ def test_untrusted_and_other_bot_reviews_are_rejected() -> None:
     assert any("bot other than Copilot" in w for w in verdict.warnings)
 
 
+def test_thread_reply_is_not_an_assessment() -> None:
+    records = data(
+        [review(MAINTAINER, "COMMENTED", review_id=9)],
+        comments=[{"pull_request_review_id": 9, "in_reply_to_id": 4}],
+    )
+    assert not evaluate(records).passed
+    records["comments"].append({"pull_request_review_id": 9, "in_reply_to_id": None})
+    assert evaluate(records).passed
+
+
 def test_empty_commented_review_is_rejected() -> None:
     verdict = evaluate(data([review(MAINTAINER, "COMMENTED", body="LGTM")]))
     assert not verdict.passed
