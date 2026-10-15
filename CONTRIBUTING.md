@@ -306,6 +306,13 @@ other accounts are listed in the summary but never count.
   `agent-review` job afterwards.
 - **Missing data fails closed.** Any API error, missing field or truncated
   listing (over 250 commits or 3000 files) fails the check; re-run it.
+- **Copilot's review does not start a run by itself.** GitHub holds a workflow
+  run that Copilot's review event triggers as "action required" and creates no
+  check for it. After Copilot reviews, re-run that waiting `agent-review` run
+  (Actions, or `gh api -X POST repos/cubrid-lab/cubrid-mcp-server/actions/runs/<id>/rerun`)
+  or edit the PR body, for example to record the review disposition; both
+  evaluate the current records. Each event adds an `agent-review` run on the
+  same head, and the newest one is the current result.
 
 Exemptions, so release and dependency automation behave as before:
 

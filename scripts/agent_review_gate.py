@@ -545,7 +545,12 @@ def render(verdict: Verdict, number: int, bootstrap: bool) -> str:
             lines.append(f"**{title}**")
             lines += [f"- {item}" for item in items]
             lines.append("")
-    lines.append("Re-run this check after resolving a thread; thread resolution sends no event.")
+    lines.append(
+        (
+            "Re-run this check after Copilot reviews (its review run waits for approval) "
+            "or after resolving a thread (resolution sends no event)."
+        )
+    )
     return "\n".join(lines) + "\n"
 
 

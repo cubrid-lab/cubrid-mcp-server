@@ -150,8 +150,10 @@ qualifying review exists). **No bypass:** changes to `safety.py`,
 `database.py`, `audit.py`, `server.py`, write-permission or release workflows
 and the gate itself need a trusted person's `APPROVED` review of the head;
 Copilot or `COMMENTED` reviews do not authorize them. release-please and
-Dependabot PRs are exempt. The check is not yet required by the ruleset; until
-it is, a failing `agent-review` blocks merging by policy.
+Dependabot PRs are exempt. A run triggered by Copilot's review waits as
+"action required": re-run it, or edit the PR body, after Copilot reviews. The
+check is not yet required by the ruleset; until it is, a failing
+`agent-review` blocks merging by policy.
 
 **Human contributions:** follow ordinary contributor requirements;
 maintainers arrange any project-specific tooling and integration. This route
