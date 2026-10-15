@@ -123,18 +123,29 @@ and an automated "approval recommended" summary are not completed reviews.
 
 Trivial OpenCode changes may omit phases 1 and 4 only with a recorded reason.
 Oracle pre/post reviews satisfy this route; a further Copilot review is not
-automatically required. Existing branch/maintainer and required CI conditions
+required. Existing branch/maintainer and required CI conditions
 still apply.
 
 **Standalone agents (Claude Code, Codex, ChatGPT, or other agent tools):**
 open a PR after implementation, tests and docs, then **wait for a substantive
-submitted GitHub Copilot review or a review by another person** before merging.
-A submitted Copilot COMMENTED review with actual code assessment can count;
-it is not GitHub APPROVED status.
-Requested/pending reviews, Copilot suggestion summaries without substantive
-assessment, self-review and passing CI are insufficient. Evaluate findings
-against the final relevant head. Without the required review, leave the PR
-unmerged (Draft/pending review).
+submitted GitHub Copilot review or a review by a maintainer**, recorded on the
+PR, before merging (maintainer decision, 2026-10-15). A maintainer is a code
+owner in `.github/CODEOWNERS` other than the PR's author. Reviews by other
+people, and reviews by AI agents other than Copilot, are welcome but do not
+satisfy this route. A Copilot COMMENTED review with an actual code assessment
+counts; it is not GitHub APPROVED status. Requested/pending reviews, Copilot
+suggestion summaries without substantive assessment, self-review and passing
+CI are insufficient. Evaluate findings against the final relevant head. Without
+the required review, leave the PR unmerged (Draft/pending review). No CI check
+enforces this today; whether to add one is pending a maintainer decision
+(#317).
+
+**Security-sensitive paths, under every route:** changes to `safety.py`,
+`database.py`, `audit.py`, `server.py`, or to workflows that hold write
+permissions or perform releases, get stricter scrutiny. Their review must
+explicitly assess the read-only/write-mode, audit-redaction and MCP stdout
+invariants they carry, and a maintainer confirms that disposition before
+merge.
 
 **`agent-review` check:** `.github/workflows/agent-review.yml` checks this
 route from GitHub's own review records on every PR (rules in
@@ -215,8 +226,9 @@ docs tasks need only the applicable fields.
 
 ## Review disposition and merge evidence
 
-- Record the development route, Oracle pre/post evidence or submitted GitHub
-  review, reviewed head SHA and pending/complete status in the PR.
+- Record the development route, Oracle pre/post evidence or the Copilot or
+  maintainer review, reviewer, reviewed head SHA and pending/complete status
+  in the PR.
 - Classify findings as fixed (commit + focused test), rejected with
   contract/reproduction evidence, or deferred with a linked issue. Keep
   confirmed security-sensitive reproductions in the private reporting path.
@@ -228,12 +240,8 @@ docs tasks need only the applicable fields.
   findings, outstanding threads, verification results and unrun checks.
 - Apply the existing two-published-AI-review-round budget. If review is still
   pending or unresolved at that limit, retain Draft and request a maintainer
-  decision rather than bypassing review or endlessly revising. A stale Copilot
-  review still spends its round; once a PR has more than two Copilot rounds the
-  `agent-review` check needs a trusted person's review of the final head
-  (Copilot error/quota notices are not rounds, and a sync that leaves the PR's
-  change identical carries a review forward without spending one).
-- Never merge with the required GitHub review still pending, failed required
+  decision rather than bypassing review or endlessly revising.
+- Never merge with the required review still pending, failed required
   CI, or unresolved critical/security findings. Record a maintainer decision
   for any other open finding. These are process rules, not an auto-merge or
   branch-protection change.

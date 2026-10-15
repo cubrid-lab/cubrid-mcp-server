@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Documentation
+
+- **Agent PR review route: Copilot or a maintainer** — maintainer decision of 2026-10-15: a standalone-agent PR needs a substantive submitted Copilot review or a review by a maintainer (a code owner other than the PR's author), recorded on the PR. Reviews by other people or by other AI agents do not satisfy the route. No CI check enforces it; whether to add one is pending (#317). The two-round AI review budget stays. New: under every route, changes to `safety.py`, `database.py`, `audit.py`, `server.py` and workflows that hold write permissions or perform releases need a review that explicitly assesses their invariants, and a maintainer confirms that disposition before merge. `AGENTS.md`, `CONTRIBUTING.md` and the PR template are updated; the Korean docs carry no review rules, so nothing there changes. Refs #317.
+
 ### CI
 
 - **`agent-review` check for review evidence** — `.github/workflows/agent-review.yml` runs `scripts/agent_review_gate.py` from the base branch with a read-only token on every pull request and review event. It passes only when GitHub's own review records show a submitted, non-self, current review: a substantive Copilot review within the two-round AI review budget, or a trusted person's `APPROVED` or substantive `COMMENTED` review. Changes to `safety.py`, `database.py`, `audit.py`, `server.py`, write-permission or release workflows and the gate itself need a trusted person's `APPROVED` review. Pending requests, PR-body checkboxes, summary-only bot text and stale reviews never count; unresolved critical or security threads and missing API data fail the check. release-please and Dependabot pull requests are exempt. The check is not required until a maintainer adds it to the `main` ruleset. `CONTRIBUTING.md` documents the rules (#317).

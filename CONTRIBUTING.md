@@ -244,8 +244,14 @@ Maintainer/agent PRs use the review route in
 Non-trivial OpenCode work records Oracle design and post-implementation reviews;
 trivial OpenCode changes may omit those reviews with a recorded reason.
 Standalone Claude Code, Codex, ChatGPT or other agent tools wait for a substantive
-submitted GitHub Copilot or other-person review. A pending request, CI pass or
-an automated approval suggestion alone does not complete that review route.
+submitted GitHub Copilot review or a review by a maintainer (a code owner other
+than the PR's author), recorded on the PR (maintainer decision, 2026-10-15).
+Other people's reviews and other AI agents' reviews do not satisfy that route.
+A pending request, CI pass, self-review or an automated approval suggestion
+alone does not complete it. Under every route, changes to `safety.py`,
+`database.py`, `audit.py`, `server.py` or workflows that hold write permissions
+or perform releases need a review that explicitly assesses their invariants,
+confirmed by a maintainer.
 Record dispositions at the final relevant head and close inline threads only
 after verification. Human contributions follow ordinary contributor review;
 no contributor must install internal agent or Oracle tooling. Existing safety,
