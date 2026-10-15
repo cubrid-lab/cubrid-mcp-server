@@ -52,10 +52,10 @@ See CONTRIBUTING.md#pull-request-and-commit-titles.
 - Open review threads and why, or "none" after verification.
 - Maintainer merge decision: **pending**; complete only after checking the applicable review, final code, required CI and thread dispositions.
 <!-- Review requests, bot approval suggestions and passing CI alone do not complete review.
-     The `agent-review` check reads only GitHub's submitted reviews of the head commit;
-     this section and its checkboxes are records for maintainers, never evidence.
-     Protected paths (safety.py, database.py, audit.py, server.py, write-permission or
-     release workflows, the gate) need a trusted person's APPROVED review.
+     The advisory `agent-review` check reads only GitHub's submitted reviews of the head
+     commit; this section and its checkboxes are records for maintainers, never evidence.
+     Protected paths (safety.py, database.py, audit.py, server.py, config.py, __main__.py,
+     context.py, every workflow, the gate) need a maintainer's APPROVED review.
      See CONTRIBUTING.md#agent-review-evidence-gate. -->
 
 ## Optional: additional AI / tool review

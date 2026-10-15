@@ -147,24 +147,23 @@ explicitly assess the read-only/write-mode, audit-redaction and MCP stdout
 invariants they carry, and a maintainer confirms that disposition before
 merge.
 
-**`agent-review` check:** `.github/workflows/agent-review.yml` checks this
-route from GitHub's own review records on every PR (rules in
-[CONTRIBUTING.md](CONTRIBUTING.md#agent-review-evidence-gate)). It accepts a
-substantive submitted Copilot review of the head within the two-round budget,
-or a trusted person's (`OWNER`/`MEMBER`/`COLLABORATOR`) `APPROVED` or
-substantive `COMMENTED` review of the head; never PR-body checkboxes, pending
-requests, self-review, summary-only bot text or a review of an older commit
-(unless the PR's change against `main` is identical at both commits). Oracle output is private and is not GitHub
-evidence: an OpenCode + Oracle PR passes when a maintainer, after checking the
-recorded Oracle reviews, submits an `APPROVED` review of the head (or another
-qualifying review exists). **No bypass:** changes to `safety.py`,
-`database.py`, `audit.py`, `server.py`, write-permission or release workflows
-and the gate itself need a trusted person's `APPROVED` review of the head;
-Copilot or `COMMENTED` reviews do not authorize them. release-please and
-Dependabot PRs are exempt. A run triggered by Copilot's review waits as
-"action required": re-run it, or edit the PR body, after Copilot reviews. The
-check is not yet required by the ruleset; until it is, a failing
-`agent-review` blocks merging by policy.
+**`agent-review` check (advisory only):** `.github/workflows/agent-review.yml`
+reports from GitHub's own review records whether this route is met (rules in
+[CONTRIBUTING.md](CONTRIBUTING.md#agent-review-evidence-gate)). It counts a
+substantive Copilot review of the head within the two-round budget, or a
+maintainer's `APPROVED` review, or `COMMENTED` review that opens an inline
+thread; never PR-body checkboxes, pending requests, self-review, other people's
+or other AI agents' reviews, summary-only bot text or a review of an older
+commit (unless the PR's change against `main` is identical at both commits).
+Protected paths (`safety.py`, `database.py`, `audit.py`, `server.py`,
+`config.py`, `__main__.py`, `context.py`, every workflow and the gate itself)
+need a maintainer's `APPROVED` review. Oracle output is private and is not
+GitHub evidence: an OpenCode + Oracle PR passes the check when a maintainer,
+after checking the recorded Oracle reviews, approves the head. A PR can publish
+a check with the same name, so the check is a reading aid and must not be made
+a required status check until it is posted from an identity a PR cannot
+impersonate, such as a GitHub App. A run triggered by Copilot's review waits as
+"action required": re-run it, or edit the PR body, after Copilot reviews.
 
 **Human contributions:** follow ordinary contributor requirements;
 maintainers arrange any project-specific tooling and integration. This route
