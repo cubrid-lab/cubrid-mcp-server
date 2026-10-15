@@ -2,6 +2,11 @@
 """Agent-review evidence gate: decide from GitHub review records whether a PR
 has the review that AGENTS.md requires before merging (#317).
 
+ADVISORY ONLY. The verdict is published as a GitHub Actions check, and any PR
+can publish a check with the same name from a workflow of its own, so this check
+must not be made a required status check until it is posted from an identity a
+PR cannot impersonate, such as a GitHub App (tracked separately).
+
 ``.github/workflows/agent-review.yml`` runs this file from the **base branch**
 (never the PR's copy, except for the bootstrap run described below) with a
 read-only token. It only reads the GitHub REST and GraphQL APIs; it never checks
@@ -9,44 +14,51 @@ out or runs PR code. Exit status 0 passes the ``agent-review`` check and 1 fails
 it; any API error, missing field or truncated listing fails closed.
 
 Evidence is only what GitHub records for the PR. The PR body, its checkboxes,
-review requests and CI results are never evidence. A review counts only when:
+review requests and CI results are never evidence. The rule (maintainer
+decision, 2026-10-15) is a substantive Copilot review or a maintainer's review.
+A review counts only when:
 
-* it is submitted (not ``PENDING``) and not ``DISMISSED``;
+* it is submitted (not ``PENDING``) and not ``DISMISSED``, and its account
+  still exists (a deleted account's review is reported and never counts);
 * its reviewer is not the PR author and authored or committed no commit in the
   PR (self-review), other than a merge commit that only brings in the base
   branch (an "Update branch" sync);
 * it is current: its ``commit_id`` is the PR head, or the PR's change against
   the base branch is identical at both commits (file names, statuses and exact
-  patches, hunk line numbers included). A base sync or a rebase that changes
-  nothing of the PR carries the review forward without spending an AI round;
-* it comes from GitHub Copilot code review or from a trusted person (author
-  association ``OWNER``, ``MEMBER`` or ``COLLABORATOR``). Other bots and
-  untrusted accounts are reported but never count.
+  patches, hunk line numbers included; the blob SHA for a file without a
+  patch). A base sync or a rebase that changes nothing of the PR carries the
+  review forward without spending an AI round;
+* it comes from GitHub Copilot code review or from a maintainer
+  (``MAINTAINERS``, the code owners). Other people, other bots and other AI
+  agents are reported but never count.
 
 ``APPROVED`` and ``COMMENTED`` are different evidence:
 
-* A trusted person's ``APPROVED`` review is formal approval. It satisfies every
-  PR, and it is the only evidence that authorizes a change to a protected path
+* A maintainer's ``APPROVED`` review is formal approval. It satisfies every PR,
+  and it is the only evidence that authorizes a change to a protected path
   (``PROTECTED_PATHS``, the no-bypass list).
-* A ``COMMENTED`` review is an assessment, not approval. A trusted person's
-  ``COMMENTED`` review needs text or an inline comment that opens a thread. A
-  Copilot review counts only when it is substantive: it has inline comments, or
-  its overview states a
-  verdict, an assessment sentence and an open-findings count. A summary of what
-  changed, or an error or quota notice, is not an assessment. A Copilot review
+* A ``COMMENTED`` review is an assessment, not approval. A maintainer's
+  ``COMMENTED`` review counts only when it opens at least one inline thread;
+  review-body text alone does not. A Copilot review counts only when it is
+  substantive: it has inline comments, or its overview states a verdict, an
+  assessment sentence and an open-findings count. A summary of what changed,
+  or an error or quota notice, is not an assessment. A Copilot review
   satisfies only a PR that changes no protected path, and only within the AI
   review budget (``AI_REVIEW_BUDGET`` published Copilot rounds); past it the
-  final head needs a trusted person's review.
+  final head needs a maintainer's review.
 
-Any trusted reviewer whose latest decision is ``CHANGES_REQUESTED`` blocks the
-gate, and so does an unresolved review thread that is a critical, high-severity
-or security finding (resolution is required even when the thread is outdated).
+A maintainer whose latest decision is ``CHANGES_REQUESTED`` blocks the gate,
+even when that maintainer also committed to the PR. Among threads opened by
+Copilot or a maintainer, an unresolved critical, high-severity or security
+finding blocks (even when outdated), and so does one the PR author resolved.
 
 Exempt PRs pass with a notice: release-please candidates (author
-``github-actions[bot]``, branch ``release-please--``, same repository), governed
-by RELEASING.md, and Dependabot PRs (author ``dependabot[bot]``, branch
-``dependabot/``, same repository) whose commits Dependabot created through
-GitHub (committer ``web-flow``, verified signature) or are base syncs. Every other PR, human or agent, is evaluated the same way.
+``github-actions[bot]``, branch ``release-please--``, same repository) that
+change only the files release-please writes (``RELEASE_FILES``) and no
+protected path, governed by RELEASING.md; and Dependabot PRs (author
+``dependabot[bot]``, branch ``dependabot/``, same repository) whose commits
+Dependabot created through GitHub (committer ``web-flow``, verified signature)
+or are base syncs. Every other PR, human or agent, is evaluated the same way.
 
 ``--bootstrap`` is used only while the base branch does not contain this file
 yet (the PR that adds it): the verdict is printed but the step always exits 0,
@@ -77,30 +89,45 @@ PROTECTED_PATHS = (
     "cubrid_mcp_server/database.py",
     "cubrid_mcp_server/audit.py",
     "cubrid_mcp_server/server.py",
-    # Workflows that hold write permissions or release (tests keep this complete).
-    ".github/workflows/codeql.yml",
-    ".github/workflows/dependabot-auto-merge.yml",
-    ".github/workflows/docs.yml",
-    ".github/workflows/publish-pypi.yml",
-    ".github/workflows/release-please.yml",
-    # The gate itself decides merge permission.
-    ".github/workflows/agent-review.yml",
+    # Configuration, entry point and connection context.
+    "cubrid_mcp_server/config.py",
+    "cubrid_mcp_server/__main__.py",
+    "cubrid_mcp_server/context.py",
+    # Every workflow: any of them can gain write permissions or impersonate a check.
+    ".github/workflows/*",
+    # The gate itself and the tests that pin its behaviour.
     "scripts/agent_review_gate.py",
+    "tests/test_agent_review_gate.py",
 )
+# The code owners in .github/CODEOWNERS (a test keeps the two equal).
+MAINTAINERS = frozenset({"yeongseon", "paikend"})
 AI_REVIEW_BUDGET = 2
 COPILOT_LOGINS = frozenset({"copilot-pull-request-reviewer[bot]"})
-TRUSTED_ASSOCIATIONS = frozenset({"OWNER", "MEMBER", "COLLABORATOR"})
+# GraphQL and REST spell Copilot's comment author differently.
+COPILOT_THREAD_AUTHORS = frozenset(
+    {"copilot-pull-request-reviewer", "copilot-pull-request-reviewer[bot]", "Copilot"}
+)
 RELEASE_AUTHOR = "github-actions[bot]"
 RELEASE_BRANCH_PREFIX = "release-please--"
 DEPENDABOT = "dependabot[bot]"
 DEPENDABOT_BRANCH_PREFIX = "dependabot/"
+# Every file release-please writes here (release-please-config.json: the Python
+# version file, both changelogs, the manifest and the extra-files).
+RELEASE_FILES = frozenset(
+    {
+        "CHANGELOG.md",
+        "RELEASE_CHANGELOG.md",
+        ".release-please-manifest.json",
+        ".mcpb/server.json",
+        "cubrid_mcp_server/__init__.py",
+    }
+)
 
 API = "https://api.github.com"
 PAGE = 100
 MAX_LISTED_FILES = 3000  # GitHub lists at most 3000 files of a PR.
 MAX_LISTED_COMMITS = 250  # ... and 250 commits.
 COMPARE_FILE_LIMIT = 300  # A compare lists at most 300 files.
-MIN_COMMENT_CHARS = 20
 
 COPILOT_VERDICT = re.compile(r"^###\s+\S+\s+(?P<verdict>[A-Za-z][^\n]*?)\s*$", re.M)
 COPILOT_FINDINGS = re.compile(r"\b(?P<count>\d+)\s+open\s+findings?\b", re.I)
@@ -329,14 +356,20 @@ def diff_fingerprint(compare: Any) -> list[list[str]] | None:
         patch = item.get("patch")
         if not isinstance(item.get("filename"), str):
             return None
-        if patch is None and item.get("changes", 1):
-            return None  # Binary or too large to show: cannot be compared.
+        if patch is None:
+            # Binary, too large to show, or a pure rename: compare the blob.
+            blob = item.get("sha")
+            if not isinstance(blob, str) or not blob:
+                return None
+            content = f"blob {blob}"
+        else:
+            content = patch
         result.append(
             [
                 item["filename"],
                 str(item.get("status")),
                 item.get("previous_filename") or "",
-                patch or "",
+                content,
             ]
         )
     return sorted(result)
@@ -376,7 +409,9 @@ def _exemption(data: dict[str, Any]) -> str:
     same_repo = head_repo.get("full_name") == data["repo"]
     branch = _require(pr, "head", "ref")
     if author == RELEASE_AUTHOR and branch.startswith(RELEASE_BRANCH_PREFIX) and same_repo:
-        return "release-please candidate: review and CI follow RELEASING.md"
+        paths = _paths(data["files"])
+        if paths <= RELEASE_FILES and not protected_paths(paths):
+            return "release-please candidate: review and CI follow RELEASING.md"
     if author == DEPENDABOT and branch.startswith(DEPENDABOT_BRANCH_PREFIX) and same_repo:
         if all(_dependabot_made(c) or _neutral_merge(c, data) for c in data["commits"]):
             return "Dependabot update: dependency-only, merged by its required checks"
@@ -425,7 +460,7 @@ def evaluate(data: dict[str, Any], event_head: str = "") -> Verdict:
     protected = protected_paths(pr_paths)
     if protected:
         verdict.notes.append(
-            "Protected (no-bypass) paths changed; a trusted person's APPROVED review "
+            "Protected (no-bypass) paths changed; a maintainer's APPROVED review "
             "of the head is required: " + ", ".join(protected)
         )
 
@@ -452,7 +487,10 @@ def evaluate(data: dict[str, Any], event_head: str = "") -> Verdict:
     reviews = []
     for item in data["reviews"]:
         state = _require(item, "state")
-        if not _login(_require(item, "user")):
+        if _require(item, "user") is None:
+            verdict.notes.append(f"Ignored a {state} review by a deleted account.")
+            continue
+        if not _login(item["user"]):
             raise GateError("a review has no reviewer login")
         if state == "PENDING":
             continue
@@ -489,6 +527,11 @@ def evaluate(data: dict[str, Any], event_head: str = "") -> Verdict:
             else:
                 ai_current.append((rounds, f"{label} (AI round {rounds}): {why}"))
             continue
+        maintainer = user.get("type") == "User" and login in MAINTAINERS
+        # A maintainer's decision is recorded before the self-review filters, so a
+        # maintainer who also committed can still block with CHANGES_REQUESTED.
+        if maintainer and state in {"APPROVED", "CHANGES_REQUESTED", "DISMISSED"}:
+            decisions[login] = state
         if login == author:
             self_reviews += 1
             continue
@@ -498,25 +541,24 @@ def evaluate(data: dict[str, Any], event_head: str = "") -> Verdict:
         if user.get("type") != "User":
             verdict.warnings.append(f"Rejected {label}: a bot other than Copilot code review.")
             continue
-        association = review.get("author_association", "")
-        if association not in TRUSTED_ASSOCIATIONS:
+        if not maintainer:
             verdict.warnings.append(
-                f"Rejected {label}: author association {association or 'unknown'} is not "
-                "OWNER, MEMBER or COLLABORATOR."
+                f"Rejected {label}: {login} is not a maintainer (a code owner); only "
+                "Copilot or a maintainer can satisfy the review route."
             )
             continue
-        if state in {"APPROVED", "CHANGES_REQUESTED", "DISMISSED"}:
-            decisions[login] = state
         if state == "APPROVED" and current:
             approved.append(login)
             verdict.evidence.append(f"{label}: formal approval.")
         elif state == "COMMENTED" and current:
-            text = re.sub(r"\s+", "", body)
-            if comments or len(text) >= MIN_COMMENT_CHARS:
+            if comments:
                 commented.append(login)
                 verdict.evidence.append(f"{label}: assessment (COMMENTED is not approval).")
             else:
-                verdict.warnings.append(f"Rejected {label}: no text and no inline comment.")
+                verdict.warnings.append(
+                    f"Rejected {label}: a COMMENTED review counts only when it opens an "
+                    "inline thread; approve instead to accept the change."
+                )
         elif state in {"APPROVED", "COMMENTED"}:
             verdict.notes.append(f"Stale {label}: the code changed after it.")
 
@@ -538,8 +580,8 @@ def evaluate(data: dict[str, Any], event_head: str = "") -> Verdict:
     for text in beyond:
         verdict.warnings.append(
             f"Not counted alone: {text}; this PR has {rounds} Copilot rounds, past the "
-            f"{AI_REVIEW_BUDGET}-round AI review budget, so the head needs a trusted "
-            "person's review."
+            f"{AI_REVIEW_BUDGET}-round AI review budget, so the head needs a "
+            "maintainer's review."
         )
 
     replies: dict[int, list[str]] = {}
@@ -556,32 +598,40 @@ def evaluate(data: dict[str, Any], event_head: str = "") -> Verdict:
             raise GateError("a review thread's first comment has no comment ID")
         if not isinstance(body, str):
             raise GateError("a review thread's first comment has no body")
+        opener = _login(first.get("author"))
+        place = f"{first.get('path')} ({first.get('url')})"
+        if opener not in COPILOT_THREAD_AUTHORS and opener not in MAINTAINERS:
+            if not thread.get("isResolved"):
+                verdict.notes.append(
+                    f"Unresolved thread at {place} by {opener or 'a deleted account'}: not "
+                    "opened by Copilot or a maintainer, so it does not block."
+                )
+            continue
         severity = severities.get(root, "")
         texts = [body, *replies.get(root, [])]
         serious = severity in BLOCKING_SEVERITIES or any(SECURITY_WORDS.search(t) for t in texts)
-        place = f"{first.get('path')} ({first.get('url')})"
         if not thread.get("isResolved"):
             if serious:
                 verdict.errors.append(
                     f"Unresolved {severity + '-severity ' if severity else ''}"
                     + ("" if severity in BLOCKING_SEVERITIES else "security-relevant ")
                     + f"finding by "
-                    f"{_login(first.get('author'))} at {place}"
+                    f"{opener} at {place}"
                     + (" (outdated, still unresolved)" if thread.get("isOutdated") else "")
                 )
             else:
                 verdict.notes.append(f"Unresolved thread at {place}.")
         elif serious and _login(thread.get("resolvedBy")) == author:
-            verdict.warnings.append(
+            verdict.errors.append(
                 f"The {severity or 'security-relevant'} finding at {place} was resolved by "
-                "the PR author; a maintainer should confirm it."
+                "the PR author; a maintainer must unresolve and resolve it after checking."
             )
 
     if protected:
         satisfied = bool(approvers)
         if not satisfied:
             verdict.errors.append(
-                "Protected paths changed without a trusted person's APPROVED review of the "
+                "Protected paths changed without a maintainer's APPROVED review of the "
                 "head. COMMENTED and Copilot reviews do not authorize them."
             )
     else:
@@ -589,8 +639,8 @@ def evaluate(data: dict[str, Any], event_head: str = "") -> Verdict:
         if not satisfied:
             verdict.errors.append(
                 "No qualifying review of the head: needs a substantive submitted Copilot review "
-                f"(within {AI_REVIEW_BUDGET} rounds) or a trusted person's APPROVED or "
-                "substantive COMMENTED review."
+                f"(within {AI_REVIEW_BUDGET} rounds) or a maintainer's APPROVED review, or "
+                "COMMENTED review that opens an inline thread."
             )
     verdict.passed = satisfied and not verdict.errors
     return verdict

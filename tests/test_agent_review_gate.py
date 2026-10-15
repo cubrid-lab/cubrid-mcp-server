@@ -9,7 +9,10 @@ from __future__ import annotations
 
 import copy
 import importlib.util
+import io
+import json
 import sys
+import urllib.error
 from pathlib import Path
 from typing import Any
 
@@ -30,7 +33,7 @@ REPO = "cubrid-lab/cubrid-mcp-server"
 HEAD = "h" * 40
 OLD = "o" * 40
 AUTHOR = "agent-operator"
-MAINTAINER = "maintainer"
+MAINTAINER = "paikend"  # a code owner, in gate.MAINTAINERS
 COPILOT = "copilot-pull-request-reviewer[bot]"
 
 COPILOT_OVERVIEW = """<!-- ccr-overview-v2 -->
@@ -132,7 +135,7 @@ OTHER = change("@@ -1,2 +1,3 @@\n x\n+z")
 
 def data(
     reviews: list[dict[str, Any]] | None = None,
-    files: tuple[str, ...] = ("cubrid_mcp_server/config.py",),
+    files: tuple[str, ...] = ("README.md",),
     author: str = AUTHOR,
     branch: str = "feature/x",
     head_repo: str | None = REPO,
@@ -191,11 +194,24 @@ def test_trusted_approval_passes() -> None:
     assert evaluate(data([review(MAINTAINER, "APPROVED")])).passed
 
 
-def test_trusted_substantive_commented_review_passes_ordinary_paths() -> None:
+def test_maintainer_commented_review_counts_only_with_an_inline_thread() -> None:
     body = "Checked the timeout handling and the new test; looks right."
-    verdict = evaluate(data([review(MAINTAINER, "COMMENTED", body=body)]))
+    records = data([review(MAINTAINER, "COMMENTED", body=body, review_id=4)])
+    verdict = evaluate(records)
+    assert not verdict.passed
+    assert any("opens an inline thread" in w for w in verdict.warnings)
+    records["comments"] = [{"pull_request_review_id": 4, "in_reply_to_id": None}]
+    verdict = evaluate(records)
     assert verdict.passed
     assert any("COMMENTED is not approval" in e for e in verdict.evidence)
+
+
+def test_maintainers_match_codeowners() -> None:
+    owners = set()
+    for line in (ROOT / ".github" / "CODEOWNERS").read_text().splitlines():
+        if line.strip() and not line.lstrip().startswith("#"):
+            owners.update(o.lstrip("@") for o in line.split()[1:])
+    assert owners == set(gate.MAINTAINERS)
 
 
 # ------------------------------------------------------------------ negative
@@ -255,15 +271,32 @@ def test_reviewer_who_committed_to_the_pr_is_rejected() -> None:
     assert any("authored commits" in w for w in verdict.warnings)
 
 
-def test_untrusted_and_other_bot_reviews_are_rejected() -> None:
+def test_non_maintainer_and_other_bot_reviews_are_rejected() -> None:
     reviews = [
-        review("stranger", "APPROVED", association="NONE", review_id=1),
+        review("member-not-owner", "APPROVED", association="MEMBER", review_id=1),
         review("some-bot[bot]", "APPROVED", review_id=2),
     ]
     verdict = evaluate(data(reviews))
     assert not verdict.passed
-    assert any("association NONE" in w for w in verdict.warnings)
+    assert any("is not a maintainer" in w for w in verdict.warnings)
     assert any("bot other than Copilot" in w for w in verdict.warnings)
+
+
+def test_bot_named_like_a_maintainer_is_not_one() -> None:
+    impostor = review(MAINTAINER, "APPROVED")
+    impostor["user"]["type"] = "Bot"
+    assert not evaluate(data([impostor])).passed
+
+
+def test_deleted_reviewer_is_ignored_not_fatal() -> None:
+    ghost = review("x", "APPROVED", review_id=2)
+    ghost["user"] = None
+    verdict = evaluate(data([copilot(review_id=1), ghost]))
+    assert verdict.passed
+    assert any("deleted account" in n for n in verdict.notes)
+    missing = review("x", "APPROVED", review_id=3)
+    del missing["user"]
+    assert run_main(data([copilot(review_id=1), missing])) == 1
 
 
 def test_thread_reply_is_not_an_assessment() -> None:
@@ -308,6 +341,12 @@ def test_changes_requested_blocks_until_superseded() -> None:
         ".github/workflows/dependabot-auto-merge.yml",
         ".github/workflows/agent-review.yml",
         "scripts/agent_review_gate.py",
+        "tests/test_agent_review_gate.py",
+        "cubrid_mcp_server/config.py",
+        "cubrid_mcp_server/__main__.py",
+        "cubrid_mcp_server/context.py",
+        ".github/workflows/ci.yml",
+        ".github/workflows/brand-new.yml",
     ],
 )
 def test_protected_paths_need_trusted_approval(path: str) -> None:
@@ -381,9 +420,21 @@ def test_force_pushed_review_commit_is_stale() -> None:
 def test_fingerprint_rejects_incomplete_compares() -> None:
     assert gate.diff_fingerprint(None) is None
     assert gate.diff_fingerprint({"files": [{"filename": "a.bin", "changes": 4}]}) is None
-    assert gate.diff_fingerprint({"files": [{"filename": "x"}] * 300}) is None
-    renamed = {"files": [{"filename": "b", "status": "renamed", "changes": 0}]}
-    assert gate.diff_fingerprint(renamed) == [["b", "renamed", "", ""]]
+    files = [{"filename": f"f{i}", "patch": "p", "status": "modified"} for i in range(299)]
+    assert gate.diff_fingerprint({"files": files}) is not None
+    assert gate.diff_fingerprint({"files": [*files, files[0]]}) is None  # 300: maybe truncated
+    renamed = {"files": [{"filename": "b", "status": "renamed", "changes": 0, "sha": "s1"}]}
+    assert gate.diff_fingerprint(renamed) == [["b", "renamed", "", "blob s1"]]
+    assert gate.diff_fingerprint({"files": [{"filename": "b", "changes": 0}]}) is None
+
+
+def test_binary_content_change_changes_the_fingerprint() -> None:
+    def blob(sha: str) -> Any:
+        item = {"filename": "docs/logo.png", "status": "modified", "changes": 0, "sha": sha}
+        return gate.diff_fingerprint({"files": [item]})
+
+    assert blob("aaa") != blob("bbb")
+    assert blob("aaa") == blob("aaa")
 
 
 def test_author_of_a_code_changing_merge_cannot_approve() -> None:
@@ -486,11 +537,38 @@ def test_plural_privileges_is_a_security_word() -> None:
     assert not evaluate(records).passed
 
 
-def test_security_thread_resolved_by_the_author_is_flagged() -> None:
+def test_security_thread_resolved_by_the_author_blocks() -> None:
     records = data([copilot()], threads=[thread(2, "Possible SQL injection.", True, AUTHOR)])
     verdict = evaluate(records)
+    assert not verdict.passed
+    assert any("resolved by the PR author" in e for e in verdict.errors)
+    records["threads"] = [thread(2, "Possible SQL injection.", True, MAINTAINER)]
+    assert evaluate(records).passed
+
+
+def test_high_severity_thread_resolved_by_the_author_blocks() -> None:
+    records = data(
+        [copilot(COPILOT_FINDING)], threads=[thread(901, "Echoes a value.", True, AUTHOR)]
+    )
+    assert not evaluate(records).passed
+
+
+def test_outdated_unresolved_security_thread_still_blocks() -> None:
+    item = thread(2, "Possible SQL injection.")
+    item["isOutdated"] = True
+    verdict = evaluate(data([copilot()], threads=[item]))
+    assert not verdict.passed
+    assert any("outdated, still unresolved" in e for e in verdict.errors)
+
+
+def test_thread_opened_by_an_outsider_does_not_block() -> None:
+    item = thread(2, "This is a security bypass.")
+    item["comments"]["nodes"][0]["author"] = {"login": "drive-by"}
+    verdict = evaluate(data([copilot()], threads=[item]))
     assert verdict.passed
-    assert any("resolved by the PR author" in w for w in verdict.warnings)
+    assert any("does not block" in n for n in verdict.notes)
+    item["comments"]["nodes"][0]["author"] = {"login": MAINTAINER}
+    assert not evaluate(data([copilot()], threads=[item])).passed
 
 
 # ------------------------------------------------- exemptions and fork PRs
@@ -505,6 +583,42 @@ def test_release_please_candidate_is_exempt() -> None:
     )
     verdict = evaluate(records)
     assert verdict.passed and "release-please" in verdict.exempt
+
+
+@pytest.mark.parametrize(
+    "extra", ["cubrid_mcp_server/safety.py", "README.md", ".github/workflows/ci.yml"]
+)
+def test_release_please_branch_with_other_files_is_evaluated(extra: str) -> None:
+    records = data(
+        author="github-actions[bot]",
+        branch="release-please--branches--main",
+        commits=[commit(HEAD, "github-actions[bot]")],
+        files=("CHANGELOG.md", extra),
+    )
+    verdict = evaluate(records)
+    assert not verdict.exempt and not verdict.passed
+
+
+def test_release_file_that_is_also_protected_is_not_exempt(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # A mirror may list a release file as protected; protection wins.
+    monkeypatch.setattr(gate, "RELEASE_FILES", gate.RELEASE_FILES | {"cubrid_mcp_server/safety.py"})
+    records = data(
+        author="github-actions[bot]",
+        branch="release-please--branches--main",
+        commits=[commit(HEAD, "github-actions[bot]")],
+        files=("CHANGELOG.md", "cubrid_mcp_server/safety.py"),
+    )
+    assert not evaluate(records).exempt
+
+
+def test_release_please_branch_by_another_author_is_evaluated() -> None:
+    records = data(
+        author=MAINTAINER, branch="release-please--branches--main", files=("CHANGELOG.md",)
+    )
+    verdict = evaluate(records)
+    assert not verdict.exempt and not verdict.passed
 
 
 def test_dependabot_update_with_branch_sync_is_exempt() -> None:
@@ -555,9 +669,15 @@ def test_dependabot_pr_with_a_human_commit_is_evaluated() -> None:
 )
 def test_fork_never_gets_an_exemption(author: str, branch: str) -> None:
     records = data(
-        author=author, branch=branch, head_repo="someone/fork", commits=[commit(HEAD, author)]
+        author=author,
+        branch=branch,
+        head_repo="someone/fork",
+        commits=[commit(HEAD, author)],
+        files=("CHANGELOG.md",),  # exempt if it came from this repository
     )
     assert not evaluate(records).passed
+    records["pr"]["head"]["repo"] = {"full_name": REPO}
+    assert evaluate(records).exempt
 
 
 def test_fork_pr_is_evaluated_like_any_other() -> None:
@@ -565,6 +685,132 @@ def test_fork_pr_is_evaluated_like_any_other() -> None:
     assert not evaluate(records).passed
     records["reviews"] = [review(MAINTAINER, "APPROVED")]
     assert evaluate(records).passed
+
+
+# ------------------------------------------------------- budget and decisions
+
+
+def test_exactly_two_copilot_rounds_pass() -> None:
+    reviews = [
+        copilot(sha=OLD, review_id=1, at="2026-10-15T01:00:00Z"),
+        copilot(sha=HEAD, review_id=2, at="2026-10-15T02:00:00Z"),
+    ]
+    verdict = evaluate(data(reviews))
+    assert verdict.passed
+    assert any("AI round 2" in e for e in verdict.evidence)
+
+
+def test_stale_approval_does_not_count() -> None:
+    records = data([review(MAINTAINER, "APPROVED", sha=OLD)], diffs={OLD: SAME, HEAD: OTHER})
+    verdict = evaluate(records)
+    assert not verdict.passed
+    assert any("Stale APPROVED" in n for n in verdict.notes)
+
+
+def test_approval_superseded_by_a_dismissal_does_not_count() -> None:
+    reviews = [
+        review(MAINTAINER, "APPROVED", review_id=1, at="2026-10-15T01:00:00Z"),
+        review(MAINTAINER, "DISMISSED", review_id=2, at="2026-10-15T02:00:00Z"),
+    ]
+    assert not evaluate(data(reviews)).passed
+
+
+def test_committer_maintainer_can_still_request_changes() -> None:
+    records = data(
+        [copilot(review_id=1), review(MAINTAINER, "CHANGES_REQUESTED", body="no", review_id=2)],
+        commits=[commit(OLD), commit(HEAD, MAINTAINER)],
+    )
+    verdict = evaluate(records)
+    assert not verdict.passed
+    assert any("requested changes" in e for e in verdict.errors)
+
+
+@pytest.mark.parametrize("listed", [1, 250])
+def test_truncated_commit_listing_fails_closed(listed: int) -> None:
+    records = data([copilot()], commits=[commit(f"{i:040d}") for i in range(listed)])
+    records["pr"]["commits"] = 2 if listed == 1 else 250
+    assert run_main(records) == 1
+
+
+# ------------------------------------------------------- Client (urllib stubbed)
+
+
+class FakeResponse(io.BytesIO):
+    def __init__(self, payload: Any, link: str = "") -> None:
+        super().__init__(json.dumps(payload).encode())
+        self.headers = {"Link": link}
+
+    def __enter__(self) -> FakeResponse:
+        return self
+
+    def __exit__(self, *exc: object) -> None:
+        self.close()
+
+
+def stub_urlopen(monkeypatch: pytest.MonkeyPatch, responses: list[Any]) -> list[str]:
+    seen: list[str] = []
+
+    def urlopen(request: Any, timeout: float) -> Any:
+        seen.append(request.full_url)
+        item = responses.pop(0)
+        if isinstance(item, Exception):
+            raise item
+        return item
+
+    monkeypatch.setattr(gate.urllib.request, "urlopen", urlopen)
+    return seen
+
+
+def http_error(code: int) -> urllib.error.HTTPError:
+    return urllib.error.HTTPError("u", code, "x", {}, None)  # type: ignore[arg-type]
+
+
+def test_client_follows_pagination(monkeypatch: pytest.MonkeyPatch) -> None:
+    seen = stub_urlopen(
+        monkeypatch,
+        [
+            FakeResponse([1, 2], '<https://api.github.com/next?page=2>; rel="next"'),
+            FakeResponse([3]),
+        ],
+    )
+    assert gate.Client("t").paginate("repos/o/r/pulls/1/reviews") == [1, 2, 3]
+    assert seen[1] == "https://api.github.com/next?page=2"
+
+
+@pytest.mark.parametrize(
+    "payload", [{"errors": [{"message": "x"}], "data": None}, {"nothing": 1}, [1]]
+)
+def test_client_graphql_errors_fail_closed(monkeypatch: pytest.MonkeyPatch, payload: Any) -> None:
+    stub_urlopen(monkeypatch, [FakeResponse(payload)])
+    with pytest.raises(gate.GateError):
+        gate.Client("t").graphql("q", {})
+
+
+@pytest.mark.parametrize("code", [404, 422])
+def test_get_optional_returns_none_only_for_missing(
+    monkeypatch: pytest.MonkeyPatch, code: int
+) -> None:
+    stub_urlopen(monkeypatch, [http_error(code)])
+    assert gate.Client("t").get_optional("repos/o/r/compare/a...b") is None
+
+
+@pytest.mark.parametrize("code", [401, 403, 500, 502])
+def test_get_optional_raises_other_errors(monkeypatch: pytest.MonkeyPatch, code: int) -> None:
+    stub_urlopen(monkeypatch, [http_error(code)])
+    with pytest.raises(gate.GateError):
+        gate.Client("t").get_optional("repos/o/r/compare/a...b")
+
+
+def test_client_network_error_fails_closed(monkeypatch: pytest.MonkeyPatch) -> None:
+    stub_urlopen(monkeypatch, [ConnectionResetError("reset")])
+    with pytest.raises(gate.GateError):
+        gate.Client("t").get("repos/o/r/pulls/1")
+
+
+def test_client_non_list_page_fails_closed(monkeypatch: pytest.MonkeyPatch) -> None:
+    stub_urlopen(monkeypatch, [FakeResponse({"message": "x"})])
+    with pytest.raises(gate.GateError):
+        gate.Client("t").paginate("repos/o/r/pulls/1/files")
 
 
 # ------------------------------------------------------- API errors (fail closed)
@@ -605,6 +851,25 @@ class FakeClient:
                 }
             }
         }
+
+
+class PagedThreadsClient(FakeClient):
+    """Serves the review threads in two GraphQL pages."""
+
+    def graphql(self, query: str, variables: dict[str, Any]) -> Any:
+        first = variables["after"] is None
+        nodes = self.records["threads"][:1] if first else self.records["threads"][1:]
+        page = {"hasNextPage": first, "endCursor": "c1" if first else None}
+        return {
+            "repository": {"pullRequest": {"reviewThreads": {"pageInfo": page, "nodes": nodes}}}
+        }
+
+
+def test_fetch_reads_every_page_of_review_threads() -> None:
+    records = data([copilot()], threads=[thread(1, "Nit."), thread(2, "Security bypass.")])
+    fetched = gate.fetch(PagedThreadsClient(records), REPO, 7)
+    assert len(fetched["threads"]) == 2
+    assert not gate.evaluate(fetched, HEAD).passed
 
 
 def run_main(records: dict[str, Any], fail: str = "", extra: tuple[str, ...] = ()) -> int:
@@ -681,6 +946,7 @@ def test_workflow_triggers_and_permissions_are_read_only() -> None:
     assert all("uses" not in step for step in steps), "the job checks out nothing"
     run = steps[0]["run"]
     assert "${{" not in run
-    assert 'ref=$BASE_REF"' in run
+    assert '-f ref="$BASE_REF"' in run
+    assert "?ref=" not in run
     assert "python3 -I" in run
     assert '[ "$HEAD_REPO" = "$GITHUB_REPOSITORY" ]' in run
