@@ -271,6 +271,26 @@ def test_reviewer_who_committed_to_the_pr_is_rejected() -> None:
     assert any("authored commits" in w for w in verdict.warnings)
 
 
+@pytest.mark.parametrize("field", ["author", "committer"])
+@pytest.mark.parametrize("value", ["missing", {}, {"login": ""}, "x"])
+def test_commit_without_identity_fails_closed(field: str, value: Any) -> None:
+    other = commit(HEAD)  # author AUTHOR, committer web-flow: the approval would count
+    if value == "missing":
+        del other[field]
+    else:
+        other[field] = value
+    records = data([review(MAINTAINER, "APPROVED")], commits=[commit(OLD), other])
+    assert run_main(records) == 1
+
+
+@pytest.mark.parametrize("field", ["author", "committer"])
+def test_commit_identity_without_an_account_is_allowed(field: str) -> None:
+    unlinked = commit(HEAD)
+    unlinked[field] = None  # the commit email maps to no GitHub account
+    records = data([review(MAINTAINER, "APPROVED")], commits=[commit(OLD), unlinked])
+    assert evaluate(records).passed
+
+
 def test_non_maintainer_and_other_bot_reviews_are_rejected() -> None:
     reviews = [
         review("member-not-owner", "APPROVED", association="MEMBER", review_id=1),
@@ -523,6 +543,48 @@ def test_unresolved_security_thread_blocks_and_ordinary_one_is_noted() -> None:
 def test_incomplete_thread_fails_closed(broken: dict[str, Any]) -> None:
     item = thread(5, "Nit: naming.")
     item["comments"]["nodes"][0].update(broken)
+    assert run_main(data([copilot()], threads=[item])) == 1
+
+
+@pytest.mark.parametrize("author", ["missing", {}, {"login": ""}, {"login": None}, "x"])
+def test_thread_author_without_identity_fails_closed(author: Any) -> None:
+    item = thread(2, "Possible SQL injection.")
+    node = item["comments"]["nodes"][0]
+    if author == "missing":
+        del node["author"]
+    else:
+        node["author"] = author
+    assert run_main(data([review(MAINTAINER, "APPROVED")], threads=[item])) == 1
+
+
+def test_thread_by_a_deleted_account_does_not_block() -> None:
+    item = thread(2, "Possible SQL injection.")
+    item["comments"]["nodes"][0]["author"] = None
+    verdict = evaluate(data([copilot()], threads=[item]))
+    assert verdict.passed
+    assert any("a deleted account" in n for n in verdict.notes)
+
+
+@pytest.mark.parametrize("resolver", ["missing", {}, {"login": ""}, "x"])
+def test_resolver_without_identity_fails_closed(resolver: Any) -> None:
+    item = thread(2, "Possible SQL injection.", True)
+    if resolver == "missing":
+        del item["resolvedBy"]
+    else:
+        item["resolvedBy"] = resolver
+    assert run_main(data([review(MAINTAINER, "APPROVED")], threads=[item])) == 1
+
+
+def test_thread_resolved_by_a_deleted_account_is_not_the_author() -> None:
+    item = thread(2, "Possible SQL injection.", True)
+    item["resolvedBy"] = None
+    assert evaluate(data([copilot()], threads=[item])).passed
+
+
+@pytest.mark.parametrize("state", [None, "yes"])
+def test_thread_without_resolution_state_fails_closed(state: Any) -> None:
+    item = thread(2, "Nit.")
+    item["isResolved"] = state
     assert run_main(data([copilot()], threads=[item])) == 1
 
 
