@@ -16,8 +16,8 @@ review requests and CI results are never evidence. A review counts only when:
   PR (self-review), other than a merge commit that only brings in the base
   branch (an "Update branch" sync);
 * it is current: its ``commit_id`` is the PR head, or the PR's change against
-  the base branch is identical at both commits (file names, statuses and patch
-  lines; hunk line numbers may move). A base sync or a rebase that changes
+  the base branch is identical at both commits (file names, statuses and exact
+  patches, hunk line numbers included). A base sync or a rebase that changes
   nothing of the PR carries the review forward without spending an AI round;
 * it comes from GitHub Copilot code review or from a trusted person (author
   association ``OWNER``, ``MEMBER`` or ``COLLABORATOR``). Other bots and
@@ -45,8 +45,8 @@ or security finding (resolution is required even when the thread is outdated).
 Exempt PRs pass with a notice: release-please candidates (author
 ``github-actions[bot]``, branch ``release-please--``, same repository), governed
 by RELEASING.md, and Dependabot PRs (author ``dependabot[bot]``, branch
-``dependabot/``, same repository) whose commits are Dependabot's or merge
-commits. Every other PR, human or agent, is evaluated the same way.
+``dependabot/``, same repository) whose commits Dependabot created through
+GitHub (committer ``web-flow``, verified signature) or are base syncs. Every other PR, human or agent, is evaluated the same way.
 
 ``--bootstrap`` is used only while the base branch does not contain this file
 yet (the PR that adds it): the verdict is printed but the step always exits 0,
@@ -316,8 +316,8 @@ def copilot_assessment(body: str, inline_comments: int) -> tuple[str, str]:
 
 def diff_fingerprint(compare: Any) -> list[list[str]] | None:
     """The PR's change as of one commit, from a ``base...commit`` compare: per
-    file its name, status, previous name and patch without hunk line numbers (a
-    base change elsewhere in the file only moves the hunks). None when the
+    file its name, status, previous name and exact patch, hunk line numbers
+    included, so an edit moved to another place never matches. None when the
     compare is missing or cannot show the whole change."""
     if not isinstance(compare, dict):
         return None
@@ -331,10 +331,13 @@ def diff_fingerprint(compare: Any) -> list[list[str]] | None:
             return None
         if patch is None and item.get("changes", 1):
             return None  # Binary or too large to show: cannot be compared.
-        lines = (patch or "").splitlines()
-        hunks = "\n".join(re.sub(r"^@@ [^@]* @@", "@@", line) for line in lines)
         result.append(
-            [item["filename"], str(item.get("status")), item.get("previous_filename") or "", hunks]
+            [
+                item["filename"],
+                str(item.get("status")),
+                item.get("previous_filename") or "",
+                patch or "",
+            ]
         )
     return sorted(result)
 
@@ -354,6 +357,18 @@ def _neutral_merge(commit: dict[str, Any], data: dict[str, Any]) -> bool:
     return _same_change(data, commit.get("sha", ""), parents[0].get("sha", ""))
 
 
+def _dependabot_made(commit: dict[str, Any]) -> bool:
+    """A commit Dependabot created through GitHub: authored by Dependabot,
+    committed by GitHub (``web-flow``) and carrying a verified signature. An
+    amended or re-signed commit keeps the author but not this provenance."""
+    verification = (commit.get("commit") or {}).get("verification") or {}
+    return (
+        _login(commit.get("author")) == DEPENDABOT
+        and _login(commit.get("committer")) == "web-flow"
+        and verification.get("verified") is True
+    )
+
+
 def _exemption(data: dict[str, Any]) -> str:
     pr = data["pr"]
     author = _login(pr.get("user"))
@@ -363,10 +378,7 @@ def _exemption(data: dict[str, Any]) -> str:
     if author == RELEASE_AUTHOR and branch.startswith(RELEASE_BRANCH_PREFIX) and same_repo:
         return "release-please candidate: review and CI follow RELEASING.md"
     if author == DEPENDABOT and branch.startswith(DEPENDABOT_BRANCH_PREFIX) and same_repo:
-        if all(
-            _login(c.get("author")) == DEPENDABOT or _neutral_merge(c, data)
-            for c in data["commits"]
-        ):
+        if all(_dependabot_made(c) or _neutral_merge(c, data) for c in data["commits"]):
             return "Dependabot update: dependency-only, merged by its required checks"
     return ""
 
@@ -538,9 +550,14 @@ def evaluate(data: dict[str, Any], event_head: str = "") -> Verdict:
         first = ((thread.get("comments") or {}).get("nodes") or [None])[0]
         if not isinstance(first, dict):
             raise GateError("a review thread has no first comment")
-        root = first.get("databaseId") or -1
+        root = first.get("databaseId")
+        body = first.get("body")
+        if not isinstance(root, int) or isinstance(root, bool) or root <= 0:
+            raise GateError("a review thread's first comment has no comment ID")
+        if not isinstance(body, str):
+            raise GateError("a review thread's first comment has no body")
         severity = severities.get(root, "")
-        texts = [first.get("body") or "", *replies.get(root, [])]
+        texts = [body, *replies.get(root, [])]
         serious = severity in BLOCKING_SEVERITIES or any(SECURITY_WORDS.search(t) for t in texts)
         place = f"{first.get('path')} ({first.get('url')})"
         if not thread.get("isResolved"):

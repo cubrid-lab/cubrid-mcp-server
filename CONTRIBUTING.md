@@ -283,10 +283,11 @@ other accounts are listed in the summary but never count.
   AI review round, so a quota failure may be re-requested.
 - **Stale reviews.** A review of an older commit counts only when the PR's change
   against `main` is identical at that commit and at the head: the same files,
-  statuses and patch lines (hunk line numbers may move). An "Update branch" sync,
-  needed because `main` requires branches to be up to date, or a rebase that
-  changes nothing of the PR carries the review forward. When `main` changed lines
-  next to the PR's own change, the patch context differs and the review is stale,
+  statuses and exact patches, hunk line numbers included, so an edit moved to
+  another place never inherits a review. An "Update branch" sync, needed because
+  `main` requires branches to be up to date, or a rebase that changes nothing of
+  the PR carries the review forward. When `main` changed lines above or next to
+  the PR's own change, the patch differs and the review is stale,
   and so is the merge commit's author as a reviewer: fail closed, and ask for a
   new review of the final head. Any other new commit needs a new review too.
 - **AI review budget.** Each published Copilot review is one round, stale or not
@@ -327,9 +328,11 @@ Exemptions, so release and dependency automation behave as before:
   reopening the candidate, which RELEASING.md already requires to start CI, also
   starts this check.
 - **Dependabot updates** (author `dependabot[bot]`, a `dependabot/` branch in this
-  repository) pass when every commit is Dependabot's or a merge commit, so
-  auto-merge is unchanged. A pushed non-merge commit by anyone else makes the
-  pull request an ordinary one.
+  repository) pass when every commit was created by Dependabot through GitHub
+  (author `dependabot[bot]`, committer `web-flow`, verified signature) or is a
+  merge that leaves the PR's change identical, so auto-merge is unchanged. Any
+  other commit, an amended Dependabot commit included, makes the pull request an
+  ordinary one.
 
 Human contributors are evaluated like everyone else: their pull requests pass
 with the maintainer review they receive anyway. A maintainer's own pull request

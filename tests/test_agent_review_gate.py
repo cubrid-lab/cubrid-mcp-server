@@ -113,6 +113,7 @@ def commit(sha: str, author: str = AUTHOR, parents: int = 1, first: str = "") ->
         "author": user(author),
         "committer": user("web-flow"),
         "parents": [{"sha": s} for s in shas[:parents]],
+        "commit": {"verification": {"verified": True}},
     }
 
 
@@ -125,7 +126,7 @@ def change(
 
 
 SAME = change()
-MOVED = change("@@ -40,2 +41,3 @@\n x\n+y")  # same lines, shifted by a base change
+MOVED = change("@@ -40,2 +41,3 @@\n x\n+y")  # the same lines at another place
 OTHER = change("@@ -1,2 +1,3 @@\n x\n+z")
 
 
@@ -351,17 +352,20 @@ def test_review_of_an_older_commit_is_stale() -> None:
     assert any("Stale" in n for n in verdict.notes)
 
 
-@pytest.mark.parametrize("reviewed", [SAME, MOVED])
-def test_unchanged_pr_change_carries_a_review_forward(reviewed: Any) -> None:
+def test_unchanged_pr_change_carries_a_review_forward() -> None:
     # An "Update branch" merge (with the base commits it imports) or a rebase that
-    # leaves the PR's own change as it was, hunks moved or not.
+    # leaves the PR's own change exactly as it was.
     merge = commit(HEAD, MAINTAINER, parents=2, first=OLD)
-    records = data(
-        [copilot(sha=OLD)], commits=[commit(OLD), merge], diffs={OLD: reviewed, HEAD: SAME}
-    )
+    records = data([copilot(sha=OLD)], commits=[commit(OLD), merge], diffs={OLD: SAME, HEAD: SAME})
     verdict = evaluate(records)
     assert verdict.passed
     assert any("carried forward" in e for e in verdict.evidence)
+
+
+def test_edit_relocated_to_identical_context_is_stale() -> None:
+    # Reverting the reviewed edit and applying it to another block with the same
+    # context leaves the same patch lines at other line numbers.
+    assert not evaluate(data([copilot(sha=OLD)], diffs={OLD: SAME, HEAD: MOVED})).passed
 
 
 @pytest.mark.parametrize("fingerprint", [None, []])
@@ -392,7 +396,7 @@ def test_author_of_a_code_changing_merge_cannot_approve() -> None:
     verdict = evaluate(records)
     assert not verdict.passed
     assert any("authored commits" in w for w in verdict.warnings)
-    records["diffs"] = {OLD: SAME, HEAD: MOVED}
+    records["diffs"] = {OLD: SAME, HEAD: SAME}
     assert evaluate(records).passed
 
 
@@ -462,6 +466,15 @@ def test_unresolved_security_thread_blocks_and_ordinary_one_is_noted() -> None:
     assert any("Unresolved thread" in n for n in verdict.notes)
 
 
+@pytest.mark.parametrize(
+    "broken", [{"databaseId": None}, {"databaseId": 0}, {"body": None}, {"databaseId": True}]
+)
+def test_incomplete_thread_fails_closed(broken: dict[str, Any]) -> None:
+    item = thread(5, "Nit: naming.")
+    item["comments"]["nodes"][0].update(broken)
+    assert run_main(data([copilot()], threads=[item])) == 1
+
+
 def test_security_reply_makes_a_thread_blocking() -> None:
     reply = {"pull_request_review_id": 8, "in_reply_to_id": 3, "body": "It leaks credentials."}
     records = data([copilot()], threads=[thread(3, "Nit: naming.")], comments=[reply])
@@ -505,6 +518,22 @@ def test_dependabot_update_with_branch_sync_is_exempt() -> None:
     records["commits"][1]["parents"][0]["sha"] = OLD
     assert evaluate(records).passed
     records["diffs"] = {OLD: SAME, HEAD: OTHER}
+    assert not evaluate(records).passed
+
+
+@pytest.mark.parametrize(
+    "amend",
+    [{"committer": {"login": MAINTAINER}}, {"commit": {"verification": {"verified": False}}}],
+)
+def test_amended_dependabot_commit_is_not_exempt(amend: dict[str, Any]) -> None:
+    bot = commit(HEAD, "dependabot[bot]")
+    bot.update(amend)
+    records = data(
+        author="dependabot[bot]",
+        branch="dependabot/pip/x",
+        commits=[bot],
+        files=("cubrid_mcp_server/safety.py",),
+    )
     assert not evaluate(records).passed
 
 
