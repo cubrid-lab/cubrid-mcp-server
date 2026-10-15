@@ -649,6 +649,18 @@ def evaluate(data: dict[str, Any], event_head: str = "") -> Verdict:
 # ---------------------------------------------------------------------------- main
 
 
+def one_line(text: str) -> str:
+    """Report text as a single line: messages quote PR-controlled strings (file
+    paths, thread paths and URLs, logins), and a line break inside one could
+    start a workflow command such as ``::error::`` in the log."""
+    return re.sub(r"[\r\n\u0085\u2028\u2029]", " ", text)
+
+
+def command_data(text: str) -> str:
+    """Escape a workflow-command message as GitHub's runner expects."""
+    return text.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+
+
 def render(verdict: Verdict, number: int, bootstrap: bool) -> str:
     status = "exempt" if verdict.exempt else ("passed" if verdict.passed else "failed")
     lines = [f"### agent-review: {status} (PR #{number})", ""]
@@ -665,7 +677,7 @@ def render(verdict: Verdict, number: int, bootstrap: bool) -> str:
     ):
         if items:
             lines.append(f"**{title}**")
-            lines += [f"- {item}" for item in items]
+            lines += [f"- {one_line(item)}" for item in items]
             lines.append("")
     lines.append(
         (
@@ -700,9 +712,9 @@ def main(
         with open(summary, "a", encoding="utf-8") as handle:
             handle.write(report)
     for message in verdict.errors:
-        print(f"::error title=agent-review::{message}")
+        print(f"::error title=agent-review::{command_data(message)}")
     for message in verdict.warnings:
-        print(f"::warning title=agent-review::{message}")
+        print(f"::warning title=agent-review::{command_data(message)}")
     if args.bootstrap:
         print("::warning title=agent-review::Bootstrap run: advisory only.")
         return 0

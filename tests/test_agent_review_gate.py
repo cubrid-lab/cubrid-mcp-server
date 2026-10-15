@@ -925,6 +925,30 @@ def test_missing_token_fails_closed(monkeypatch: pytest.MonkeyPatch) -> None:
     assert gate.main(["--repo", REPO, "--pr", "7"]) == 1
 
 
+def test_pr_controlled_text_cannot_inject_workflow_commands(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    summary = tmp_path / "summary.md"
+    monkeypatch.setenv("GITHUB_STEP_SUMMARY", str(summary))
+    evil = "x\n::error::forged\r\n::stop-commands::t"
+    item = thread(2, "Possible SQL injection.")
+    item["comments"]["nodes"][0]["path"] = f"cubrid_mcp_server/{evil}"
+    records = data(
+        [copilot()], files=(f"cubrid_mcp_server/safety.py{evil}", "README.md"), threads=[item]
+    )
+    records["files"][0]["previous_filename"] = "cubrid_mcp_server/safety.py"
+    assert run_main(records) == 1
+    out = capsys.readouterr().out
+    commands = [line for line in out.splitlines() if line.startswith("::")]
+    assert commands, "the gate's own annotations are still emitted"
+    for line in commands:
+        assert line.startswith(("::error title=agent-review::", "::warning title=agent-review::"))
+        assert "\r" not in line
+    assert "%0A::error::forged" in out
+    for line in summary.read_text().splitlines():
+        assert not line.startswith("::")
+
+
 def test_bootstrap_is_advisory() -> None:
     assert run_main(data(), extra=("--bootstrap",)) == 0
 
