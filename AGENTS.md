@@ -132,10 +132,11 @@ review by someone other than the PR's author** before merging (maintainer
 decision, 2026-10-15). Any one of these counts:
 - a submitted GitHub Copilot review with an actual code assessment;
 - a review by another person;
-- a review by an independent reviewer agent that runs in a separate context
-  from the authoring agent, with read-only access, and is recorded on the PR
-  (a review or comment giving the reviewer, the reviewed head SHA and its
-  findings).
+- a review by an independent reviewer agent: it runs in a fresh context
+  separate from the authoring agent, with read-only access, and wrote none of
+  the change (the authoring session may launch it). Its review is recorded on
+  the PR as a review or comment giving the reviewer, the reviewed head SHA and
+  its findings.
 
 Copilot review is optional, and no CI check or ruleset rule enforces review
 evidence. A Copilot COMMENTED review is not GitHub APPROVED status.
@@ -146,7 +147,7 @@ the final relevant head. Without the required review, leave the PR unmerged
 (Draft/pending review).
 
 Changes to `safety.py`, `database.py`, `audit.py`, `server.py`, or to
-workflows that hold write permissions or release, get stricter scrutiny: the
+workflows that hold write permissions or perform releases, get stricter scrutiny: the
 review must explicitly assess the read-only/write-mode, audit-redaction and MCP
 stdout invariants they carry, and a maintainer confirms that disposition before
 merge.
@@ -202,8 +203,9 @@ docs tasks need only the applicable fields.
 - AI severity is not authority to expand scope. Out-of-scope findings become
   separate issues unless the maintainer explicitly expands the contract.
 - Default to two published AI review rounds per scoped PR/task (initial review plus
-  one corrective re-review). Further rounds or scope expansion require explicit
-  maintainer direction.
+  one corrective re-review). A Copilot review and a recorded independent-agent
+  review each count as one round. Further rounds or scope expansion require
+  explicit maintainer direction.
 - Never merge with unresolved critical/security defects or failed required CI. Keep
   incomplete work Draft and report blockers and a proposed split.
 - Preserve contributor history. Do not repeatedly re-review an external PR until its

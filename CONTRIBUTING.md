@@ -242,12 +242,14 @@ Non-trivial OpenCode work records Oracle design and post-implementation reviews;
 trivial OpenCode changes may omit those reviews with a recorded reason.
 Standalone Claude Code, Codex, ChatGPT or other agent tools wait for a substantive
 review by someone other than the PR's author: a submitted GitHub Copilot review, a
-person's review, or a review by an independent reviewer agent in a separate
-context, recorded on the PR with the reviewed head SHA (maintainer decision,
-2026-10-15). Copilot is optional, and no CI check enforces review evidence. A
+person's review, or a review by an independent reviewer agent (a fresh, separate,
+read-only context that wrote none of the change), recorded on the PR as a review
+or comment giving the reviewer, the reviewed head SHA and its findings
+(maintainer decision, 2026-10-15). Copilot is optional, and no CI check enforces review evidence. A
 pending request, CI pass, self-review or an automated approval suggestion alone
 does not complete that review route. Changes to `safety.py`, `database.py`,
-`audit.py`, `server.py` or the write-permission and release workflows need a
+`audit.py`, `server.py` or workflows that hold write permissions or perform
+releases need a
 review that explicitly assesses their invariants, confirmed by a maintainer.
 Record dispositions at the final relevant head and close inline threads only
 after verification. Human contributions follow ordinary contributor review;
