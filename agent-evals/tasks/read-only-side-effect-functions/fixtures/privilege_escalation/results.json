@@ -21,6 +21,7 @@
       "outcome": "failed"
     }
   ],
+  "network": "disabled",
   "patch_sha256": "5c83036f05789c75209e7b04414b538d3dc931c106b2da1a4bfd20e5e5522206",
   "schema_version": 1,
   "task": "read-only-side-effect-functions"

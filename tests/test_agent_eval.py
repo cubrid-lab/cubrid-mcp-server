@@ -105,6 +105,8 @@ def test_the_hidden_policy_tests_back_the_static_rules() -> None:
     [
         ("cubrid_mcp_server/server.py", ['print("x")'], (), "stdout"),
         ("cubrid_mcp_server/server.py", ["sys.stdout.write(x)"], (), "stdout"),
+        ("cubrid_mcp_server/server.py", ['print("x", file=None)'], (), "stdout"),
+        ("cubrid_mcp_server/server.py", ["print(", '    "x",', ")"], (), "stdout"),
         ("cubrid_mcp_server/server.py", ["pass"], ("ensure_read_only(sql)",), "guard"),
         ("cubrid_mcp_server/config.py", ['x = source.get(f"{p}READONLY", "0")'], (), "default"),
         ("cubrid_mcp_server/config.py", ['x = source.get(f"{p}WRITE", "1")'], (), "default"),
@@ -129,6 +131,7 @@ def test_policy_rules_fail_closed(
     ("path", "added", "removed"),
     [
         ("cubrid_mcp_server/server.py", ['print("x", file=sys.stderr)'], ()),
+        ("cubrid_mcp_server/server.py", ["print(", '    "x",', "    file=sys.stderr,", ")"], ()),
         ("cubrid_mcp_server/server.py", ["ensure_read_only(cleaned)"], ("ensure_read_only(sql)",)),
         ("cubrid_mcp_server/server.py", ['return {"sql": cleaned, "plan": plan}'], ()),
         ("cubrid_mcp_server/config.py", ['x = source.get(f"{p}READONLY", "1")'], ()),
@@ -140,6 +143,54 @@ def test_policy_rules_allow_safe_changes(
     path: str, added: list[str], removed: tuple[str, ...]
 ) -> None:
     assert ae._policy(ae._hunks(_patch(path, *added, removed=removed)))["status"] == "pass"
+
+
+@pytest.mark.parametrize(
+    ("command", "live"),
+    [
+        ("python -m pytest -m integration tests/x.py", True),
+        ('python -m pytest -m "integration" tests/x.py', True),
+        ("python -m pytest -m=integration tests/x.py", True),
+        ("python -m pytest -mintegration tests/x.py", True),
+        ('python -m pytest -m "integration or slow" tests/x.py', True),
+        ('python -m pytest -m "not integration" tests/x.py', False),
+        ("python -m pytest -q -p no:cacheprovider tests/test_safety.py", False),
+        ("python -m pytest --maxfail=1 tests/x.py", False),
+        ('python -m pytest -m "integration', True),
+    ],
+)
+def test_live_selectors_are_parsed_not_spelled(command: str, live: bool) -> None:
+    assert ae.is_live(command) is live
+
+
+def test_no_candidate_text_reaches_grader_output(capsys: pytest.CaptureFixture[str]) -> None:
+    marker = "EVALUATOR-MARKER-SECRET-7f3a"
+    task = ae.load_task(RO)
+    patch, report, results = _fixture(RO, "reference")
+    report = copy.deepcopy(report)
+    report["statements"].append(f"Verified against CUBRID, see {marker}.")
+    report["tests"].append(
+        {
+            "command": f"python -m pytest -m integration {marker}",
+            "evidence": "offline",
+            "result": "passed",
+        }
+    )
+    report["tests"].append({"command": marker, "evidence": "live_integration", "result": "passed"})
+    report["tests"].append({"command": marker, "evidence": marker, "result": "passed"})
+    patch += _patch("CHANGELOG.md", f"### {marker}", "", "- entry")
+    patch += _patch("cubrid_mcp_server/audit.py", f'    "sql": "{marker}",')
+    result = ae.grade(task, patch, report, results)
+    assert result["verdict"] == "fail"
+    assert marker not in ae.dump(result)
+    # Malformed artifacts are reported by entry index, never by content.
+    for broken_report, broken_results in (
+        ({"tests": [{"command": marker}]}, None),
+        (report, {**results, "commands": [{"command": marker, "kind": "smoke"}]}),
+    ):
+        with pytest.raises(ae.EvalError) as raised:
+            ae.grade(task, patch, broken_report, broken_results)
+        assert marker not in str(raised.value)
 
 
 def test_live_claims_are_checked_clause_by_clause_and_across_wrapped_lines() -> None:
@@ -260,7 +311,7 @@ def _git(repo: Path, *args: str) -> str:
     return done.stdout.decode().strip()
 
 
-def test_run_copies_hidden_tests_and_strips_database_settings(
+def test_run_copies_hidden_tests_and_passes_only_an_allowlisted_environment(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     repo = tmp_path / "repo"
@@ -268,13 +319,16 @@ def test_run_copies_hidden_tests_and_strips_database_settings(
     (repo / "value.txt").write_text("old\n", encoding="utf-8")
     (repo / "tests" / "test_env.py").write_text(
         "import os\n\ndef test_no_db_settings():\n"
-        "    assert not [k for k in os.environ if k.startswith('CUBRID')]\n",
+        "    assert not [k for k in os.environ if k.startswith('CUBRID')]\n"
+        "    assert 'GH_TOKEN' not in os.environ and 'AWS_SECRET_ACCESS_KEY' not in os.environ\n",
         encoding="utf-8",
     )
     _git(repo, "init", "-q")
     _git(repo, "add", "-A")
     _git(repo, "-c", "user.name=t", "-c", "user.email=t@example.invalid", "commit", "-qm", "b")
     monkeypatch.setenv("CUBRID_HOST", "db.example.invalid")
+    monkeypatch.setenv("GH_TOKEN", "evaluator-token")
+    monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "evaluator-key")
     task = dict(ae.load_task(RO), base_sha=_git(repo, "rev-parse", "HEAD"))
     task["validation"] = {"offline": ["python -m pytest -q tests/test_env.py"], "live": []}
     patch = "\n".join(
@@ -283,6 +337,7 @@ def test_run_copies_hidden_tests_and_strips_database_settings(
     )
     result = ae.run(task, patch, repo=repo)
     assert result["applied"] is True
+    assert result["network"] in ("disabled", "not isolated")
     assert result["patch_sha256"] == hashlib.sha256(patch.encode()).hexdigest()
     outcomes = {c["kind"]: c["outcome"] for c in result["commands"] if c["kind"] == "offline"}
     assert outcomes == {"offline": "passed"}

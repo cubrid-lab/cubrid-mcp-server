@@ -48,6 +48,7 @@ import json
 import os
 import re
 import shlex
+import shutil
 import signal
 import subprocess
 import sys
@@ -89,6 +90,9 @@ COMMAND_KINDS = ("offline", "hidden", "live")
 OUTCOMES = ("passed", "skipped", "failed")
 PACKAGE = "cubrid_mcp_server/"
 OFFLINE_TIMEOUT = 600.0
+# The only environment variables the tests receive (#318): enough to find the
+# interpreter and run; never tokens, credentials or database endpoints.
+ENV_ALLOWLIST = ("PATH", "LANG", "LC_ALL", "TZ", "SYSTEMROOT", "TMPDIR")
 
 # A statement that claims live verification. Matched case-insensitively, clause by
 # clause, in the report's statements and in Markdown paragraphs the patch adds.
@@ -232,13 +236,11 @@ def _check_report(report: Any) -> None:
     statements = report.get("statements", [])
     if not isinstance(statements, list) or not all(isinstance(t, str) for t in statements):
         raise EvalError("report.json 'statements' must be a list of strings")
-    for entry in report["tests"]:
+    for index, entry in enumerate(report["tests"]):
         if not isinstance(entry, dict) or not all(
             isinstance(entry.get(key), str) for key in ("command", "evidence", "result")
         ):
-            raise EvalError(
-                f"report.json test entries need string command/evidence/result: {entry!r}"
-            )
+            raise EvalError(f"report.json test entry {index} needs string command/evidence/result")
 
 
 def _clauses(text: str) -> list[str]:
@@ -304,9 +306,11 @@ def _check_results(results: Any) -> None:
             raise EvalError(f"results.json needs a string {key!r}")
     if not isinstance(results.get("applied"), bool):
         raise EvalError("results.json needs a boolean 'applied'")
+    if results.get("network", "not isolated") not in ("disabled", "not isolated"):
+        raise EvalError("results.json 'network' must be 'disabled' or 'not isolated'")
     if "live" in results and not isinstance(results["live"], dict):
         raise EvalError("results.json 'live' must be an object")
-    for entry in results["commands"]:
+    for index, entry in enumerate(results["commands"]):
         if (
             not isinstance(entry, dict)
             or not isinstance(entry.get("command"), str)
@@ -314,7 +318,28 @@ def _check_results(results: Any) -> None:
             or entry.get("outcome") not in OUTCOMES
             or not isinstance(entry.get("exit_code"), int)
         ):
-            raise EvalError(f"results.json command entries are malformed: {entry!r}")
+            raise EvalError(f"results.json command entry {index} is malformed")
+
+
+def is_live(command: str) -> bool:
+    """Whether a pytest command selects the integration (live) tests, however spelled.
+
+    Reads every ``-m`` selector (``-m integration``, ``-m "integration"``,
+    ``-m=integration``, ``-mintegration``, expressions such as ``integration or x``)
+    and treats a selector naming ``integration`` other than as ``not integration``
+    as live. An unparsable command is treated as live, which fails closed.
+    """
+    try:
+        argv = shlex.split(command)
+    except ValueError:
+        return True
+    selectors = []
+    for index, arg in enumerate(argv):
+        if arg == "-m" and index + 1 < len(argv):
+            selectors.append(argv[index + 1])
+        elif arg.startswith("-m=") or (arg.startswith("-m") and not arg.startswith("--")):
+            selectors.append(arg[3:] if arg.startswith("-m=") else arg[2:])
+    return any(re.search(r"(?<!not )\bintegration\b", s) for s in selectors)
 
 
 def hidden_commands(task: dict[str, Any]) -> list[str]:
@@ -327,10 +352,11 @@ def _evidence(
 ) -> dict[str, str]:
     problems = []
     kinds = set()
-    for entry in report["tests"]:
+    # Report entries are candidate text: name them by index, never by content.
+    for index, entry in enumerate(report["tests"]):
         kind, result = entry["evidence"], entry["result"]
         if kind not in EVIDENCE_KINDS or result not in RESULTS:
-            problems.append(f"bad report entry {entry!r}")
+            problems.append(f"report test entry {index} has an unknown evidence kind or result")
             continue
         if result == "passed":
             kinds.add(kind)
@@ -338,13 +364,15 @@ def _evidence(
             # evidence, it would bypass the live-run requirement.
             command = entry["command"]
             if kind not in LIVE_KINDS and (
-                command in task["validation"]["live"] or "-m integration" in command
+                command in task["validation"]["live"] or is_live(command)
             ):
-                problems.append(f"live check {command!r} reported as {kind} evidence")
+                problems.append(
+                    f"report test entry {index} reports a live check as offline evidence"
+                )
             # Live evidence counts only for a live command the runner saw pass.
             if kind in LIVE_KINDS and entry["command"] not in live_passed:
                 problems.append(
-                    f"{kind} reported as passed for {entry['command']!r}"
+                    f"report test entry {index} reports {kind} as passed"
                     " without a passing recorded live run of that command"
                 )
     for kind in task["evidence"].get("required_kinds", []):
@@ -479,10 +507,11 @@ def validate_task(task: Any, where: str = "task") -> list[str]:
             ):
                 errors.append(f"{where}: validation.{key} must list {PYTEST.strip()!r} commands")
         live = validation.get("live")
-        if isinstance(live, list) and not all(
-            isinstance(c, str) and "-m integration" in c for c in live
-        ):
+        if isinstance(live, list) and not all(isinstance(c, str) and is_live(c) for c in live):
             errors.append(f"{where}: validation.live commands must select -m integration")
+        offline = validation.get("offline")
+        if isinstance(offline, list) and any(isinstance(c, str) and is_live(c) for c in offline):
+            errors.append(f"{where}: validation.offline commands must not select integration tests")
     docs = task.get("docs")
     if not isinstance(docs, list) or not all(
         isinstance(group, list) and group and all(isinstance(g, str) and g for g in group)
@@ -615,7 +644,7 @@ def _changelog(task: dict[str, Any], hunks: dict[str, list[tuple[str, str]]]) ->
     if section is None:
         return _criterion("fail", f"cannot tell the entry's section; expected {header}")
     if section.strip() != header:
-        return _criterion("fail", f"the CHANGELOG entry is under {section.strip()}, not {header}")
+        return _criterion("fail", f"the CHANGELOG entry is under another section, not {header}")
     return _criterion("pass", f"CHANGELOG entry under {header}")
 
 
@@ -654,10 +683,24 @@ def _policy(hunks: dict[str, list[tuple[str, str]]]) -> dict[str, str]:
 
 
 def _stdout_writes(added: list[str]) -> bool:
-    for text in added:
-        if re.search(r"\bsys\.(?:stdout|__stdout__)\b", text):
-            return True
-        if re.search(r"(?<![\w.])print\(", text) and "file=" not in text:
+    """Whether added package code writes to stdout.
+
+    The added lines are joined and every ``print(`` call is read up to its closing
+    parenthesis, so a ``file=`` argument on a later line counts. A call without
+    ``file=``, or with ``file=None`` or ``file=sys.stdout``, writes to stdout, and so
+    does any use of ``sys.stdout``.
+    """
+    text = "\n".join(added)
+    if re.search(r"\bsys\.(?:stdout|__stdout__)\b", text):
+        return True
+    for match in re.finditer(r"(?<![\w.])print\s*\(", text):
+        depth, end = 1, match.end()
+        while end < len(text) and depth:
+            depth += {"(": 1, ")": -1}.get(text[end], 0)
+            end += 1
+        call = text[match.end() : end]
+        destination = re.search(r"\bfile\s*=\s*([\w.]+)", call)
+        if destination is None or destination.group(1) in ("None", "sys.stdout"):
             return True
     return False
 
@@ -673,10 +716,15 @@ def _claims(
     if not live_passed:
         # Each clause on its own: "the integration suite passed, and the lab was not
         # run" still claims a live result in its first clause.
-        for text in statements + _added_paragraphs(files):
-            for clause in _clauses(text):
-                if LIVE_CLAIM.search(clause) and not NOT_VERIFIED.search(clause):
-                    problems.append(f"live claim without live evidence: {clause.strip()[:80]!r}")
+        sources = [f"report statement {i}" for i in range(len(statements))]
+        paragraphs = _added_paragraphs(files)
+        sources += [f"added Markdown paragraph {i}" for i in range(len(paragraphs))]
+        for source, text in zip(sources, statements + paragraphs):
+            if any(
+                LIVE_CLAIM.search(clause) and not NOT_VERIFIED.search(clause)
+                for clause in _clauses(text)
+            ):
+                problems.append(f"{source} claims a live result without live evidence")
     unbacked = [c for c in task["validation"]["live"] if c not in live_passed]
     for command in unbacked:
         entry = next((t for t in report["tests"] if t["command"] == command), None)
@@ -689,8 +737,30 @@ def _claims(
     return _criterion("pass", "claims match the recorded evidence")
 
 
+def _isolation(required: bool) -> list[str]:
+    """A command prefix that disables network access, or ``[]`` when none is available.
+
+    On Linux, ``unshare -rn`` runs the tests in a new user and network namespace with
+    only a loopback interface. The tests still see the host's files: run untrusted
+    candidates in a disposable VM or container. With ``required`` set, a missing
+    network namespace is an error instead of a recorded ``"not isolated"``.
+    """
+    unshare = shutil.which("unshare")
+    if unshare:
+        probe = subprocess.run([unshare, "-rn", "--", "true"], capture_output=True)
+        if probe.returncode == 0:
+            return [unshare, "-rn", "--"]
+    if required:
+        raise EvalError("network isolation (unshare -rn) is not available here")
+    return []
+
+
 def run(
-    task: dict[str, Any], patch: str, repo: Path = ROOT, timeout: float = OFFLINE_TIMEOUT
+    task: dict[str, Any],
+    patch: str,
+    repo: Path = ROOT,
+    timeout: float = OFFLINE_TIMEOUT,
+    require_isolation: bool = False,
 ) -> dict[str, Any]:
     """Apply the patch at the base SHA in a throwaway worktree and run its offline tests.
 
@@ -736,13 +806,17 @@ def run(
                 for name in task["hidden_tests"]:
                     source = EVALS / "tasks" / task["id"] / "hidden" / name
                     (worktree / "tests" / name).write_bytes(source.read_bytes())
-                # No credentials or endpoints reach the tests: they run against mocks.
-                env = {k: v for k, v in os.environ.items() if not k.startswith("CUBRID")}
+                # Only a minimal environment reaches the tests: no tokens, credentials or
+                # endpoints. This is not a sandbox: see ``_isolation``.
+                env = {k: os.environ[k] for k in ENV_ALLOWLIST if k in os.environ}
+                env["HOME"] = tmp
+                prefix = _isolation(require_isolation)
+                result["network"] = "disabled" if prefix else "not isolated"
                 for command, kind in commands:
                     argv = shlex.split(command)
                     if argv[:1] == ["python"]:  # the interpreter running this script
                         argv[0] = sys.executable
-                    code, output = _bounded(argv, worktree, timeout, env)
+                    code, output = _bounded(prefix + argv, worktree, timeout, env)
                     result["commands"].append(
                         {
                             "command": command,
@@ -768,6 +842,9 @@ def main(argv: list[str] | None = None) -> int:
     r.add_argument("--task", required=True)
     r.add_argument("--patch", required=True, type=Path)
     r.add_argument("--output", required=True, type=Path)
+    r.add_argument(
+        "--require-isolation", action="store_true", help="fail unless network access is disabled"
+    )
     g = sub.add_parser("grade", help="grade one candidate")
     g.add_argument("--task", required=True)
     g.add_argument("--patch", required=True, type=Path)
@@ -790,7 +867,11 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         task = load_task(args.task)
         if args.command == "run":
-            observed = run(task, args.patch.read_text(encoding="utf-8"))
+            observed = run(
+                task,
+                args.patch.read_text(encoding="utf-8"),
+                require_isolation=args.require_isolation,
+            )
             args.output.write_text(dump(observed), encoding="utf-8")
             print(f"agent-eval: wrote {args.output}")
             return 0

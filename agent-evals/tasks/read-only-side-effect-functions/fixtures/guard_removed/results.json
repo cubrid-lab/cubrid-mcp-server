@@ -21,6 +21,7 @@
       "outcome": "passed"
     }
   ],
+  "network": "disabled",
   "patch_sha256": "8e9af41b32542b60427eba16a0bee5804de5c1ab9fed033bd9af8cca571a1241",
   "schema_version": 1,
   "task": "read-only-side-effect-functions"

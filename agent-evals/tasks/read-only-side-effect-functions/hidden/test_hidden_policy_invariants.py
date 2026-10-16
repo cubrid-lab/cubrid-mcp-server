@@ -67,8 +67,11 @@ def _stdout_writes(path: Path) -> list[str]:
     found = []
     for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
         if isinstance(node, ast.Call) and getattr(node.func, "id", None) == "print":
-            if not any(k.arg == "file" for k in node.keywords):
-                found.append(f"{path.name}:{node.lineno} print() without file=")
+            # The destination decides: no file=, file=None and file=sys.stdout all
+            # write to stdout.
+            dest = next((k.value for k in node.keywords if k.arg == "file"), None)
+            if dest is None or (isinstance(dest, ast.Constant) and dest.value is None):
+                found.append(f"{path.name}:{node.lineno} print() to stdout")
         if isinstance(node, ast.Attribute) and node.attr in ("stdout", "__stdout__"):
             if getattr(node.value, "id", None) == "sys":
                 found.append(f"{path.name}:{node.lineno} sys.{node.attr}")
