@@ -136,7 +136,9 @@ except Exception:
     raise
 finally:
     conn.close()
-print("Created table mcp_quickstart_books (3 rows) and user mcp_reader (SELECT on that table only).")
+print(
+    "Created table mcp_quickstart_books (3 rows) and user mcp_reader (SELECT on that table only)."
+)
 ```
 
 ```bash
