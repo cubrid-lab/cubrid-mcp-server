@@ -123,12 +123,6 @@ def test_the_hidden_policy_tests_back_the_static_rules() -> None:
         ("tests/test_x.py", ["token = 'ghp_" + "a" * 30 + "'"], (), "token"),
     ],
 )
-def test_an_open_string_in_kept_code_does_not_hide_an_added_print() -> None:
-    # The hunk starts inside a docstring whose opening quotes are outside it.
-    lines = [("@", "@@"), (" ", "    cleanup steps."), (" ", '    """'), ("+", '    print("x")')]
-    assert ae._stdout_writes(lines) is True
-
-
 def test_policy_rules_fail_closed(
     path: str, added: list[str], removed: tuple[str, ...], rule: str
 ) -> None:
@@ -137,6 +131,41 @@ def test_policy_rules_fail_closed(
     # Findings name the file and the rule, never the offending text.
     for text in added + list(removed):
         assert text.strip() not in result["detail"]
+
+
+def _hunk(*lines: str) -> list[tuple[str, str]]:
+    return [("@", "@@")] + [(line[0], line[1:]) for line in lines]
+
+
+@pytest.mark.parametrize(
+    "lines",
+    [
+        # (a) an added argument line inside an existing multi-line call
+        (" logger.info(", '     "audit %s",', "+    sql,", " )"),
+        (" logger.info(", '     "audit %s",', "+    password,", " )"),
+    ],
+)
+def test_an_added_argument_inside_an_existing_log_call_is_caught(lines: tuple[str, ...]) -> None:
+    assert ae._logs_sql(_hunk(*lines)) is True
+
+
+@pytest.mark.parametrize(
+    ("lines", "stdout"),
+    [
+        # (a) an added argument line inside an existing multi-line print call
+        ((" print(", '     "done",', "+    file=None,", " )"), True),
+        ((" print(", '     "done",', "+    file=sys.stdout,", " )"), True),
+        ((" print(", '     "done",', "+    file=sys.stderr,", " )"), False),
+        # (b) a string opened in kept code before the hunk cannot hide an added print
+        (("     cleanup steps.", '     """', '+    print("x")'), True),
+        (("     cleanup steps.", '     """', '+    print("x", file=sys.stderr)'), False),
+        (("     cleanup steps.", '     """', '+    print("x", file=None)'), True),
+    ],
+)
+def test_print_destinations_are_read_whole_in_their_hunk(
+    lines: tuple[str, ...], stdout: bool
+) -> None:
+    assert ae._stdout_writes(_hunk(*lines)) is stdout
 
 
 @pytest.mark.parametrize(

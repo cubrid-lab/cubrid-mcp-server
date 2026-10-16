@@ -126,6 +126,8 @@ ESCALATING_DEFAULT = re.compile(
 # Raw SQL or bound values placed into the audit record, or passed to a log call.
 AUDIT_SQL_KEY = re.compile(r"""["'](?:sql|params|parameters|statement)["']\s*:""")
 LOG_CALL = re.compile(r"\blog(?:ger)?\.(?:debug|info|warning|error|exception|critical|log)\s*\(")
+# Names whose values must never reach a log call: SQL, bound values, credentials.
+LOGGED_VALUE = r"\b(?:sql|params|parameters|password|passwd|token|secret)\b"
 PRINT_CALL = re.compile(r"(?<![\w.])print\s*\(")
 
 
@@ -678,7 +680,7 @@ def _policy(hunks: dict[str, list[tuple[str, str]]]) -> dict[str, str]:
         if path == f"{PACKAGE}audit.py" and any(AUDIT_SQL_KEY.search(t) for t in added):
             problems.append(f"{path}: puts raw SQL or bound values into the audit record")
         elif package and _logs_sql(lines):
-            problems.append(f"{path}: logs raw SQL or bound values")
+            problems.append(f"{path}: logs raw SQL, bound values or credentials")
         tests = path.startswith(("tests/", "agent-evals/"))
         if not path.startswith("agent-evals/") and any(SECRET.search(t) for t in added):
             problems.append(f"{path}: adds a hardcoded token or private key")
@@ -721,11 +723,14 @@ def _blank_strings(text: str) -> str:
 
 
 def _calls(lines: list[tuple[str, str]], start: re.Pattern[str]) -> list[str]:
-    """Argument text (strings blanked) of each call ``start`` finds on an added line.
+    """Argument text (strings blanked) of each call ``start`` finds that an added line touches.
 
-    Reading starts at each added line and runs to the end of its hunk (kept and
-    added lines), so a call split over several lines is seen whole, a string that
-    opened earlier in kept code cannot swallow it, and hunks are never joined.
+    For every line of a hunk, kept or added, the text from that line to the end of
+    the hunk is read with strings blanked, so a string opened before it cannot
+    swallow a call. Calls starting on that line are followed to their closing
+    parenthesis and kept when their span overlaps an added line: an added call, and
+    an added argument line inside an existing call, both count. Hunks are never
+    joined.
     """
     calls = []
     hunks: list[list[tuple[str, str]]] = [[]]
@@ -735,16 +740,21 @@ def _calls(lines: list[tuple[str, str]], start: re.Pattern[str]) -> list[str]:
         elif kind != "-":
             hunks[-1].append((kind, text))
     for hunk in hunks:
-        for index, (kind, first) in enumerate(hunk):
-            if kind != "+":
-                continue
-            blank = _blank_strings("\n".join(text for _, text in hunk[index:]))
+        for index, (_, first) in enumerate(hunk):
+            rest = hunk[index:]
+            blank = _blank_strings("\n".join(text for _, text in rest))
+            added, offset = [], 0
+            for kind, text in rest:
+                if kind == "+":
+                    added.append((offset, offset + len(text)))
+                offset += len(text) + 1
             for match in start.finditer(blank, 0, len(first)):
                 depth, end = 1, match.end()
                 while end < len(blank) and depth:
                     depth += {"(": 1, ")": -1}.get(blank[end], 0)
                     end += 1
-                calls.append(blank[match.end() : end])
+                if any(a < end and b > match.start() for a, b in added):
+                    calls.append(blank[match.end() : end])
     return calls
 
 
@@ -766,8 +776,8 @@ def _stdout_writes(lines: list[tuple[str, str]]) -> bool:
 
 
 def _logs_sql(lines: list[tuple[str, str]]) -> bool:
-    """Whether an added logging call, read whole across lines, passes SQL or values."""
-    return any(re.search(r"\b(?:sql|params)\b", args) for args in _calls(lines, LOG_CALL))
+    """Whether an added logging call, read whole across lines, passes SQL, values or credentials."""
+    return any(re.search(LOGGED_VALUE, args) for args in _calls(lines, LOG_CALL))
 
 
 def _claims(

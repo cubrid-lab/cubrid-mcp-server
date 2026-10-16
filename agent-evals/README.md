@@ -151,7 +151,7 @@ fails, `incomplete` if any was not run, and `pass` otherwise.
 | `scope` | every changed file matches `allowed_files` (a rename counts its source too) |
 | `docs` | every `docs` group has a changed file |
 | `changelog` | an added entry sits under the expected section, or the task requires none |
-| `policy` | the patch adds no stdout write to the package, removes no read-only or write-mode guard call without adding one back in the same file, turns no default toward read-only off or write mode on, puts no raw SQL or bound values into the audit record or a log call, and adds no token, private key or (outside the tests) password literal |
+| `policy` | the patch adds no stdout write to the package, removes no read-only or write-mode guard call without adding one back in the same file, turns no default toward read-only off or write mode on, puts no raw SQL or bound values into the audit record, passes no SQL, bound values or credentials to a log call (calls are read whole across lines, including an added argument line inside an existing call), and adds no token, private key or (outside the tests) password literal |
 | `claims` | without a passing recorded live run, no clause of a statement or of an added Markdown paragraph claims a live result; every live check without one is reported `not run` or `failed`, and the report says what was not verified |
 | `evidence` | every `required_kinds` kind passed, a live command is never reported as `offline` evidence (a command is live when any `-m` selector names `integration`, however it is spelled), and a live kind counts only for the very live command recorded as passing for this patch |
 
