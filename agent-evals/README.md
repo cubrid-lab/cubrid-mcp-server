@@ -229,7 +229,8 @@ task revision, tool and version, and model, and for each group reports:
 
 Report that distribution with the number of runs, never as a bare pass percentage.
 Three passes in three runs is an interval of about 0.44 to 1.0, not 100%. Runs of
-different task revisions, tools or models are never pooled. A record whose verdict
+different task revisions, tools or models are never pooled. A record missing a rubric
+criterion, or whose verdict
 disagrees with its criteria is rejected. Note the limitations of each
 group: the not-isolated runs, the excluded runs and how few runs there were.
 

@@ -424,6 +424,17 @@ SEVERITIES = ("critical", "major", "minor", "info")
 # Optional run metrics: elapsed time, the time limit the agent ran under, and how
 # many review rounds the change needed before it was acceptable (review rework).
 METRICS = ("wall_clock_seconds", "timeout_seconds", "rework_rounds")
+# Every rubric criterion grade() reports; a run record must carry all of them.
+CRITERIA = (
+    "behavior",
+    "regression_test",
+    "scope",
+    "docs",
+    "changelog",
+    "policy",
+    "claims",
+    "evidence",
+)
 
 
 def _metric(value: Any) -> bool:
@@ -593,11 +604,17 @@ def summarize(records: list[Any]) -> dict[str, Any]:
         if verdict not in ("pass", "incomplete", "fail"):
             raise EvalError(f"run record with verdict {verdict!r}")
         criteria = entry["rubric"].get("criteria")
-        if not isinstance(criteria, dict) or not all(
-            isinstance(c, dict) and c.get("status") in ("pass", "fail", "not_run")
-            for c in criteria.values()
+        if (
+            not isinstance(criteria, dict)
+            or set(criteria) != set(CRITERIA)
+            or not all(
+                isinstance(c, dict) and c.get("status") in ("pass", "fail", "not_run")
+                for c in criteria.values()
+            )
         ):
-            raise EvalError("run record criteria must map names to pass/fail/not_run statuses")
+            raise EvalError(
+                f"run record criteria must map every one of {CRITERIA} to a pass/fail/not_run status"
+            )
         if verdict != _verdict(criteria):
             raise EvalError(f"run record verdict {verdict!r} disagrees with its criteria")
         metrics = entry.get("metrics", {})

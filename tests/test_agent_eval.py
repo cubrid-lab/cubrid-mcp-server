@@ -500,6 +500,7 @@ def test_record_holds_tool_model_base_and_rubric() -> None:
         "wall_clock_seconds": 60.0,
     }
     assert entry["rubric"]["verdict"] == "pass" and entry["excluded"] is None
+    assert tuple(entry["rubric"]["criteria"]) == ae.CRITERIA
     assert ae.dump(entry) == ae.dump(_record())
     offline = _record(results=None)
     assert offline["network"] is None and offline["rubric"]["verdict"] == "incomplete"
@@ -553,6 +554,14 @@ def test_summarize_reports_counts_intervals_and_exclusions() -> None:
         dict(passing, rubric={"verdict": "pass", "criteria": []}),
         dict(passing, agent={"name": " ", "model": "model-a"}),
         dict(failing, rubric=dict(failing["rubric"], verdict="pass")),
+        dict(passing, rubric={"verdict": "pass", "criteria": {}}),
+        dict(
+            passing,
+            rubric={
+                "verdict": "pass",
+                "criteria": {"scope": passing["rubric"]["criteria"]["scope"]},
+            },
+        ),
     ):
         with pytest.raises(ae.EvalError):
             ae.summarize([broken])
