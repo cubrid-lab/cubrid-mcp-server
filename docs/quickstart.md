@@ -1,5 +1,7 @@
 # Quick Start
 
+> 한국어: [빠른 시작](ko/quickstart.md)
+
 This walkthrough connects one MCP client to a small sample database and reads
 from it, without giving the model more than read access to one table.
 

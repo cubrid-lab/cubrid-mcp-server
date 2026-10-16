@@ -1,6 +1,8 @@
 # 도구 참조 (한국어)
 
 > 🌐 [TOOLS.md](https://github.com/cubrid-lab/cubrid-mcp-server/blob/main/docs/TOOLS.md)의 번역입니다. 영어 원문이 표준이며, 페이지 번역은 경고 수준의 동기화 규칙을 따릅니다.
+>
+> English: [Tools Reference](../TOOLS.md)
 
 `cubrid-mcp-server`는 MCP **도구**·**리소스**·**프롬프트**로 기능을 노출합니다. 모든 도구는 선택적 `connection` 인자를 받으며( [멀티커넥션](MULTI_CONNECTION.md) 참고), 생략하면 `default` 연결을 대상으로 합니다.
 

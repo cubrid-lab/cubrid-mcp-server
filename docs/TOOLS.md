@@ -1,5 +1,7 @@
 # Tools Reference
 
+> 한국어: [도구 참조](ko/TOOLS.md)
+
 `cubrid-mcp-server` exposes its capabilities as MCP **tools**, **resources**, and **prompts**. Every tool accepts an optional `connection` argument (see [Multi-Connection](MULTI_CONNECTION.md)); omitting it targets the `default` connection.
 
 ## Tools

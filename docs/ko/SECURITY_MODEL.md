@@ -1,6 +1,8 @@
 # 보안 모델 (한국어)
 
 > 🌐 [SECURITY_MODEL.md](https://github.com/cubrid-lab/cubrid-mcp-server/blob/main/docs/SECURITY_MODEL.md)의 번역입니다. 영어 원문이 표준이며, 페이지 번역은 경고 수준의 동기화 규칙을 따릅니다.
+>
+> English: [Security Model](../SECURITY_MODEL.md)
 
 `cubrid-mcp-server`는 CUBRID 데이터베이스와 MCP를 사용하는 LLM 클라이언트를 잇는 다리입니다. 모델이 보내는 모든 쿼리를 신뢰할 수 없는 입력으로 취급하세요: LLM은 파괴적 SQL을 환각할 수 있고, 악의적인 프롬프트는 서버가 노출할 의도가 없던 데이터를 빼내려 할 수 있습니다. **심층 방어**가 설계 의도입니다.
 

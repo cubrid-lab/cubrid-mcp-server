@@ -1,6 +1,8 @@
 # 문제 해결 (한국어)
 
 > 🌐 [TROUBLESHOOTING.md](https://github.com/cubrid-lab/cubrid-mcp-server/blob/main/docs/TROUBLESHOOTING.md)의 번역입니다. 영어 원문이 표준이며, 페이지 번역은 경고 수준의 동기화 규칙을 따릅니다.
+>
+> English: [Troubleshooting](../TROUBLESHOOTING.md)
 
 증상 → 원인 → 해결 순으로 정리했습니다.
 

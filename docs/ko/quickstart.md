@@ -1,6 +1,8 @@
 # 빠른 시작 (한국어)
 
 > 🌐 [quickstart.md](https://github.com/cubrid-lab/cubrid-mcp-server/blob/main/docs/quickstart.md)의 번역입니다. 영어 원문이 표준이며, 페이지 번역은 커뮤니티 기여 번역과 같은 경고 수준의 동기화 규칙을 따릅니다.
+>
+> English: [Quick Start](../quickstart.md)
 
 이 안내는 MCP 클라이언트 하나를 작은 예제 데이터베이스에 연결해 데이터를 읽는 과정을 다룹니다.
 모델에게는 테이블 하나에 대한 읽기 권한만 줍니다.

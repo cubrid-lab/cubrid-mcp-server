@@ -34,12 +34,11 @@ See the full [Tools reference](TOOLS.md) for parameters and return shapes, the [
 
 ## Documentation
 
-- [Quick Start](quickstart.md) — start here: a disposable lab, a read-only account and a first query from one MCP client
-- [Tools](TOOLS.md) — the complete tool, resource, and prompt reference
-- [Security Model](SECURITY_MODEL.md) — read-only enforcement, opt-in writes, audit logging
-- [Multi-Connection](MULTI_CONNECTION.md) — named connections and per-connection settings
-- [Troubleshooting](TROUBLESHOOTING.md) — common problems and fixes
-- [한국어 문서](README.ko.md)
+- **Start here:** [Quick Start](quickstart.md) — a disposable lab, a read-only account, one MCP client and a first query, then a safe clean-up
+- **How-to guides:** [Serve several databases](MULTI_CONNECTION.md) — named connections and per-connection settings; chat-client setup is at the end of the [Quick Start](quickstart.md#optional-use-the-same-server-from-a-chat-client)
+- **Reference:** [Tools, resources and prompts](TOOLS.md), [configuration settings](https://github.com/cubrid-lab/cubrid-mcp-server#configure) and the [Security Model](SECURITY_MODEL.md) — read-only enforcement, opt-in writes, audit logging
+- **Help:** [Troubleshooting](TROUBLESHOOTING.md); questions and bugs through the [issue forms](https://github.com/cubrid-lab/cubrid-mcp-server/issues/new/choose) (never paste passwords, connection strings or query results you would not publish); vulnerabilities privately as described in [SECURITY.md](https://github.com/cubrid-lab/cubrid-mcp-server/blob/main/SECURITY.md#reporting-a-vulnerability)
+- **한국어:** [한국어 README](README.ko.md), [빠른 시작](ko/quickstart.md), [도구 참조](ko/TOOLS.md), [보안 모델](ko/SECURITY_MODEL.md), [멀티커넥션](ko/MULTI_CONNECTION.md), [문제 해결](ko/TROUBLESHOOTING.md)
 
 ## License
 

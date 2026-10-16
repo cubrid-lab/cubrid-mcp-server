@@ -1,5 +1,7 @@
 # Security Model
 
+> 한국어: [보안 모델](ko/SECURITY_MODEL.md)
+
 `cubrid-mcp-server` bridges a CUBRID database and any MCP-speaking LLM client. Treat every query coming from the model as untrusted input: the LLM may hallucinate destructive SQL, and a malicious prompt may try to exfiltrate data the server was never meant to expose. Defence in depth is the design intent.
 
 ## Layer 1 — database permissions (required)

@@ -1,5 +1,7 @@
 # Multi-Connection
 
+> 한국어: [멀티커넥션](ko/MULTI_CONNECTION.md)
+
 One server process can serve several CUBRID databases. Every tool accepts an optional `connection` argument selecting the target; single-database setups are unchanged.
 
 ## Default connection

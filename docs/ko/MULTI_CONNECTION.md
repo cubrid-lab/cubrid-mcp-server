@@ -1,6 +1,8 @@
 # 멀티커넥션 (한국어)
 
 > 🌐 [MULTI_CONNECTION.md](https://github.com/cubrid-lab/cubrid-mcp-server/blob/main/docs/MULTI_CONNECTION.md)의 번역입니다. 영어 원문이 표준이며, 페이지 번역은 경고 수준의 동기화 규칙을 따릅니다.
+>
+> English: [Multi-Connection](../MULTI_CONNECTION.md)
 
 하나의 서버 프로세스로 여러 CUBRID 데이터베이스를 서빙할 수 있습니다. 모든 도구는 대상을 선택하는 선택적 `connection` 인자를 받으며, 단일 데이터베이스 구성은 그대로 작동합니다.
 

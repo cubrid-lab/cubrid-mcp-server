@@ -1,5 +1,7 @@
 # Troubleshooting
 
+> 한국어: [문제 해결](ko/TROUBLESHOOTING.md)
+
 Symptom → cause → fix for the most common problems.
 
 ## The client cannot connect to the server

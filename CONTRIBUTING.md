@@ -213,6 +213,45 @@ Renaming the `ci-gate` job or the `PR title` job changes the check name and
 blocks every merge until the required checks are updated in the settings; change
 both together.
 
+## Documentation structure
+
+The documentation site (`mkdocs.yml`, `docs/`) has one page per reader question.
+The navigation groups pages by reader: **Start here** (one learning route), **How-to
+guides** (a goal after the first route), **Reference** (exact tools, settings and
+security limits), **Help** (troubleshooting and reporting) and a peer **한국어** tab
+with the same groups. Every English page links its Korean page right below its title,
+and every Korean page links the English page below its translation note.
+
+| Source, site URL | Reader and question | Group | Before / after it | Owner of the content |
+|---|---|---|---|---|
+| `docs/index.md`, `/` | Anyone: what is this and where do I start? | Home | — / Quick Start | Navigation (#354) |
+| `README.md` (GitHub and PyPI only) | A visitor: what is this project, and how is it configured? | Not in the site; the Reference group links its `#configure` section | — / Quick Start | Unchanged |
+| `docs/quickstart.md`, `/quickstart/` | Newcomer: how do I prepare a lab and an account, register one client, see the tools, query, and clean up? | Start here | — / Tools reference | Steps, accounts and results: #352. Location and links: #354 |
+| `docs/MULTI_CONNECTION.md`, `/MULTI_CONNECTION/` | User: how do I serve several databases from one process? | How-to guides, "Serve several databases" | Quick Start / Tools reference | Unchanged content |
+| `docs/TOOLS.md`, `/TOOLS/` | User: what exactly does each tool, resource and prompt take and return? | Reference | Any page | Unchanged content (kept in sync by `tests/test_docs_alignment.py`) |
+| `docs/SECURITY_MODEL.md`, `/SECURITY_MODEL/` | User or reviewer: what do the read-only checks protect, and what not? | Reference | Any page | Unchanged content; the Quick Start keeps its own least-privilege and data-exposure warnings |
+| `docs/TROUBLESHOOTING.md`, `/TROUBLESHOOTING/` | User with a problem: what does this symptom mean? | Help | Any page / issue forms or `SECURITY.md` | Unchanged content |
+| `docs/README.ko.md`, `docs/ko/*.md`, `/ko/...` | Korean reader: the same questions | 한국어 tab, same groups (moved from Project → Translations) | Same as English | Translators; the existing warning-level sync rule |
+
+No file is renamed, so every existing page URL and heading anchor stays. The chat-client
+configurations stay at the end of the Quick Start
+(`/quickstart/#optional-use-the-same-server-from-a-chat-client`).
+
+### Writing a walkthrough step
+
+Give each step of a learning route these parts, in this order: the goal; what earlier
+steps must have produced (never an open Python session); the exact file or
+configuration and the command; the actual output from a recorded run; a short
+explanation of what the output proves (process started, MCP tools discovered, database
+query succeeded are three different checkpoints); and the next step. Keep alternatives,
+optional clients and exhaustive settings out of the main route and link them instead.
+Use the sample names of the Quick Start (`testdb`, `dba.mcp_quickstart_books`,
+`mcp_reader`) everywhere. Keep the least-privilege and data-exposure warning that applies
+to a step beside that step. When a step's command or output changes, run the route again
+and record the platform and versions it ran on; a successful build or a screenshot of
+tool discovery is not evidence that a query works. Preserve the original author of an
+active translation fix.
+
 ## CHANGELOG
 
 Add an entry under `## [Unreleased]` in

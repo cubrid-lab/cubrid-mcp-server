@@ -15,6 +15,7 @@ theme:
     - navigation.sections
     - navigation.expand
     - navigation.top
+    - navigation.footer
     - content.code.copy
     - search.highlight
     - search.suggest
@@ -36,26 +37,35 @@ theme:
 
 nav:
   - Home: index.md
-  - Getting Started:
+  - Start here:
       - Quick Start: quickstart.md
-  - Usage:
-      - Tools: TOOLS.md
-      - Multi-Connection: MULTI_CONNECTION.md
+  - How-to guides:
+      - Serve several databases: MULTI_CONNECTION.md
   - Reference:
+      - Tools, resources and prompts: TOOLS.md
+      - Configuration settings: https://github.com/cubrid-lab/cubrid-mcp-server#configure
       - Security Model: SECURITY_MODEL.md
-  - Operations:
+  - Help:
       - Troubleshooting: TROUBLESHOOTING.md
+      - Ask a question or report a bug: https://github.com/cubrid-lab/cubrid-mcp-server/issues/new/choose
+      - Report a vulnerability privately: https://github.com/cubrid-lab/cubrid-mcp-server/blob/main/SECURITY.md#reporting-a-vulnerability
+  - 한국어:
+      - 한국어 README: README.ko.md
+      - 여기서 시작:
+          - 빠른 시작: ko/quickstart.md
+      - 사용 방법:
+          - 여러 데이터베이스 제공: ko/MULTI_CONNECTION.md
+      - 참고:
+          - 도구, 리소스, 프롬프트: ko/TOOLS.md
+          - 설정 항목: https://github.com/cubrid-lab/cubrid-mcp-server/blob/main/docs/README.ko.md#설정
+          - 보안 모델: ko/SECURITY_MODEL.md
+      - 도움말:
+          - 문제 해결: ko/TROUBLESHOOTING.md
+          - 질문과 버그 제보: https://github.com/cubrid-lab/cubrid-mcp-server/issues/new/choose
+          - 취약점 비공개 제보: https://github.com/cubrid-lab/cubrid-mcp-server/blob/main/SECURITY.md#reporting-a-vulnerability
   - Project:
-      - Translations:
-          - 한국어 README: README.ko.md
-          - 한국어 문서:
-              - 빠른 시작: ko/quickstart.md
-              - 도구 참조: ko/TOOLS.md
-              - 보안 모델: ko/SECURITY_MODEL.md
-              - 멀티커넥션: ko/MULTI_CONNECTION.md
-              - 문제 해결: ko/TROUBLESHOOTING.md
-  - Changelog: https://github.com/cubrid-lab/cubrid-mcp-server/blob/main/CHANGELOG.md
-  - Contributing: https://github.com/cubrid-lab/cubrid-mcp-server/blob/main/CONTRIBUTING.md
+      - Changelog: https://github.com/cubrid-lab/cubrid-mcp-server/blob/main/CHANGELOG.md
+      - Contributing: https://github.com/cubrid-lab/cubrid-mcp-server/blob/main/CONTRIBUTING.md
 
 markdown_extensions:
   - admonition
