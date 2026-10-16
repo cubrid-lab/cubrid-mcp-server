@@ -123,6 +123,12 @@ def test_the_hidden_policy_tests_back_the_static_rules() -> None:
         ("tests/test_x.py", ["token = 'ghp_" + "a" * 30 + "'"], (), "token"),
     ],
 )
+def test_an_open_string_in_kept_code_does_not_hide_an_added_print() -> None:
+    # The hunk starts inside a docstring whose opening quotes are outside it.
+    lines = [("@", "@@"), (" ", "    cleanup steps."), (" ", '    """'), ("+", '    print("x")')]
+    assert ae._stdout_writes(lines) is True
+
+
 def test_policy_rules_fail_closed(
     path: str, added: list[str], removed: tuple[str, ...], rule: str
 ) -> None:

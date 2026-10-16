@@ -721,10 +721,11 @@ def _blank_strings(text: str) -> str:
 
 
 def _calls(lines: list[tuple[str, str]], start: re.Pattern[str]) -> list[str]:
-    """Argument text (strings blanked) of each call ``start`` finds that an added line touches.
+    """Argument text (strings blanked) of each call ``start`` finds on an added line.
 
-    Each hunk's new text (kept and added lines) is read on its own, so a call split
-    over several lines is seen whole and hunks are never joined.
+    Reading starts at each added line and runs to the end of its hunk (kept and
+    added lines), so a call split over several lines is seen whole, a string that
+    opened earlier in kept code cannot swallow it, and hunks are never joined.
     """
     calls = []
     hunks: list[list[tuple[str, str]]] = [[]]
@@ -734,19 +735,15 @@ def _calls(lines: list[tuple[str, str]], start: re.Pattern[str]) -> list[str]:
         elif kind != "-":
             hunks[-1].append((kind, text))
     for hunk in hunks:
-        source = "\n".join(text for _, text in hunk)
-        blank = _blank_strings(source)
-        added, offset = [], 0
-        for kind, text in hunk:
-            if kind == "+":
-                added.append((offset, offset + len(text)))
-            offset += len(text) + 1
-        for match in start.finditer(blank):
-            depth, end = 1, match.end()
-            while end < len(blank) and depth:
-                depth += {"(": 1, ")": -1}.get(blank[end], 0)
-                end += 1
-            if any(a < end and b > match.start() for a, b in added):
+        for index, (kind, first) in enumerate(hunk):
+            if kind != "+":
+                continue
+            blank = _blank_strings("\n".join(text for _, text in hunk[index:]))
+            for match in start.finditer(blank, 0, len(first)):
+                depth, end = 1, match.end()
+                while end < len(blank) and depth:
+                    depth += {"(": 1, ")": -1}.get(blank[end], 0)
+                    end += 1
                 calls.append(blank[match.end() : end])
     return calls
 
