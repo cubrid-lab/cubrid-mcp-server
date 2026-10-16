@@ -1,0 +1,60 @@
+{
+  "allowed_files": [
+    "cubrid_mcp_server/audit.py",
+    "cubrid_mcp_server/safety.py",
+    "tests/test_audit.py",
+    "tests/test_safety.py",
+    "docs/SECURITY_MODEL.md",
+    "docs/TOOLS.md",
+    "docs/ko/SECURITY_MODEL.md",
+    "docs/ko/TOOLS.md",
+    "README.md",
+    "docs/README.ko.md",
+    "SECURITY.md",
+    "CHANGELOG.md"
+  ],
+  "base_sha": "58621d96876f6bda73ff9f9b802c0c7101d0eb80",
+  "changelog": {
+    "section": "Fixed"
+  },
+  "docs": [
+    [
+      "docs/SECURITY_MODEL.md"
+    ],
+    [
+      "docs/TOOLS.md"
+    ]
+  ],
+  "evidence": {
+    "live": "absent",
+    "required_kinds": [
+      "offline"
+    ]
+  },
+  "expected": "An audit record for a statement with leading block or line comments carries the statement's real category (DELETE, UPDATE, INSERT), and neither the comment text nor a literal value appears in the record, which is written only to its stream. Offline evidence; the integration suite would show the audit path against a lab server.",
+  "fix_commit": "2c64d0f74d4a3bb6fa9cc0619e4e5b05a559f492",
+  "hidden_tests": [
+    "test_hidden_audit_category.py",
+    "test_hidden_policy_invariants.py"
+  ],
+  "id": "audit-category-after-comments",
+  "issue": "#179",
+  "non_goals": [
+    "no new audit fields and no raw SQL, comment or literal in the record",
+    "no change to the read-only or write-mode rules"
+  ],
+  "problem": "The opt-in audit log takes a statement's category from its first word, so a statement that starts with a comment (/* ... */ DELETE ..., -- ...\\nUPDATE ...) is recorded under the wrong category, while table identifiers are already read after comments and literals are blanked. Read the category after stripping comments the way CUBRID reads them, and keep the record redacted: no raw SQL, comment text or literal value may reach it. The record stays on stderr.",
+  "required_tests": [
+    "tests/test_audit.py"
+  ],
+  "schema_version": 1,
+  "title": "Read the audit category after leading comments, keeping the record redacted",
+  "validation": {
+    "live": [
+      "python -m pytest -q -p no:cacheprovider -m integration tests/test_integration.py"
+    ],
+    "offline": [
+      "python -m pytest -q -p no:cacheprovider tests/test_audit.py"
+    ]
+  }
+}

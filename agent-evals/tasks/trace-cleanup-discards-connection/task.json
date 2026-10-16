@@ -1,0 +1,56 @@
+{
+  "allowed_files": [
+    "cubrid_mcp_server/database.py",
+    "tests/test_database.py",
+    "tests/test_coverage_gaps.py",
+    "docs/SECURITY_MODEL.md",
+    "docs/TOOLS.md",
+    "docs/ko/SECURITY_MODEL.md",
+    "docs/ko/TOOLS.md",
+    "CHANGELOG.md"
+  ],
+  "base_sha": "7dadb264723205ea25b146db2202025814646781",
+  "changelog": {
+    "section": "Fixed"
+  },
+  "docs": [
+    [
+      "docs/SECURITY_MODEL.md"
+    ],
+    [
+      "docs/TOOLS.md"
+    ]
+  ],
+  "evidence": {
+    "live": "absent",
+    "required_kinds": [
+      "offline"
+    ]
+  },
+  "expected": "With a fake driver, a failure at the cleanup cursor, SET TRACE OFF or the rollback leaves the traced statement's result intact and makes the next call open a new connection; a healthy cleanup keeps the connection. Offline evidence; the session state of a live server is shown only by the integration suite against a lab.",
+  "fix_commit": "739dca082a0026ee9ab8210d546b7f2520741460",
+  "hidden_tests": [
+    "test_hidden_trace_cleanup.py",
+    "test_hidden_policy_invariants.py"
+  ],
+  "id": "trace-cleanup-discards-connection",
+  "issue": "#264",
+  "non_goals": [
+    "no connection pool and no change to timeouts or the read-only rules",
+    "no claim that a live server's session was checked unless a live run is recorded"
+  ],
+  "problem": "explain_query turns tracing on, runs its statement and then turns tracing off and rolls back. A failure to open the cleanup cursor, run SET TRACE OFF or roll back is only logged, so the next tool call can reuse a session with tracing still on or a transaction still open. Retire the connection on the first failed cleanup step so the next call reconnects, keep a healthy connection after a healthy cleanup, and keep the statement's own result and errors as the client sees them. Do not put driver error text or SQL into anything the client receives.",
+  "required_tests": [
+    "tests/test_database.py"
+  ],
+  "schema_version": 1,
+  "title": "Discard the shared connection when explain_query's trace cleanup fails",
+  "validation": {
+    "live": [
+      "python -m pytest -q -p no:cacheprovider -m integration tests/test_integration.py"
+    ],
+    "offline": [
+      "python -m pytest -q -p no:cacheprovider tests/test_database.py tests/test_coverage_gaps.py"
+    ]
+  }
+}

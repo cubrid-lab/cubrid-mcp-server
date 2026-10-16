@@ -1,0 +1,28 @@
+{
+  "applied": true,
+  "base_sha": "7dadb264723205ea25b146db2202025814646781",
+  "commands": [
+    {
+      "command": "python -m pytest -q -p no:cacheprovider tests/test_database.py tests/test_coverage_gaps.py",
+      "exit_code": 0,
+      "kind": "offline",
+      "outcome": "passed"
+    },
+    {
+      "command": "python -m pytest -q -p no:cacheprovider tests/test_hidden_trace_cleanup.py",
+      "exit_code": 0,
+      "kind": "hidden",
+      "outcome": "passed"
+    },
+    {
+      "command": "python -m pytest -q -p no:cacheprovider tests/test_hidden_policy_invariants.py",
+      "exit_code": 0,
+      "kind": "hidden",
+      "outcome": "passed"
+    }
+  ],
+  "network": "disabled",
+  "patch_sha256": "bc2fd2a12269d968bee635546f5a62385ccf1de4139af863d03b90f97fa29229",
+  "schema_version": 1,
+  "task": "trace-cleanup-discards-connection"
+}

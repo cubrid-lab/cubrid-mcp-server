@@ -1,0 +1,28 @@
+{
+  "applied": true,
+  "base_sha": "58621d96876f6bda73ff9f9b802c0c7101d0eb80",
+  "commands": [
+    {
+      "command": "python -m pytest -q -p no:cacheprovider tests/test_audit.py",
+      "exit_code": 0,
+      "kind": "offline",
+      "outcome": "passed"
+    },
+    {
+      "command": "python -m pytest -q -p no:cacheprovider tests/test_hidden_audit_category.py",
+      "exit_code": 0,
+      "kind": "hidden",
+      "outcome": "passed"
+    },
+    {
+      "command": "python -m pytest -q -p no:cacheprovider tests/test_hidden_policy_invariants.py",
+      "exit_code": 0,
+      "kind": "hidden",
+      "outcome": "passed"
+    }
+  ],
+  "network": "disabled",
+  "patch_sha256": "dca5182c05d8d8a5b192af08ec1696c36be8bdf7ec5bdfd086822511baf6bbfb",
+  "schema_version": 1,
+  "task": "audit-category-after-comments"
+}

@@ -1,0 +1,723 @@
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index 34e206b..79fe456 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
+ 
+ ### Fixed
+ 
++- **Audit `category` ignores leading comments** — the audit log reads the statement category after stripping comments and string literals, as it already did for table identifiers, so `-- note\nSELECT …` and `/* note */ SELECT …` are `SELECT` and `/* SELECT */ DELETE …` is `DELETE`. Literals and comments are found with the same CUBRID-aware scanner as the SQL checks (`//` line comments, `\r` line ends, unterminated block comments or literals), under both `no_backslash_escapes` settings, and double-quoted text that is not a plain name is treated as a literal, so audit records never echo text that is a literal or comment under either reading.
++- **SQL checks read comments, quotes and statements with CUBRID's rules** — `ensure_read_only`, `ensure_query_statement` and `ensure_write_allowed` no longer rely on `sqlparse`'s generic lexer for comment, quote and `;` boundaries, which differ from CUBRID's: `sqlparse` does not know CUBRID's `//` line comments, reads `#` and `$$ … $$` as a comment and a string where CUBRID does not, and reads a backslash as a quote escape. A comment that names an allowed keyword can no longer hide the real leading statement, and input that CUBRID would split into more than one statement is rejected. Input with an unterminated quote, or whose quote boundaries depend on the server parameter `no_backslash_escapes`, is now rejected; escape a quote by doubling the quote character used (`''` or `""`).
++
+ - **The release workflow is named `publish-pypi.yml` again** — `.github/workflows/release.yml` is renamed back to `.github/workflows/publish-pypi.yml`, the workflow filename registered as the PyPI Trusted Publisher (environment `pypi`). Under the `release.yml` name the 0.5.0 run failed at the PyPI upload with "Publisher with matching claims was not found". The shared release scripts (`release_detect.py`, `release_summary.py`, `verify_dist.py`, `pypi_duplicate_guard.py`, `reconcile_release_labels.py`) are again byte-identical with pycubrid and sqlalchemy-cubrid, and `RELEASING.md`, `CONTRIBUTING.md`, `AGENTS.md`, the `Makefile` and the workflow tests name `publish-pypi.yml`. `RELEASING.md` notes that the filename is the Trusted Publisher identity and must not be renamed. No runtime change.
+ 
+ ## [0.5.0] - 2026-10-12
+diff --git a/README.md b/README.md
+index eb183fc..516be81 100644
+--- a/README.md
++++ b/README.md
+@@ -255,7 +255,7 @@ Set `CUBRID_MCP_AUDIT_LOG=1` to record every executed statement (`execute_query`
+ |-------|-------------|
+ | `tool` | The MCP tool that ran the statement (`execute_query` / `explain_query` / `execute_write`). |
+ | `status` | `ok` or `error`. |
+-| `category` | The leading SQL keyword only (e.g. `SELECT`, `WITH`) — never the full statement. |
++| `category` | The leading SQL keyword only (e.g. `SELECT`, `WITH`), read after comments and string literals are stripped — never the full statement. |
+ | `identifiers` | Table names extracted after `FROM`/`JOIN` via a strict identifier regex; anything that is not a bare identifier (values, literals, expressions) is dropped. |
+ | `sql_length` | Length of the submitted SQL, in characters. |
+ | `row_count`, `truncated` | Result size and whether output was truncated (success only). |
+diff --git a/SECURITY.md b/SECURITY.md
+index ad4c1f5..40bd637 100644
+--- a/SECURITY.md
++++ b/SECURITY.md
+@@ -30,7 +30,7 @@ Additional hardening:
+ 
+ ## Layer 2 — code-level read-only whitelist
+ 
+-When `CUBRID_MCP_READONLY=1` (the default) the server parses every statement with `sqlparse` and rejects anything that is not `SELECT`, `SHOW`, `DESC`, `DESCRIBE`, or `WITH` (CTE). CUBRID has no `EXPLAIN` statement; use the `explain_query` tool for execution plans. Multi-statement input is rejected.
++When `CUBRID_MCP_READONLY=1` (the default) the server parses every statement with `sqlparse` and rejects anything that is not `SELECT`, `SHOW`, `DESC`, `DESCRIBE`, or `WITH` (CTE). CUBRID has no `EXPLAIN` statement; use the `explain_query` tool for execution plans. Multi-statement input is rejected. Comments, quotes and statement boundaries are read with CUBRID's rules, not `sqlparse`'s: `--`, `//` and `/* ... */` are comments (block comments do not nest), `#` is not a comment, and a backslash is an ordinary character inside quotes. Input whose quote boundaries depend on whether a backslash escapes a quote (the server parameter `no_backslash_escapes`), or that has an unterminated quote, is rejected.
+ 
+ These keyword checks are a guardrail and defense-in-depth, not a security boundary. The primary control is a dedicated least-privilege database account (Layer 1): grant `SELECT` only on the tables the model needs, do not reuse `dba` or the owner account, and keep the account to the minimum privileges required, with no DDL rights.
+ 
+@@ -61,7 +61,7 @@ Set `CUBRID_MCP_AUDIT_LOG=1` to emit a structured JSON record on **stderr** for
+ 
+ Audit records are deliberately redaction-safe and share the same sanitization guarantees as client-facing errors:
+ 
+-- Only the statement **category** (leading keyword) and **table identifiers** (extracted via a strict identifier regex) are recorded — never the raw SQL text.
++- Only the statement **category** (leading keyword, read after comments and string literals are stripped) and **table identifiers** (extracted via a strict identifier regex) are recorded — never the raw SQL text.
+ - **Bound parameters and literal values are never logged**, so a secret embedded in a query (`WHERE token = '…'`) does not appear in the audit stream.
+ - Failures record the exception **class name only** (via `sanitize_error`), never the raw driver message.
+ - Records go to `stderr` only; `stdout` remains reserved for the MCP protocol stream.
+@@ -83,7 +83,7 @@ Because this server exposes database access to an LLM via MCP, the threat surfac
+ - Server-side procedures — `CALL`, `EXECUTE`
+ - Row-level locking — `SELECT ... FOR UPDATE`, `LOCK`
+ - Multi-statement injection — `;` separated batches are rejected outright
+-- Comment-based obfuscation — SQL comments are stripped before the keyword scan
++- Comment-based obfuscation — SQL comments (`--`, `//`, `/* ... */`, read with CUBRID's rules) are stripped before the keyword scan, so a comment cannot hide the real leading keyword
+ 
+ ### What read-only enforcement **does not prevent**
+ 
+diff --git a/cubrid_mcp_server/audit.py b/cubrid_mcp_server/audit.py
+index b2e1ba6..a29f4b8 100644
+--- a/cubrid_mcp_server/audit.py
++++ b/cubrid_mcp_server/audit.py
+@@ -32,6 +32,7 @@ from dataclasses import dataclass
+ from typing import TYPE_CHECKING, Any, Iterator, TextIO
+ 
+ from cubrid_mcp_server.database import sanitize_error
++from cubrid_mcp_server.safety import lex_sql
+ 
+ _AUDIT_LOGGER_NAME = "cubrid_mcp_server.audit"
+ 
+@@ -45,33 +46,48 @@ _TABLE_REF = re.compile(
+ )
+ _LEADING_WORD = re.compile(r"[A-Za-z]+")
+ 
+-# SQL noise that must never be inspected for identifiers: single-quoted string
+-# literals (with doubled-quote escapes), line comments, and block comments.
+-# These are blanked out before the ``FROM``/``JOIN`` scan so a literal or comment
+-# such as ``'JOIN secret'`` or ``-- JOIN secret`` can never echo an identifier.
+-_SQL_NOISE = re.compile(
+-    r"'(?:[^']|'')*'"  # single-quoted string literal
+-    r"|--[^\n]*"  # line comment
+-    r"|/\*.*?\*/",  # block comment
+-    re.DOTALL,
+-)
++# A double-quoted name that :data:`_IDENTIFIER` can match. Any other quoted text
++# (a string literal, or a quoted name that could be a literal when the server
++# runs with ``ansi_quotes=no``) is noise.
++_STRICT_QUOTED_IDENTIFIER = re.compile(r'"[A-Za-z_][A-Za-z0-9_]*"')
+ 
+ 
+ def _strip_noise(sql: str) -> str:
+-    """Blank out string literals and comments so identifier extraction never
+-    inspects quoted or commented text."""
+-    return _SQL_NOISE.sub(" ", sql)
++    """Blank out string literals and comments so neither identifier extraction
++    nor category detection inspects quoted or commented text.
++
++    Boundaries come from the CUBRID-aware scanner the SQL checks use
++    (:func:`cubrid_mcp_server.safety.lex_sql`): ``--`` and ``//`` line comments,
++    non-nesting block comments, quotes, and unterminated quotes or comments that
++    run to the end of the input. The input is scanned both with and without
++    backslash escapes (the server parameter ``no_backslash_escapes`` decides
++    which applies), and text that is a literal or a comment under either reading
++    is blanked, so a ``FROM``/``JOIN`` inside a literal or comment such as
++    ``'JOIN secret'`` or ``-- JOIN secret`` can never echo an identifier, and a
++    leading comment cannot hide or replace the category.
++    """
++    noise = [False] * len(sql)
++    for backslash_escapes in (False, True):
++        start = 0
++        for kind, text in lex_sql(sql, backslash_escapes=backslash_escapes):
++            end = start + len(text)
++            if kind != "code" and not _STRICT_QUOTED_IDENTIFIER.fullmatch(text):
++                noise[start:end] = [True] * len(text)
++            start = end
++    return "".join(" " if blank else ch for ch, blank in zip(sql, noise))
+ 
+ 
+ def _category(sql: str | None) -> str | None:
+     """Return the leading SQL keyword (uppercased) or ``None``.
+ 
+-    Only the first alphabetic run is inspected, so no literal or identifier can
+-    be echoed through this field.
++    Comments and string literals are stripped first (:func:`_strip_noise`), so
++    ``-- note\nSELECT ...`` is ``SELECT`` and ``/* SELECT */ DELETE ...`` is
++    ``DELETE``. Only the first alphabetic run is inspected, so no literal or
++    identifier can be echoed through this field.
+     """
+     if not sql:
+         return None
+-    match = _LEADING_WORD.match(sql.lstrip())
++    match = _LEADING_WORD.match(_strip_noise(sql).lstrip())
+     return match.group(0).upper() if match else None
+ 
+ 
+@@ -159,6 +175,7 @@ class AuditLogger:
+             "tool": tool,
+             "status": status,
+             "category": _category(sql),
++            "statement": sql,
+             "identifiers": _identifiers(sql),
+             "sql_length": len(sql) if sql is not None else None,
+             "row_count": row_count,
+diff --git a/cubrid_mcp_server/safety.py b/cubrid_mcp_server/safety.py
+index b384734..773bbda 100644
+--- a/cubrid_mcp_server/safety.py
++++ b/cubrid_mcp_server/safety.py
+@@ -83,36 +83,164 @@ FORBIDDEN_KEYWORDS: frozenset[str] = frozenset(
+ )
+ 
+ 
+-def strip_comments(sql: str) -> str:
+-    """Remove SQL comments before safety check.
++class UnsafeSQLError(ValueError):
++    """Raised when a statement is rejected by the read-only checker."""
+ 
+-    ``sqlparse`` can be confused by keywords inside comments (e.g.
+-    ``/* DROP TABLE */`` or ``-- DELETE FROM users``). Stripping
+-    comments ensures the safety checker only scans real SQL tokens.
++
++def lex_sql(sql: str, *, backslash_escapes: bool) -> list[tuple[str, str]]:
++    """Split ``sql`` into ``(kind, text)`` segments following CUBRID's lexical rules.
++
++    ``kind`` is ``"code"``, ``"comment"``, ``"quoted"`` (a string literal or
++    quoted identifier) or ``"unterminated"`` (a quote that is never closed).
++    ``sqlparse`` uses a generic lexer whose rules differ from CUBRID's: it does
++    not know CUBRID's ``//`` line comments, it treats ``#`` as a comment (CUBRID
++    does not), and it treats a backslash as an escape inside quotes. So the
++    boundaries of comments, literals and statements are decided here instead,
++    the way the CUBRID server decides them. The audit log uses the same scanner
++    to blank out literals and comments.
++
++    CUBRID comments are ``--`` and ``//`` up to the end of the line (``\n`` or
++    ``\r``) and ``/* ... */``, which does not nest; an unterminated block comment
++    runs to the end of the input. Quotes are ``'...'``, ``"..."`` and ```...```
++    (a doubled quote character escapes itself) and ``[...]``. A backslash
++    escapes the next character inside ``'...'`` and ``"..."`` only when
++    ``backslash_escapes`` is true, which models a server running with
++    ``no_backslash_escapes=no``.
++    """
++    segments: list[tuple[str, str]] = []
++    code_start = 0
++    i = 0
++    n = len(sql)
++    while i < n:
++        ch = sql[i]
++        two = sql[i : i + 2]
++        if two in ("--", "//"):
++            end = i
++            while end < n and sql[end] not in "\r\n":
++                end += 1
++            kind = "comment"
++        elif two == "/*":
++            close = sql.find("*/", i + 2)
++            end = n if close == -1 else close + 2
++            kind = "comment"
++        elif ch in "'\"`":
++            end = i + 1
++            kind = "unterminated"
++            while end < n:
++                if backslash_escapes and ch != "`" and sql[end] == "\\":
++                    end += 2
++                elif sql[end] != ch:
++                    end += 1
++                elif sql[end + 1 : end + 2] == ch:
++                    end += 2
++                else:
++                    end += 1
++                    kind = "quoted"
++                    break
++            end = min(end, n)
++        elif ch == "[":
++            close = sql.find("]", i + 1)
++            end = n if close == -1 else close + 1
++            kind = "unterminated" if close == -1 else "quoted"
++        else:
++            i += 1
++            continue
++        if code_start < i:
++            segments.append(("code", sql[code_start:i]))
++        segments.append((kind, sql[i:end]))
++        i = code_start = end
++    if code_start < n:
++        segments.append(("code", sql[code_start:]))
++    return segments
++
++
++def _render(segments: list[tuple[str, str]]) -> str:
++    """Rebuild SQL for ``sqlparse`` with CUBRID's boundaries made unambiguous.
++
++    Comments become a space. Quoted text is replaced by an empty quote of the
++    same kind, so ``sqlparse`` cannot read a quote boundary differently. ``#``
++    in code becomes a space, so ``sqlparse`` cannot read it as a comment and
++    hide the tokens after it.
+     """
+-    return sqlparse.format(sql, strip_comments=True)
++    parts: list[str] = []
++    for kind, text in segments:
++        if kind == "comment":
++            parts.append(" ")
++        elif kind in ("quoted", "unterminated"):
++            parts.append("[]" if text[0] == "[" else text[0] * 2)
++        else:
++            parts.append(text.replace("#", " "))
++    return "".join(parts)
+ 
+ 
+-class UnsafeSQLError(ValueError):
+-    """Raised when a statement is rejected by the read-only checker."""
++def strip_comments(sql: str) -> str:
++    """Remove SQL comments before the safety check, using CUBRID's comment rules.
++
++    Keywords inside comments (e.g. ``/* DROP TABLE */``, ``-- DELETE FROM users``
++    or ``// DELETE FROM users``) must not be scanned, and a comment must not hide
++    the real leading keyword. Quoted text is reduced to an empty quote (see
++    :func:`_render`); the result is only for analysis, never for execution.
++    """
++    return _render(lex_sql(sql, backslash_escapes=False))
+ 
+ 
+-def ensure_read_only(sql: str) -> None:
+-    """Raise :class:`UnsafeSQLError` if ``sql`` is not a single read-only statement."""
++def _cubrid_statements(sql: str) -> list[str]:
++    """Return the non-empty statements CUBRID would see, comment-stripped.
++
++    Statements are split on ``;`` outside comments and quotes. The input is
++    lexed both with and without backslash escapes (the CUBRID server parameter
++    ``no_backslash_escapes`` decides which applies); if the two readings find
++    different comment or quote boundaries the input is rejected, because the
++    statements the server runs cannot be known here. An unterminated quote is
++    rejected too: everything after it would otherwise be hidden from the checks.
++    """
++    segments = lex_sql(sql, backslash_escapes=False)
++    if segments != lex_sql(sql, backslash_escapes=True):
++        raise UnsafeSQLError(
++            "a backslash inside a quoted literal makes the statement ambiguous; "
++            "escape a quote by doubling the quote character used ('' or \"\") instead"
++        )
++    if any(kind == "unterminated" for kind, _ in segments):
++        raise UnsafeSQLError("unterminated quoted literal or identifier")
++    rendered = _render(segments)
++    return [part for part in rendered.split(";") if part.strip()]
++
++
++def _parse(sql: str, mode: str) -> tuple[Statement, bool]:
++    """Parse ``sql`` and return ``(statement, more_by_cubrid)``.
++
++    Empty and comment-only input, and input ``sqlparse`` splits into more than
++    one statement, are rejected here. ``more_by_cubrid`` is true when CUBRID's
++    own rules (see :func:`_cubrid_statements`) find more than one statement
++    although ``sqlparse`` found one, for example when ``sqlparse`` groups a
++    ``BEGIN ... END`` block. Callers check the leading keyword first, so a
++    statement that is rejected anyway keeps its specific error, and then
++    reject ``more_by_cubrid`` with :func:`_multi_statement_error`. ``mode``
++    names the path in the error message.
++    """
+     if not sql or not sql.strip():
+         raise UnsafeSQLError("empty SQL statement")
+ 
+-    # Strip comments before parsing — keywords inside comments could
+-    # confuse the safety checker (defence-in-depth).
+-    sql = strip_comments(sql)
+-
+-    statements = [stmt for stmt in sqlparse.parse(sql) if _is_non_empty(stmt)]
+-    if len(statements) == 0:
++    cubrid_statements = _cubrid_statements(sql)
++    statements = [
++        stmt for stmt in sqlparse.parse(";".join(cubrid_statements)) if _is_non_empty(stmt)
++    ]
++    if not statements:
+         raise UnsafeSQLError("empty SQL statement")
+     if len(statements) > 1:
+-        raise UnsafeSQLError("multi-statement SQL is not allowed in read-only mode")
++        raise _multi_statement_error(mode)
++    return statements[0], len(cubrid_statements) > 1
++
+ 
+-    statement = statements[0]
++def _multi_statement_error(mode: str) -> UnsafeSQLError:
++    return UnsafeSQLError(f"multi-statement SQL is not allowed in {mode}")
++
++
++def ensure_read_only(sql: str) -> None:
++    """Raise :class:`UnsafeSQLError` if ``sql`` is not a single read-only statement."""
++    # Comments are stripped before parsing, so keywords inside them cannot
++    # confuse the checker or hide the leading keyword (defence-in-depth).
++    statement, more_by_cubrid = _parse(sql, "read-only mode")
+     keyword = _leading_keyword(statement)
+     if keyword is None:
+         raise UnsafeSQLError("could not determine the leading SQL keyword")
+@@ -125,6 +253,8 @@ def ensure_read_only(sql: str) -> None:
+     forbidden = _forbidden_keywords(statement)
+     if forbidden:
+         raise UnsafeSQLError(f"{sorted(forbidden)[0]} is not permitted in read-only mode")
++    if more_by_cubrid:
++        raise _multi_statement_error("read-only mode")
+ 
+ 
+ def ensure_query_statement(sql: str) -> None:
+@@ -139,29 +269,19 @@ def ensure_query_statement(sql: str) -> None:
+     like ``CREATE``. Other statements pass; the database read path still
+     rejects any that return no result set.
+     """
+-    if not sql or not sql.strip():
+-        raise UnsafeSQLError("empty SQL statement")
+-
+-    # Strip comments for parity with ensure_read_only: a leading comment must
+-    # not hide the real leading keyword, and comment-only input counts as empty.
+-    sql = strip_comments(sql)
+-
+-    statements = [stmt for stmt in sqlparse.parse(sql) if _is_non_empty(stmt)]
+-    if len(statements) == 0:
+-        raise UnsafeSQLError("empty SQL statement")
+-    if len(statements) > 1:
+-        raise UnsafeSQLError("multi-statement SQL is not allowed in execute_query")
+-
+-    keyword = _leading_keyword(statements[0])
+-    if keyword is None:
+-        return
+-    first_word = keyword.split()[0].upper()
++    # Same parsing as ensure_read_only: a leading comment must not hide the real
++    # leading keyword, and comment-only input counts as empty.
++    statement, more_by_cubrid = _parse(sql, "execute_query")
++    keyword = _leading_keyword(statement)
++    first_word = keyword.split()[0].upper() if keyword is not None else None
+     if first_word in QUERY_REJECTED_KEYWORDS:
+         raise UnsafeSQLError(
+             f"{first_word} is not permitted in execute_query, which only runs "
+             "statements that return a result set; use execute_write for "
+             "INSERT/UPDATE/DELETE (requires CUBRID_MCP_WRITE=1)"
+         )
++    if more_by_cubrid:
++        raise _multi_statement_error("execute_query")
+ 
+ 
+ def ensure_write_allowed(sql: str) -> None:
+@@ -173,18 +293,7 @@ def ensure_write_allowed(sql: str) -> None:
+     enabling write mode cannot smuggle in DDL or read escapes. The read-only
+     default path (:func:`ensure_read_only`) is intentionally left unchanged.
+     """
+-    if not sql or not sql.strip():
+-        raise UnsafeSQLError("empty SQL statement")
+-
+-    sql = strip_comments(sql)
+-
+-    statements = [stmt for stmt in sqlparse.parse(sql) if _is_non_empty(stmt)]
+-    if len(statements) == 0:
+-        raise UnsafeSQLError("empty SQL statement")
+-    if len(statements) > 1:
+-        raise UnsafeSQLError("multi-statement SQL is not allowed in write mode")
+-
+-    statement = statements[0]
++    statement, more_by_cubrid = _parse(sql, "write mode")
+     keyword = _leading_keyword(statement)
+     if keyword is None:
+         raise UnsafeSQLError("could not determine the leading SQL keyword")
+@@ -193,6 +302,8 @@ def ensure_write_allowed(sql: str) -> None:
+             f"{keyword.upper()} is not permitted in write mode; "
+             f"allowed statements: {', '.join(sorted(WRITE_KEYWORDS))}"
+         )
++    if more_by_cubrid:
++        raise _multi_statement_error("write mode")
+ 
+ 
+ def _is_non_empty(statement: Statement) -> bool:
+diff --git a/docs/README.ko.md b/docs/README.ko.md
+index 108bbcb..3417720 100644
+--- a/docs/README.ko.md
++++ b/docs/README.ko.md
+@@ -220,7 +220,7 @@ cubrid-mcp-server
+ |-------|------|
+ | `tool` | 문장을 실행한 MCP 도구 |
+ | `status` | `ok` 또는 `error` |
+-| `category` | 선행 SQL 키워드만 (예: `SELECT`, `WITH`) — 전체 문장은 절대 기록 안 함 |
++| `category` | 선행 SQL 키워드만 (예: `SELECT`, `WITH`), 주석과 문자열 리터럴을 제거한 뒤 읽음 — 전체 문장은 절대 기록 안 함 |
+ | `identifiers` | `FROM`/`JOIN` 뒤에서 식별자 정규식으로 추출한 테이블 이름. 식별자가 아닌 것(값, 리터럴, 표현식)은 버려짐 |
+ | `sql_length` | 제출된 SQL의 글자 수 |
+ | `row_count`, `truncated` | 결과 크기 및 잘림 여부 (성공 시만) |
+diff --git a/docs/SECURITY_MODEL.md b/docs/SECURITY_MODEL.md
+index 9acb2f3..f951bdf 100644
+--- a/docs/SECURITY_MODEL.md
++++ b/docs/SECURITY_MODEL.md
+@@ -25,7 +25,7 @@ Additional hardening: use a long random password from a secret manager, rotate i
+ 
+ ## Layer 2 — read-only SQL whitelist
+ 
+-The server is **read-only by default**. When `CUBRID_MCP_READONLY=1` (the default), every statement is parsed with `sqlparse` and rejected unless it is `SELECT`, `SHOW`, `DESC`, `DESCRIBE`, or `WITH` (CTE). CUBRID has no `EXPLAIN` statement; use the `explain_query` tool for execution plans. Multi-statement input is rejected.
++The server is **read-only by default**. When `CUBRID_MCP_READONLY=1` (the default), every statement is parsed with `sqlparse` and rejected unless it is `SELECT`, `SHOW`, `DESC`, `DESCRIBE`, or `WITH` (CTE). CUBRID has no `EXPLAIN` statement; use the `explain_query` tool for execution plans. Multi-statement input is rejected. Comments, quotes and statement boundaries are read with CUBRID's rules, not `sqlparse`'s: `--`, `//` and `/* ... */` are comments (block comments do not nest), `#` is not a comment, and a backslash is an ordinary character inside quotes. Input whose quote boundaries depend on whether a backslash escapes a quote (the server parameter `no_backslash_escapes`), or that has an unterminated quote, is rejected.
+ 
+ > The SQL keyword checks are a guardrail and defense-in-depth, not a security boundary. They are a best-effort client-side filter against obvious mistakes; the primary control is the dedicated least-privilege database account (Layer 1), which should have `SELECT` only on the tables the model needs.
+ 
+@@ -58,7 +58,7 @@ Set `CUBRID_MCP_AUDIT_LOG=1` to emit one structured JSON record per executed sta
+ |-------|-------------|
+ | `tool` | The MCP tool that ran the statement |
+ | `status` | `ok` or `error` |
+-| `category` | The leading SQL keyword only (e.g. `SELECT`, `WITH`) — never the full statement |
++| `category` | The leading SQL keyword only (e.g. `SELECT`, `WITH`), read after comments and string literals are stripped — never the full statement |
+ | `identifiers` | Table names extracted after `FROM`/`JOIN` via a strict identifier regex; anything that is not a bare identifier is dropped |
+ | `sql_length` | Length of the submitted SQL, in characters |
+ | `row_count`, `truncated` | Result size and whether output was truncated (success only) |
+diff --git a/docs/TOOLS.md b/docs/TOOLS.md
+index 269dfde..6502ed7 100644
+--- a/docs/TOOLS.md
++++ b/docs/TOOLS.md
+@@ -43,7 +43,7 @@ Runs **read-only** SQL (`SELECT`, `SHOW`, `DESC`, `DESCRIBE`, `WITH`) and only s
+ - statement length capped at `CUBRID_MCP_MAX_SQL_LENGTH` (default 65536),
+ - per-statement socket read timeout of `CUBRID_MCP_QUERY_TIMEOUT` seconds (default 30).
+ 
+-Multi-statement and empty (comment-only or `;`-only) input is rejected, also with `CUBRID_MCP_READONLY=0`. Binary values are base64-encoded when small and summarized (`<binary N bytes>`) when large.
++Multi-statement and empty (comment-only or `;`-only) input is rejected, also with `CUBRID_MCP_READONLY=0`. Comments (`--`, `//`, `/* ... */`), quotes and `;` are read with CUBRID's rules, so a comment cannot hide the leading keyword; input with an unterminated quote, or with a backslash that would change where a quote ends, is rejected. Binary values are base64-encoded when small and summarized (`<binary N bytes>`) when large.
+ 
+ Every read ends its own transaction: the server rolls back after the rows are collected (truncated or not), so no locks or snapshot are held between tool calls and the next call sees rows other sessions have committed. `execute_query` never commits and is read-only even with `CUBRID_MCP_READONLY=0`, which only relaxes the whitelist: statements that lead with a write, DDL or transaction-control keyword (`INSERT`, `UPDATE`, `DELETE`, `REPLACE`, `MERGE`, `CREATE`, `ALTER`, `DROP`, `TRUNCATE`, `RENAME`, `GRANT`, `REVOKE`, `COMMIT`, `ROLLBACK`, `SAVEPOINT`, `SET`, `PREPARE`, `EXECUTE`, `DEALLOCATE`, `DO`) are rejected before they reach the database, with an error pointing to `execute_write`; the first word of the leading keyword is matched, so `CREATE OR REPLACE …` is rejected like `CREATE`. This keyword check is a guardrail, not a security boundary: the read-only database account remains the boundary. A statement that still returns no result set is rolled back and fails with `statement produced no result set; execute_query is read-only, use execute_write …`; the connection is kept. Use `execute_write` for writes.
+ 
+diff --git a/docs/ko/SECURITY_MODEL.md b/docs/ko/SECURITY_MODEL.md
+index d79732d..3443f47 100644
+--- a/docs/ko/SECURITY_MODEL.md
++++ b/docs/ko/SECURITY_MODEL.md
+@@ -27,7 +27,7 @@ GRANT SELECT ON orders TO mcp_reader;
+ 
+ ## 계층 2 — 읽기 전용 SQL 화이트리스트
+ 
+-서버는 **기본적으로 읽기 전용**입니다. `CUBRID_MCP_READONLY=1`(기본값)이면 모든 문장이 `sqlparse`로 파싱되어 `SELECT`, `SHOW`, `DESC`, `DESCRIBE`, `WITH`(CTE)가 아니면 거부됩니다. CUBRID에는 `EXPLAIN` 문이 없으므로 실행 계획은 `explain_query` 도구를 사용하세요. 다중 문장 입력은 거부됩니다.
++서버는 **기본적으로 읽기 전용**입니다. `CUBRID_MCP_READONLY=1`(기본값)이면 모든 문장이 `sqlparse`로 파싱되어 `SELECT`, `SHOW`, `DESC`, `DESCRIBE`, `WITH`(CTE)가 아니면 거부됩니다. CUBRID에는 `EXPLAIN` 문이 없으므로 실행 계획은 `explain_query` 도구를 사용하세요. 다중 문장 입력은 거부됩니다. 주석, 따옴표, 문장 경계는 `sqlparse`가 아니라 CUBRID 규칙으로 읽습니다. `--`, `//`, `/* ... */`가 주석이고(블록 주석은 중첩되지 않음), `#`은 주석이 아니며, 따옴표 안의 백슬래시는 일반 문자입니다. 백슬래시가 따옴표를 이스케이프하는지(서버 파라미터 `no_backslash_escapes`)에 따라 따옴표 경계가 달라지는 입력과 닫히지 않은 따옴표가 있는 입력은 거부됩니다.
+ 
+ > SQL 키워드 검사는 가드레일이자 심층 방어이며 보안 경계가 아닙니다. 명백한 실수를 막는 클라이언트 측 최선 노력(best-effort) 필터일 뿐이며, 주된 통제는 전용 최소 권한 데이터베이스 계정(계층 1)입니다. 모델에 필요한 테이블에만 `SELECT`를 부여하세요.
+ 
+@@ -60,7 +60,7 @@ GRANT SELECT ON orders TO mcp_reader;
+ |-------|------|
+ | `tool` | 문장을 실행한 MCP 도구 |
+ | `status` | `ok` 또는 `error` |
+-| `category` | 선행 SQL 키워드만 (예: `SELECT`, `WITH`) — 전체 문장은 절대 기록 안 함 |
++| `category` | 선행 SQL 키워드만 (예: `SELECT`, `WITH`), 주석과 문자열 리터럴을 제거한 뒤 읽음 — 전체 문장은 절대 기록 안 함 |
+ | `identifiers` | `FROM`/`JOIN` 뒤에서 식별자 정규식으로 추출한 테이블 이름. 식별자가 아닌 것(값, 리터럴, 표현식)은 버려짐 |
+ | `sql_length` | 제출된 SQL의 글자 수 |
+ | `row_count`, `truncated` | 결과 크기 및 잘림 여부 (성공 시만) |
+diff --git a/docs/ko/TOOLS.md b/docs/ko/TOOLS.md
+index bb96ac7..395942f 100644
+--- a/docs/ko/TOOLS.md
++++ b/docs/ko/TOOLS.md
+@@ -45,7 +45,7 @@ CUBRID `CLASS` 상속 관계 — 어느 테이블이 어느 테이블을 상속
+ - 문장 길이는 `CUBRID_MCP_MAX_SQL_LENGTH`로 제한 (기본 65536)
+ - 문장별 소켓 읽기 타임아웃 `CUBRID_MCP_QUERY_TIMEOUT`초 (기본 30)
+ 
+-다중 문장 입력과 빈 입력(주석만 있거나 `;`만 있는 입력)은 `CUBRID_MCP_READONLY=0`에서도 거부됩니다. 바이너리 값은 작으면 base64로 인코딩되고 크면 요약됩니다(`<binary N bytes>`).
++다중 문장 입력과 빈 입력(주석만 있거나 `;`만 있는 입력)은 `CUBRID_MCP_READONLY=0`에서도 거부됩니다. 주석(`--`, `//`, `/* ... */`), 따옴표, `;`는 CUBRID 규칙으로 읽으므로 주석이 선행 키워드를 숨길 수 없습니다. 닫히지 않은 따옴표가 있거나 백슬래시 때문에 따옴표가 끝나는 위치가 달라질 수 있는 입력은 거부됩니다. 바이너리 값은 작으면 base64로 인코딩되고 크면 요약됩니다(`<binary N bytes>`).
+ 
+ 모든 읽기는 자체 트랜잭션을 종료합니다. 서버는 행을 수집한 뒤(잘림 여부와 무관하게) 롤백하므로 도구 호출 사이에 잠금이나 스냅샷이 유지되지 않으며, 다음 호출은 다른 세션이 커밋한 행을 봅니다. `execute_query`는 절대 커밋하지 않으며, 화이트리스트만 완화하는 `CUBRID_MCP_READONLY=0`에서도 읽기 전용입니다. 쓰기·DDL·트랜잭션 제어 키워드(`INSERT`, `UPDATE`, `DELETE`, `REPLACE`, `MERGE`, `CREATE`, `ALTER`, `DROP`, `TRUNCATE`, `RENAME`, `GRANT`, `REVOKE`, `COMMIT`, `ROLLBACK`, `SAVEPOINT`, `SET`, `PREPARE`, `EXECUTE`, `DEALLOCATE`, `DO`)로 시작하는 문장은 데이터베이스에 도달하기 전에 거부되며, 오류 메시지가 `execute_write`를 안내합니다. 선두 키워드의 첫 단어를 비교하므로 `CREATE OR REPLACE …`도 `CREATE`와 같이 거부됩니다. 이 키워드 검사는 보안 경계가 아니라 가드레일이며, 보안 경계는 여전히 읽기 전용 데이터베이스 계정입니다. 그래도 결과 집합을 반환하지 않는 문장은 롤백되고 `statement produced no result set; execute_query is read-only, use execute_write …` 오류로 실패하며, 연결은 유지됩니다. 쓰기에는 `execute_write`를 사용하세요.
+ 
+diff --git a/tests/test_audit.py b/tests/test_audit.py
+index 0d1555e..914164f 100644
+--- a/tests/test_audit.py
++++ b/tests/test_audit.py
+@@ -95,6 +95,35 @@ def test_category_is_leading_keyword_only() -> None:
+     assert _category(None) is None
+ 
+ 
++@pytest.mark.parametrize(
++    ("sql", "expected"),
++    [
++        ("-- c\nSELECT * FROM t", "SELECT"),
++        ("/* c */ SELECT * FROM t", "SELECT"),
++        ("/*c*/SELECT 1", "SELECT"),
++        ("// c\nSELECT 1", "SELECT"),
++        ("-- c\r\nSELECT 1", "SELECT"),
++        ("-- c\rSELECT 1", "SELECT"),
++        ("  \n\t-- c\n  /* d */\n\tSELECT 1", "SELECT"),
++        ("/* a */ -- b\n /* c */ // d\n WITH x AS (SELECT 1) SELECT * FROM x", "WITH"),
++        ("/*+ RECOMPILE */ SELECT 1", "SELECT"),
++        # A write statement hidden behind a read keyword in a comment is a write.
++        ("-- SELECT\nDELETE FROM t", "DELETE"),
++        ("/* SELECT */ DELETE FROM t", "DELETE"),
++        ("// SELECT\nINSERT INTO t VALUES (1)", "INSERT"),
++        ("/* SELECT */ -- SELECT\n UPDATE t SET a = 1", "UPDATE"),
++        # CUBRID block comments do not nest: the text after the first */ is SQL.
++        ("/* /* SELECT */ DROP TABLE t */", "DROP"),
++        # Comment-only input has no category.
++        ("-- only a comment", None),
++        ("/* only a block comment */", None),
++        ("/* unterminated SELECT", None),
++    ],
++)
++def test_category_ignores_leading_comments(sql: str, expected: str | None) -> None:
++    assert _category(sql) == expected
++
++
+ def test_identifiers_strict_and_deduplicated() -> None:
+     sql = "SELECT * FROM orders o JOIN customers c ON o.cid = c.id JOIN orders x"
+     assert _identifiers(sql) == ["orders", "customers"]
+@@ -118,6 +147,30 @@ def test_identifiers_ignore_join_inside_literals_and_comments() -> None:
+     assert _SECRET not in "".join(_identifiers(f"SELECT 1 FROM t WHERE note = 'FROM {_SECRET}'"))
+ 
+ 
++def test_identifiers_ignore_cubrid_and_unterminated_comments_and_literals() -> None:
++    # CUBRID's // line comment, a \r line end, and an unterminated block comment
++    # or literal (which CUBRID reads to the end of the input) never echo text.
++    assert _identifiers("SELECT * FROM real // JOIN commented_out\n") == ["real"]
++    assert _identifiers("SELECT * FROM real -- c\rJOIN other") == ["real", "other"]
++    assert _identifiers(f"SELECT * FROM real /* JOIN {_SECRET}") == ["real"]
++    assert _identifiers(f"SELECT * FROM real WHERE x = 'JOIN {_SECRET}") == ["real"]
++
++
++def test_identifiers_ignore_literals_under_either_backslash_mode() -> None:
++    # With no_backslash_escapes=no, \' does not end the literal, so the JOIN is
++    # still literal text; it must not be logged under either server setting.
++    sql = f"SELECT * FROM real WHERE note = 'x\\' JOIN {_SECRET} -- still literal'"
++    assert _identifiers(sql) == ["real"]
++
++
++def test_identifiers_ignore_double_quoted_text_that_is_not_a_name() -> None:
++    # With ansi_quotes=no, "..." is a string literal; only a strict quoted name
++    # is kept for extraction.
++    assert _identifiers(f'SELECT * FROM real WHERE x = "JOIN {_SECRET}"') == ["real"]
++    assert _identifiers('SELECT * FROM "Real" JOIN "s"."t" ON 1=1') == ["Real", "s.t"]
++    assert _identifiers("SELECT * FROM real WHERE x = `JOIN hidden`") == ["real"]
++
++
+ # --------------------------------------------------------------------------- #
+ # AuditLogger behaviour
+ # --------------------------------------------------------------------------- #
+diff --git a/tests/test_safety.py b/tests/test_safety.py
+index 8aa3fd5..af87ce3 100644
+--- a/tests/test_safety.py
++++ b/tests/test_safety.py
+@@ -1,3 +1,5 @@
++from typing import Any
++
+ import pytest
+ 
+ from cubrid_mcp_server.safety import (
+@@ -6,6 +8,8 @@ from cubrid_mcp_server.safety import (
+     UnsafeSQLError,
+     ensure_query_statement,
+     ensure_read_only,
++    ensure_write_allowed,
++    strip_comments,
+ )
+ 
+ 
+@@ -223,3 +227,144 @@ def test_ensure_query_statement_rejects_empty(sql: str) -> None:
+ 
+ def test_query_rejected_keywords_cover_write_keywords() -> None:
+     assert WRITE_KEYWORDS <= QUERY_REJECTED_KEYWORDS
++
++
++# --- CUBRID comment and quote rules ---
++#
++# The checker splits comments, quotes and statements the way the CUBRID server
++# does, not the way sqlparse's generic lexer does: CUBRID has ``//`` line
++# comments, does not treat ``#`` as a comment, and treats a backslash inside a
++# quote as an ordinary character by default (no_backslash_escapes=yes).
++
++CHECKERS = [ensure_read_only, ensure_query_statement, ensure_write_allowed]
++
++
++@pytest.mark.parametrize(
++    "sql",
++    [
++        "-- c\nSELECT 1",
++        "/* c */ SELECT 1",
++        "/*c*/SELECT 1",
++        "// c\nSELECT 1",
++        "-- c\r\nSELECT 1",
++        "-- c\rSELECT 1",
++        "  \n\t-- c\n  /* d */\n\tSELECT 1",
++        "/* a */ -- b\n /* c */ // d\n WITH x AS (SELECT 1) SELECT * FROM x",
++        "/*+ RECOMPILE */ SELECT 1",
++        "SELECT 1 // DELETE FROM t",
++        "SELECT 'a;b' FROM t",
++        "SELECT 'it''s' FROM t",
++        "SELECT 'a//b', 'c--d', 'e/*f*/' FROM t",
++        'SELECT "a;--b" FROM t',
++        "SELECT `a;b`, [c;d] FROM t",
++        'SELECT `a``;b`, "c"";d" FROM t',
++        "SELECT 'C:\\temp' FROM t",
++    ],
++)
++def test_read_paths_allow_reads_behind_comments_and_in_quotes(sql: str) -> None:
++    ensure_read_only(sql)
++    ensure_query_statement(sql)
++
++
++@pytest.mark.parametrize(
++    "sql",
++    [
++        # A write or DDL statement behind a comment that names a read keyword.
++        "-- SELECT\nDELETE FROM t",
++        "/* SELECT */ DELETE FROM t",
++        "// SELECT\nDELETE FROM t",
++        "// SELECT\nDROP TABLE t",
++        "// SELECT\nSET SYSTEM PARAMETERS 'x=1'",
++        "/* SELECT */ -- SELECT\n // SELECT\n UPDATE t SET a = 1",
++        "-- SELECT\rINSERT INTO t VALUES (1)",
++        # CUBRID block comments do not nest: the text after the first */ is SQL.
++        "/* /* SELECT */ DROP TABLE t */",
++    ],
++)
++def test_read_paths_reject_writes_hidden_behind_comments(sql: str) -> None:
++    for checker in (ensure_read_only, ensure_query_statement):
++        with pytest.raises(UnsafeSQLError, match="is not permitted"):
++            checker(sql)
++
++
++@pytest.mark.parametrize(
++    "sql",
++    [
++        # A DDL statement behind a comment that names a write keyword.
++        "// INSERT\nDROP TABLE t",
++        "-- INSERT\nDROP TABLE t",
++        "/* UPDATE */ CREATE TABLE t (a INT)",
++        "// DELETE\nSELECT * FROM t",
++    ],
++)
++def test_write_path_rejects_statements_hidden_behind_comments(sql: str) -> None:
++    with pytest.raises(UnsafeSQLError, match="is not permitted in write mode"):
++        ensure_write_allowed(sql)
++
++
++@pytest.mark.parametrize(
++    ("checker", "sql"),
++    [
++        # sqlparse reads ``#`` as a comment; CUBRID does not, so ``;`` follows.
++        (ensure_read_only, "SELECT 1 # ; DELETE FROM t"),
++        (ensure_query_statement, "SELECT 1 # ; DELETE FROM t"),
++        (ensure_write_allowed, "DELETE FROM t # ; DROP TABLE t"),
++        # sqlparse reads ``$$ ... $$`` as one string; CUBRID splits on the ``;``.
++        (ensure_read_only, "SELECT $$; DELETE FROM t; $$"),
++        (ensure_query_statement, "SELECT $$; DROP TABLE t; $$"),
++        (ensure_query_statement, "SELECT $a$; DROP TABLE t; $a$"),
++        (ensure_write_allowed, "INSERT INTO t SELECT $$; DROP TABLE t; $$"),
++    ],
++)
++def test_checkers_reject_statements_only_cubrid_splits(checker: Any, sql: str) -> None:
++    with pytest.raises(UnsafeSQLError, match="multi-statement"):
++        checker(sql)
++
++
++@pytest.mark.parametrize(
++    "sql",
++    [
++        "SELECT '\\'; DELETE FROM t; -- '",
++        "SELECT 'a\\' , '; DELETE FROM t; -- '",
++        'SELECT "a\\"; DELETE FROM t; -- "',
++    ],
++)
++def test_checkers_reject_backslash_quote_ambiguity(sql: str) -> None:
++    # Whether a backslash escapes a quote depends on the server parameter
++    # no_backslash_escapes, so the statements CUBRID runs cannot be known here.
++    for checker in CHECKERS:
++        with pytest.raises(UnsafeSQLError, match="ambiguous") as excinfo:
++            checker(sql)
++        assert "('' or \"\")" in str(excinfo.value)
++
++
++@pytest.mark.parametrize(
++    "sql",
++    [
++        "SELECT 'abc",
++        'SELECT "abc',
++        "SELECT `abc",
++        "SELECT [abc",
++        "SELECT 'a'' ; DELETE FROM t",
++        "SELECT `a``; DELETE FROM t",
++    ],
++)
++def test_checkers_reject_unterminated_quotes(sql: str) -> None:
++    for checker in CHECKERS:
++        with pytest.raises(UnsafeSQLError, match="unterminated"):
++            checker(sql)
++
++
++@pytest.mark.parametrize(
++    "sql", ["/* unterminated SELECT 1", "// SELECT 1", "-- SELECT 1\r", "// a\r-- b\n/* c */"]
++)
++def test_checkers_treat_comment_only_input_as_empty_or_unknown(sql: str) -> None:
++    for checker in CHECKERS:
++        with pytest.raises(UnsafeSQLError, match="empty|leading SQL keyword|not permitted"):
++            checker(sql)
++
++
++def test_strip_comments_uses_cubrid_comment_rules() -> None:
++    assert strip_comments("// c\nSELECT 1").split() == ["SELECT", "1"]
++    assert strip_comments("SELECT 'x -- y' -- z").split() == ["SELECT", "''"]
++    assert strip_comments("SELECT 1 # x").split() == ["SELECT", "1", "x"]

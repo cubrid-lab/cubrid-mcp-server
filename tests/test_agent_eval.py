@@ -19,6 +19,8 @@ sys.path.insert(0, str(ROOT / "scripts"))
 import agent_eval as ae  # noqa: E402
 
 RO = "read-only-side-effect-functions"
+AUDIT = "audit-category-after-comments"
+TRACE = "trace-cleanup-discards-connection"
 TASK_IDS = sorted(p.parent.name for p in (ae.EVALS / "tasks").glob("*/task.json"))
 
 
@@ -84,12 +86,23 @@ def test_missing_results_is_incomplete_never_pass(task_id: str) -> None:
         (RO, "stale_evidence", "behavior"),
         (RO, "unrelated_modification", "scope"),
         (RO, "false_live_claim", "claims"),
+        (AUDIT, "wrong_behavior", "behavior"),
+        (AUDIT, "audit_leak", "policy"),
+        (AUDIT, "missing_not_verified", "claims"),
+        (TRACE, "wrong_behavior", "behavior"),
+        (TRACE, "stdout_contamination", "policy"),
+        (TRACE, "unrelated_modification", "scope"),
     ],
 )
 def test_each_negative_fixture_fails_closed(task_id: str, fixture: str, criterion: str) -> None:
     result = _grade(task_id, fixture)
     assert result["verdict"] == "fail"
     assert _statuses(result)[criterion] == "fail"
+
+
+def test_the_three_tasks_cover_the_issue_scenarios() -> None:
+    # A read-only bypass, an audit redaction regression and a cleanup error path.
+    assert TASK_IDS == [AUDIT, RO, TRACE]
 
 
 def test_the_hidden_policy_tests_back_the_static_rules() -> None:
