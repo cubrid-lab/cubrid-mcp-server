@@ -120,10 +120,81 @@ second production release PR.
   `gh api graphql -f query='{repository(owner:"cubrid-lab",name:"cubrid-mcp-server"){pullRequest(number:<N>){closingIssuesReferences(first:50){nodes{number state}}}}}'`.
   Anything listed (for example a link added by hand in the Development
   sidebar) has to be handled before the merge.
-- **Start CI after the final bot update.** GITHUB_TOKEN events do not trigger
-  other workflows. Close/reopen the candidate with your own account or push a
-  reviewed commit. No PAT/App credential is introduced. Require all usual PR
-  checks at the final head and run `make release-check VERSION=X.Y.Z` after edits.
+- **Start CI after the final bot update.** A push made with GITHUB_TOKEN does
+  not start an ordinary CI run. Check what actually happened at the final head
+  (see the [release review checklist](#release-review-checklist)): observed on
+  2026-10-16 for candidate #339 (`ec87bde`), every `pull_request` workflow
+  created a run that ended `action_required` and no check runs exist, which
+  means the runs wait for a maintainer, not that CI passed. Start CI with your
+  own account: approve the waiting runs where GitHub offers that (the run page
+  in the Actions tab), or push a reviewed commit. Close/reopen the candidate
+  only when the checklist shows no run at all. No PAT/App credential is
+  introduced, and the registered publisher workflow and environment are never
+  renamed to obtain a run. Require all usual PR checks at the final head and run
+  `make release-check VERSION=X.Y.Z` after edits.
+
+#### Release review checklist
+
+Before merging a release PR, record these in the candidate's PR (one
+maintainer comment is enough). A generated candidate is a proposal: generating
+it is neither a bug nor approval to release.
+
+1. **Candidate identity.** The release PR number, its base (`main` at the
+   generator's SHA) and its final head SHA. Every later item refers to that
+   head; evidence for an earlier head is stale, unless the PR's change
+   against `main` is identical at both.
+2. **CI state at the final head.** For each required check, which of these it
+   is, from `gh api repos/cubrid-lab/cubrid-mcp-server/commits/<head>/check-runs`
+   and `gh api "repos/cubrid-lab/cubrid-mcp-server/actions/runs?head_sha=<head>"`:
+   - *missing*: no run and no check run exists for the head;
+   - *approval required*: the run exists with conclusion `action_required`;
+   - *running* or *queued*;
+   - *failed*, *cancelled* or *timed out*;
+   - *successful*.
+
+   Only *successful* at the final head counts. The others are not a pass and
+   never a reason to loosen a gate, add a PAT, rename the registered
+   `publish-pypi.yml` or its environment, or close and reopen the PR without
+   checking first.
+3. **Review evidence.** The submitted review of the final head that the
+   repository requires, and the disposition of every finding.
+4. **Impact classification.** What actually changed for users since the last
+   published tag: tools, resources, prompts, configuration, read-only safety,
+   dependencies and supported versions, classified under the Semantic
+   Versioning statement in [`CHANGELOG.md`](CHANGELOG.md) (not by commit type
+   alone). While the version is 0.x, a breaking change can ship in a minor
+   release; the curated Upgrade notes must then say what users change.
+   `__version__` and both `.mcpb/server.json` versions agree
+   (`make release-check`), and the existing `serverInfo` version tests pass.
+5. **Release purpose.** Whether there is a user-facing reason to publish now.
+   A candidate with only documentation or internal changes may stay pending;
+   a documentation-only release is still possible when it helps users (for
+   example, corrected setup or safety instructions).
+
+After the merge, the release is complete when the publisher evidence shows
+both publication and post-publication verification for the same tag, release
+SHA and version:
+
+- the `publish-pypi.yml` run at the merge SHA (or a `resume` dispatch for that
+  tag) reports `published and verified`; or
+- that run reports `published; post-release verification failed`, and a later
+  [`verify-only` dispatch](#recovery-dispatch-the-only-manual-entry-point) for
+  the same tag reports `verification only of vX.Y.Z: success`. Such a recovery
+  run can come from a newer workflow commit; its summary has no artifact
+  hashes or publication URLs, so pair it with the original run's.
+
+Record from those summaries (do not rebuild or re-verify by another tool):
+the tag and the SHA it points at, the exact package version, the verified
+wheel file name and SHA-256 and the PyPI and GitHub Release URLs (from the
+publishing run), and the successful cookbook verification run. Keep the
+package version apart from the versions of FastMCP, of any MCP client and of
+any registry tool. The `.mcpb/server.json` file only describes the package;
+reading it is not proof that an MCP Registry entry was published. Any other
+final state is not a completed release: follow
+[Failure and recovery](#failure-and-recovery). A version that will not be
+published is recorded there as abandoned, never as released. `main` showing a
+different version than the latest published release is a normal development
+state, not something to fix by tagging.
 
 ### 3. Squash-merge and next-candidate lifecycle
 

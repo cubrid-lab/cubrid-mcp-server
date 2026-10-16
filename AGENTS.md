@@ -55,7 +55,7 @@ squash-merge `publish-pypi.yml` detects the version change and runs consistency 
 build → candidate verification (the cookbook smoke test in candidate mode on the built
 wheel; `publish` needs it) → tag/Release/PyPI → cookbook verification (the cookbook smoke
 test called as a pinned reusable workflow, no token) → summary on its own.
-Freeze a release candidate with `autorelease: review` before branch-only note edits; wait for in-flight preparation to finish. Unfrozen notes come from main Unreleased. GITHUB_TOKEN updates require maintainer-triggered CI at the final head. Pending labels are reconciled only after successful publication and cookbook verification.
+Freeze a release candidate with `autorelease: review` before branch-only note edits; wait for in-flight preparation to finish. Unfrozen notes come from main Unreleased. GITHUB_TOKEN updates require maintainer-triggered CI at the final head; before merging a release PR, complete the release review checklist in `RELEASING.md` (candidate head, per-check CI state, impact, release purpose). Pending labels are reconciled only after successful publication and cookbook verification.
 Ordinary PRs never change `__version__` or date a
 CHANGELOG section. Never push tags or publish by hand; the only manual entry point is the
 narrow recovery dispatch of `publish-pypi.yml`. Procedure, failure matrix and recovery:

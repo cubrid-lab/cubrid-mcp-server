@@ -516,7 +516,8 @@ version change is what starts an automatic release. Maintainers use the PR-only
 `release-please.yml` generator; curated Unreleased and Upgrade notes remain
 reviewed in CHANGELOG. Freeze the candidate with `autorelease: review` before
 editing its notes, and start CI at the final bot-updated head; see
-[`RELEASING.md`](RELEASING.md).
+[`RELEASING.md`](RELEASING.md). Before merging a release PR, maintainers complete its
+[release review checklist](RELEASING.md#release-review-checklist).
 
 ## A Note on stdout
 
