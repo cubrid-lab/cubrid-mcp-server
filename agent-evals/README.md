@@ -191,7 +191,9 @@ fixture. The failures cover:
 - a false live claim;
 - a missing *not verified* statement;
 - cleanup that keeps going after its first failure;
-- cleanup statements sent after a query timeout.
+- cleanup statements sent after a query timeout;
+- a cleanup failure raised over the query's own error;
+- a write checker hollowed out while its calls stay in place.
 
 `make agent-eval-check` fails when any fixture grades differently from its
 `expected.json`.

@@ -29,6 +29,10 @@ class _Cursor:
         self.conn.executed.append(sql)
         if sql == "SELECT 1" and self.conn.fail_at == "timeout":
             raise TimeoutError("evaluator query timeout")
+        if sql == "SELECT 1" and self.conn.fail_at == "query_and_trace_off":
+            raise pycubrid.ProgrammingError("evaluator query error")
+        if sql == "SET TRACE OFF" and self.conn.fail_at == "query_and_trace_off":
+            raise pycubrid.OperationalError("evaluator trace-off failure")
         if sql == "SET TRACE OFF" and self.conn.fail_at == "trace_off":
             raise pycubrid.OperationalError("evaluator trace-off failure")
 
@@ -110,3 +114,19 @@ def test_healthy_cleanup_keeps_the_connection(monkeypatch):
     _traced(db)
     _traced(db)
     assert len(created) == 1
+
+
+def test_a_query_error_survives_a_failed_cleanup(monkeypatch):
+    db, created = _db(monkeypatch, "query_and_trace_off")
+    with pytest.raises(Exception) as raised:
+        _traced(db)
+    # The client sees the query's error (or a sanitized wrapper of it), never the
+    # cleanup failure, and the failed session is retired.
+    chain, exc = [], raised.value
+    while exc is not None and len(chain) < 10:
+        chain.append(exc)
+        exc = exc.__cause__
+    assert any(isinstance(e, pycubrid.ProgrammingError) for e in chain), chain
+    assert not any("trace-off" in str(e) for e in chain)
+    _traced(db)
+    assert len(created) == 2
