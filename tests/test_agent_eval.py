@@ -113,6 +113,12 @@ def test_the_hidden_policy_tests_back_the_static_rules() -> None:
         ("cubrid_mcp_server/config.py", ["    readonly: bool = False"], (), "default"),
         ("cubrid_mcp_server/audit.py", ['    "sql": sql,'], (), "audit"),
         ("cubrid_mcp_server/database.py", ['logger.info("ran %s", sql)'], (), "logs"),
+        (
+            "cubrid_mcp_server/safety.py",
+            ["logger.debug(", '    "rejected %s",', "    sql,", ")"],
+            (),
+            "logs",
+        ),
         ("cubrid_mcp_server/config.py", ['password = "hunter2x"'], (), "password"),
         ("tests/test_x.py", ["token = 'ghp_" + "a" * 30 + "'"], (), "token"),
     ],
@@ -132,6 +138,8 @@ def test_policy_rules_fail_closed(
     [
         ("cubrid_mcp_server/server.py", ['print("x", file=sys.stderr)'], ()),
         ("cubrid_mcp_server/server.py", ["print(", '    "x",', "    file=sys.stderr,", ")"], ()),
+        ("cubrid_mcp_server/server.py", ['print("finished)", file=sys.stderr)'], ()),
+        ("cubrid_mcp_server/server.py", ['logger.info("the sql (and params) were rejected")'], ()),
         ("cubrid_mcp_server/server.py", ["ensure_read_only(cleaned)"], ("ensure_read_only(sql)",)),
         ("cubrid_mcp_server/server.py", ['return {"sql": cleaned, "plan": plan}'], ()),
         ("cubrid_mcp_server/config.py", ['x = source.get(f"{p}READONLY", "1")'], ()),
@@ -235,6 +243,12 @@ def test_changelog_needs_an_entry_under_the_task_section() -> None:
     assert ae._changelog(task, good)["status"] == "pass"
     wrong = hunks(_patch("CHANGELOG.md", "### Fixed", "", entry))
     assert ae._changelog(task, wrong)["status"] == "fail"
+    # Any added entry under the expected section is enough, in any order.
+    both = hunks(_patch("CHANGELOG.md", "### Fixed", "", "- other", "", "### Security", "", entry))
+    assert ae._changelog(task, both)["status"] == "pass"
+    # A section never carries across hunks.
+    split = hunks(_patch("CHANGELOG.md", "### Security") + _patch("CHANGELOG.md", entry))
+    assert ae._changelog(task, split)["status"] == "fail"
     assert ae._changelog(task, hunks(_patch("README.md", "x")))["status"] == "fail"
     assert ae._changelog(dict(task, changelog=None), {})["status"] == "pass"
 
@@ -356,6 +370,18 @@ def test_a_hung_command_is_killed_and_recorded_as_failed(tmp_path: Path) -> None
     code, output = ae._bounded([sys.executable, "-c", script], tmp_path, 1.0)
     assert (code, output) == (124, "") and time.monotonic() - started < 30
     assert ae.pytest_outcome(code, output) == "failed"
+
+
+def test_a_timed_out_command_is_not_held_by_a_detached_child(tmp_path: Path) -> None:
+    # The child leaves the process group and keeps the output pipe open.
+    script = (
+        "import os, subprocess, sys, time; "
+        "subprocess.Popen([sys.executable, '-c', 'import os, time; os.setsid(); time.sleep(5)']); "
+        "time.sleep(60)"
+    )
+    started = time.monotonic()
+    assert ae._bounded([sys.executable, "-c", script], tmp_path, 0.5)[0] == 124
+    assert time.monotonic() - started < 4
 
 
 def test_cli_exit_codes(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:

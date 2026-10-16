@@ -123,11 +123,10 @@ ESCALATING_DEFAULT = re.compile(
     r"""READONLY["'][^)\n]*["']0["']|\bWRITE["'][^)\n]*["']1["']"""
     r"|\breadonly\s*:\s*bool\s*=\s*False\b|\bwrite_enabled\s*:\s*bool\s*=\s*True\b"
 )
-# Raw SQL or bound values placed into a log or audit record.
-LOGGED_SQL = re.compile(
-    r"""["'](?:sql|params|parameters|statement)["']\s*:"""
-    r"""|\blog(?:ger)?\.(?:debug|info|warning|error|exception|critical)\([^)]*\b(?:sql|params)\b"""
-)
+# Raw SQL or bound values placed into the audit record, or passed to a log call.
+AUDIT_SQL_KEY = re.compile(r"""["'](?:sql|params|parameters|statement)["']\s*:""")
+LOG_CALL = re.compile(r"\blog(?:ger)?\.(?:debug|info|warning|error|exception|critical|log)\s*\(")
+PRINT_CALL = re.compile(r"(?<![\w.])print\s*\(")
 
 
 class EvalError(Exception):
@@ -405,7 +404,11 @@ def _bounded(
             output, _ = proc.communicate(timeout=timeout)
         except subprocess.TimeoutExpired:
             os.killpg(proc.pid, signal.SIGKILL)
-            proc.communicate()
+            # A detached descendant may still hold the pipe open: discard the output
+            # instead of draining it, and reap only the killed process.
+            if proc.stdout is not None:
+                proc.stdout.close()
+            proc.wait()
             return 124, ""
     return proc.returncode, output
 
@@ -624,28 +627,33 @@ def grade(task: dict[str, Any], patch: str, report: Any, results: Any | None) ->
 
 
 def _changelog(task: dict[str, Any], hunks: dict[str, list[tuple[str, str]]]) -> dict[str, str]:
-    """An added entry under the task's section; this repository's entries need no issue."""
+    """An added entry under the task's section; this repository's entries need no issue.
+
+    Every added entry is read with the nearest heading before it in the same hunk;
+    one under the expected section is enough.
+    """
     expected = task["changelog"]
     if expected is None:
         return _criterion("pass", "the task requires no CHANGELOG entry")
     header = f"### {expected['section']}"
     lines = [(k, t) for k, t in hunks.get("CHANGELOG.md", []) if k != "-"]
-    entry = next(
-        (i for i, (kind, text) in enumerate(lines) if kind == "+" and text.startswith("- ")),
-        None,
-    )
-    if entry is None:
+    sections = []
+    for index, (kind, text) in enumerate(lines):
+        if kind != "+" or not text.startswith("- "):
+            continue
+        section = None
+        for before_kind, before in reversed(lines[:index]):
+            if before_kind == "@":
+                break  # never carry a section across hunks
+            if before.startswith("### "):
+                section = before.strip()
+                break
+        sections.append(section)
+    if header in sections:
+        return _criterion("pass", f"CHANGELOG entry under {header}")
+    if not sections:
         return _criterion("fail", f"no CHANGELOG entry under {header}")
-    # The nearest heading before the entry, added or kept as diff context, is its section.
-    section = next(
-        (text for kind, text in reversed(lines[:entry]) if kind != "@" and text.startswith("### ")),
-        None,
-    )
-    if section is None:
-        return _criterion("fail", f"cannot tell the entry's section; expected {header}")
-    if section.strip() != header:
-        return _criterion("fail", f"the CHANGELOG entry is under another section, not {header}")
-    return _criterion("pass", f"CHANGELOG entry under {header}")
+    return _criterion("fail", f"no added CHANGELOG entry sits under {header}")
 
 
 def _policy(hunks: dict[str, list[tuple[str, str]]]) -> dict[str, str]:
@@ -659,7 +667,7 @@ def _policy(hunks: dict[str, list[tuple[str, str]]]) -> dict[str, str]:
         added = [text for kind, text in lines if kind == "+"]
         removed = [text for kind, text in lines if kind == "-"]
         package = path.startswith(PACKAGE) and path.endswith(".py")
-        if package and _stdout_writes(added):
+        if package and _stdout_writes(lines):
             problems.append(f"{path}: writes to stdout, which carries only the MCP protocol")
         if package and sum(len(GUARD_CALL.findall(t)) for t in removed) > sum(
             len(GUARD_CALL.findall(t)) for t in added
@@ -667,10 +675,9 @@ def _policy(hunks: dict[str, list[tuple[str, str]]]) -> dict[str, str]:
             problems.append(f"{path}: removes a read-only or write-mode guard call")
         if package and any(ESCALATING_DEFAULT.search(t) for t in added):
             problems.append(f"{path}: turns read-only off or write mode on by default")
-        logged = [t for t in added if LOGGED_SQL.search(t)]
-        if path == f"{PACKAGE}audit.py" and logged:
+        if path == f"{PACKAGE}audit.py" and any(AUDIT_SQL_KEY.search(t) for t in added):
             problems.append(f"{path}: puts raw SQL or bound values into the audit record")
-        elif package and any(re.search(r"\blog(?:ger)?\.", t) for t in logged):
+        elif package and _logs_sql(lines):
             problems.append(f"{path}: logs raw SQL or bound values")
         tests = path.startswith(("tests/", "agent-evals/"))
         if not path.startswith("agent-evals/") and any(SECRET.search(t) for t in added):
@@ -682,27 +689,88 @@ def _policy(hunks: dict[str, list[tuple[str, str]]]) -> dict[str, str]:
     return _criterion("pass", "no stdout write, guard removal, escalation, logged SQL or secret")
 
 
-def _stdout_writes(added: list[str]) -> bool:
+def _blank_strings(text: str) -> str:
+    """``text`` with string-literal contents and ``#`` comments blanked, offsets kept.
+
+    Parentheses, ``file=`` or ``sql`` inside a string or comment are then never
+    read as code, so ``print("done)", file=sys.stderr)`` is one call.
+    """
+    out = list(text)
+    i = 0
+    while i < len(text):
+        char = text[i]
+        if char == "#":
+            while i < len(text) and text[i] != "\n":
+                out[i] = " "
+                i += 1
+            continue
+        if char in "\"'":
+            quote = text[i : i + 3] if text[i : i + 3] in ('"""', "'''") else char
+            i += len(quote)
+            while i < len(text) and not text.startswith(quote, i):
+                if text[i] == "\\":
+                    out[i] = " "
+                    i += 1
+                if i < len(text) and text[i] != "\n":
+                    out[i] = " "
+                i += 1
+            i += len(quote)
+            continue
+        i += 1
+    return "".join(out)
+
+
+def _calls(lines: list[tuple[str, str]], start: re.Pattern[str]) -> list[str]:
+    """Argument text (strings blanked) of each call ``start`` finds that an added line touches.
+
+    Each hunk's new text (kept and added lines) is read on its own, so a call split
+    over several lines is seen whole and hunks are never joined.
+    """
+    calls = []
+    hunks: list[list[tuple[str, str]]] = [[]]
+    for kind, text in lines:
+        if kind == "@":
+            hunks.append([])
+        elif kind != "-":
+            hunks[-1].append((kind, text))
+    for hunk in hunks:
+        source = "\n".join(text for _, text in hunk)
+        blank = _blank_strings(source)
+        added, offset = [], 0
+        for kind, text in hunk:
+            if kind == "+":
+                added.append((offset, offset + len(text)))
+            offset += len(text) + 1
+        for match in start.finditer(blank):
+            depth, end = 1, match.end()
+            while end < len(blank) and depth:
+                depth += {"(": 1, ")": -1}.get(blank[end], 0)
+                end += 1
+            if any(a < end and b > match.start() for a, b in added):
+                calls.append(blank[match.end() : end])
+    return calls
+
+
+def _stdout_writes(lines: list[tuple[str, str]]) -> bool:
     """Whether added package code writes to stdout.
 
-    The added lines are joined and every ``print(`` call is read up to its closing
-    parenthesis, so a ``file=`` argument on a later line counts. A call without
-    ``file=``, or with ``file=None`` or ``file=sys.stdout``, writes to stdout, and so
-    does any use of ``sys.stdout``.
+    A ``print(`` call is read whole, across lines and past parentheses in strings:
+    without ``file=``, or with ``file=None`` or ``file=sys.stdout``, it writes to
+    stdout. Any use of ``sys.stdout`` in added code does too.
     """
-    text = "\n".join(added)
-    if re.search(r"\bsys\.(?:stdout|__stdout__)\b", text):
+    added = "\n".join(text for kind, text in lines if kind == "+")
+    if re.search(r"\bsys\.(?:stdout|__stdout__)\b", _blank_strings(added)):
         return True
-    for match in re.finditer(r"(?<![\w.])print\s*\(", text):
-        depth, end = 1, match.end()
-        while end < len(text) and depth:
-            depth += {"(": 1, ")": -1}.get(text[end], 0)
-            end += 1
-        call = text[match.end() : end]
-        destination = re.search(r"\bfile\s*=\s*([\w.]+)", call)
+    for args in _calls(lines, PRINT_CALL):
+        destination = re.search(r"\bfile\s*=\s*([\w.]+)", args)
         if destination is None or destination.group(1) in ("None", "sys.stdout"):
             return True
     return False
+
+
+def _logs_sql(lines: list[tuple[str, str]]) -> bool:
+    """Whether an added logging call, read whole across lines, passes SQL or values."""
+    return any(re.search(r"\b(?:sql|params)\b", args) for args in _calls(lines, LOG_CALL))
 
 
 def _claims(
