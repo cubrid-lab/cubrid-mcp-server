@@ -335,6 +335,8 @@ Example: `list_serials()` returns
 ]
 ```
 
+The `db_serial` catalog column was renamed from `att_name` to `attr_name` in CUBRID 11.4, so the server probes once per connection which spelling the server has, and only a server rejecting one spelling moves it to the other. A timeout or a lost connection during that probe is reported as such, and if the probe's connection is reset the call fails with `connection was reset while probing db_serial; retry the request` rather than reusing the answer on a new connection.
+
 #### `health_check(connection=None)`
 
 Verifies database connectivity on demand and reports per-connection status. Useful after environment changes or long idle periods.

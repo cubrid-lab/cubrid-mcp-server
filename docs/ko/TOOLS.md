@@ -302,7 +302,7 @@ CUBRID `SHOW TRACE`를 통해 `SELECT`/`WITH` 문의 실행 계획/트레이스�
 
 #### `list_serials(connection=None)`
 
-CUBRID `SERIAL` 시퀀스와 현재값·최솟값·최댓값·증분. (`db_serial` 카탈로그의 컬럼명은 CUBRID 11.4에서 `att_name`→`attr_name`으로 개명되어, 서버 버전에 따라 자동으로 해석합니다.)
+CUBRID `SERIAL` 시퀀스와 현재값·최솟값·최댓값·증분. (`db_serial` 카탈로그의 컬럼명은 CUBRID 11.4에서 `att_name`→`attr_name`으로 개명되어, 서버 버전에 따라 자동으로 해석합니다. 연결마다 한 번 확인하며, 서버가 한쪽 이름을 거부할 때만 다른 이름을 시도합니다. 확인 중의 타임아웃이나 연결 끊김은 그대로 보고되고, 확인에 쓴 연결이 재설정되면 그 결과를 새 연결에 쓰지 않고 `connection was reset while probing db_serial; retry the request`로 실패합니다.)
 
 예시: `list_serials()` 응답
 

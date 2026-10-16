@@ -484,7 +484,8 @@ class _SerialProbeConnection(FakeConnection):
         def _execute(sql: str, params: tuple[Any, ...] = ()) -> None:
             original_execute(sql, params)
             if "db_serial" in sql and f'"{column}"' not in sql:
-                raise RuntimeError("Semantic: unknown column")
+                # What CUBRID 10.2, 11.2 and 11.4 raise for the other spelling.
+                raise pycubrid.ProgrammingError("Semantic: Attribute was not found.")
 
         cursor.execute = _execute  # type: ignore[method-assign]
         return cursor
@@ -521,6 +522,122 @@ def test_serial_attribute_column_reset_by_failed_query(monkeypatch: pytest.Monke
             _raise(ConnectionResetError("broker restarted"))
     backend["column"] = "attr_name"
     assert db.serial_attribute_column() == "attr_name"
+
+
+class _SerialFaultConnection(FakeConnection):
+    """Fake connection whose ``db_serial`` probes raise the queued errors, in order.
+
+    ``None`` in the queue lets that probe succeed; every probe is recorded.
+    """
+
+    def __init__(self, faults: list[BaseException | None], probes: list[tuple[int, str]]) -> None:
+        super().__init__()
+        self.faults = faults
+        self.probes = probes
+
+    def cursor(self) -> FakeCursor:
+        cursor = super().cursor()
+        original_execute = cursor.execute
+
+        def _execute(sql: str, params: tuple[Any, ...] = ()) -> None:
+            original_execute(sql, params)
+            if "db_serial" in sql:
+                self.probes.append((id(self), sql.split('"')[1]))
+                fault = self.faults.pop(0) if self.faults else None
+                if fault is not None:
+                    raise fault
+
+        cursor.execute = _execute  # type: ignore[method-assign]
+        return cursor
+
+
+def _serial_db(
+    monkeypatch: pytest.MonkeyPatch, faults: list[BaseException | None]
+) -> tuple[Database, list[_SerialFaultConnection], list[tuple[int, str]]]:
+    created: list[_SerialFaultConnection] = []
+    probes: list[tuple[int, str]] = []
+
+    def _connect(**_k: Any) -> _SerialFaultConnection:
+        created.append(_SerialFaultConnection(faults, probes))
+        return created[-1]
+
+    monkeypatch.setattr(pycubrid, "connect", _connect)
+    return Database(_TEST_CONFIG), created, probes
+
+
+def test_serial_probe_timeout_is_not_a_missing_column(monkeypatch: pytest.MonkeyPatch) -> None:
+    # #351: a timeout says nothing about the catalog; it must surface as itself,
+    # without probing the other spelling or caching anything.
+    db, created, probes = _serial_db(monkeypatch, [socket.timeout("timed out")])
+    with pytest.raises(QueryTimeoutError) as excinfo:
+        db.serial_attribute_column()
+    assert _is_timeout_error(excinfo.value)
+    assert [column for _, column in probes] == ["att_name"]
+    assert db._serial_attribute_column is None
+    assert created[0].closed is True  # the timed-out connection was discarded
+
+
+@pytest.mark.parametrize(
+    "fault",
+    [ConnectionResetError("broker restarted"), pycubrid.OperationalError("communication error")],
+)
+def test_serial_probe_transport_failure_is_preserved(
+    monkeypatch: pytest.MonkeyPatch, fault: BaseException
+) -> None:
+    db, _created, probes = _serial_db(monkeypatch, [fault, fault])
+    with pytest.raises(DatabaseError) as excinfo:
+        db.serial_attribute_column()
+    assert str(excinfo.value) == f"query failed: {type(fault).__name__}"
+    assert excinfo.value.__cause__ is fault
+    assert [column for _, column in probes] == ["att_name"]
+    assert db._serial_attribute_column is None
+
+
+def test_serial_probe_falls_back_only_on_a_server_rejection(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    rejection = pycubrid.ProgrammingError("Semantic: Attribute was not found.")
+    db, created, probes = _serial_db(monkeypatch, [rejection, None])
+    assert db.serial_attribute_column() == "attr_name"
+    assert db.serial_attribute_column() == "attr_name"  # cached for this connection
+    assert len(created) == 1 and created[0].closed is False
+    assert probes == [(id(created[0]), "att_name"), (id(created[0]), "attr_name")]
+
+
+def test_serial_probe_with_both_spellings_rejected_names_neither(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    rejection = pycubrid.ProgrammingError("Semantic: Attribute was not found.")
+    db, _created, probes = _serial_db(monkeypatch, [rejection, rejection])
+    with pytest.raises(DatabaseError, match="neither att_name nor attr_name"):
+        db.serial_attribute_column()
+    assert len(probes) == 2
+
+
+@pytest.mark.parametrize("first", [None, "rejected"], ids=["answered", "rejected"])
+def test_serial_probe_answer_is_not_kept_when_cleanup_drops_the_connection(
+    monkeypatch: pytest.MonkeyPatch, first: str | None
+) -> None:
+    # #351: the probe's read-transaction rollback fails, which discards the
+    # connection. Its answer must not be cached for, or reused on, the next one.
+    rejection = pycubrid.ProgrammingError("Semantic: Attribute was not found.")
+    faults: list[BaseException | None] = [rejection if first else None]
+    db, created, probes = _serial_db(monkeypatch, faults)
+    first_conn = db.connect()
+    first_conn.rollback = lambda: _raise(RuntimeError("rollback failed"))  # type: ignore[method-assign]
+
+    with pytest.raises(DatabaseError, match="connection was reset"):
+        db.serial_attribute_column()
+    assert db._connection is None
+    assert db._serial_attribute_column is None
+    assert probes == [(id(first_conn), "att_name")]  # no probe on another connection
+
+    faults.extend([None])
+    assert db.serial_attribute_column() == "att_name"
+    assert db.serial_attribute_column() == "att_name"
+    second = created[-1]
+    assert second is not first_conn and db._connection is second
+    assert probes == [(id(first_conn), "att_name"), (id(second), "att_name")]
 
 
 # --- read transactions end after every fetch (#234) ---

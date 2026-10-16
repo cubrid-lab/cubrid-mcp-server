@@ -154,19 +154,35 @@ class Database:
         CUBRID 11.2 names it ``att_name``; 11.4 renamed it to ``attr_name``.
         Probed with a zero-row SELECT and cached, so every later
         ``list_serials`` call uses the version-correct identifier.
+
+        Only the server rejecting a spelling moves on to the other one: a lost
+        connection or a timeout says nothing about the catalog and is raised
+        as it is (#351). Every answer belongs to the connection it was probed
+        on; if the probe's cleanup discarded that connection, the call fails
+        instead of applying the answer to the next connection, which may reach
+        another server version.
         """
         with self._lock:
-            if self._serial_attribute_column is None:
-                for column in self._SERIAL_ATTRIBUTE_COLUMNS:
-                    try:
-                        self.fetch_all(f'SELECT "{column}" FROM db_serial WHERE 1 = 0')
-                    except DatabaseError:
-                        continue
-                    self._serial_attribute_column = column
-                    break
+            if self._serial_attribute_column is not None:
+                return self._serial_attribute_column
+            probed = self.connect()
+            for column in self._SERIAL_ATTRIBUTE_COLUMNS:
+                try:
+                    self.fetch_all(f'SELECT "{column}" FROM db_serial WHERE 1 = 0')
+                except DatabaseError as exc:
+                    if exc.__cause__ is None or not _is_server_sql_error(exc.__cause__):
+                        raise
+                    found = False
                 else:
-                    raise DatabaseError("db_serial exposes neither att_name nor attr_name")
-            return self._serial_attribute_column
+                    found = True
+                if self._connection is not probed:
+                    raise DatabaseError(
+                        "connection was reset while probing db_serial; retry the request"
+                    )
+                if found:
+                    self._serial_attribute_column = column
+                    return column
+            raise DatabaseError("db_serial exposes neither att_name nor attr_name")
 
     def connect(self) -> Any:
         # Return the cached connection without a liveness ping: pinging on every
