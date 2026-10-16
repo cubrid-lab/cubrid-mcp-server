@@ -220,7 +220,7 @@ credentials or log excerpts.
 
 Agents are not deterministic, so one run says little. Summarize repeated runs with
 `python scripts/agent_eval.py summarize run1.json run2.json ...`. It groups records by
-task revision and model, and for each group reports:
+task revision, tool and version, and model, and for each group reports:
 
 - the number of runs, and the excluded and not-isolated counts;
 - the verdict counts and how often each criterion did not pass;
@@ -229,7 +229,8 @@ task revision and model, and for each group reports:
 
 Report that distribution with the number of runs, never as a bare pass percentage.
 Three passes in three runs is an interval of about 0.44 to 1.0, not 100%. Runs of
-different task revisions or models are never pooled. Note the limitations of each
+different task revisions, tools or models are never pooled. A record whose verdict
+disagrees with its criteria is rejected. Note the limitations of each
 group: the not-isolated runs, the excluded runs and how few runs there were.
 
 Publish run records or summaries, with the tool and model versions they name, only

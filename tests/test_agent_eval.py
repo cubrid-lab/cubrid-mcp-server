@@ -509,6 +509,8 @@ def test_record_holds_tool_model_base_and_rubric() -> None:
     "overrides",
     [
         {"agent": {"name": "tool"}},
+        {"agent": {"name": " ", "model": "model-a"}},
+        {"agent": {"name": "tool 1.0", "model": ""}},
         {"findings": [{"source": "x", "severity": "blocker", "summary": "y"}]},
         {"metrics": {"wall_clock_seconds": float("nan")}},
         {"metrics": {"tokens": 5}},
@@ -530,8 +532,10 @@ def test_summarize_reports_counts_intervals_and_exclusions() -> None:
     failing["network"] = "not isolated"
     other = copy.deepcopy(passing)
     other["agent"]["model"] = "model-b"
+    other_tool = copy.deepcopy(passing)
+    other_tool["agent"]["name"] = "zz-tool 9.0"
     excluded = _record(exclude="the agent read the public fix")
-    first, second = ae.summarize([passing, failing, other, excluded])["groups"]
+    first, second, third = ae.summarize([passing, failing, other, other_tool, excluded])["groups"]
     assert (first["model"], first["runs"], first["excluded"]) == ("model-a 2026-10", 2, 1)
     assert first["verdicts"] == {"pass": 1, "incomplete": 0, "fail": 1}
     assert first["criteria_not_passed"] == {"policy": 1}
@@ -539,12 +543,16 @@ def test_summarize_reports_counts_intervals_and_exclusions() -> None:
     assert first["not_isolated"] == 1
     assert first["metrics"]["rework_rounds"] == {"min": 1, "median": 2.0, "max": 3}
     assert (second["model"], second["runs"]) == ("model-b", 1)
+    assert first["tool"] == second["tool"] == passing["agent"]["name"]
+    assert (third["tool"], third["model"], third["runs"]) == ("zz-tool 9.0", "model-a 2026-10", 1)
     assert ae.wilson(3, 3) == [0.438, 1.0] and ae.wilson(0, 0) == [0.0, 1.0]
     for broken in (
         {"schema_version": 1},
         dict(passing, agent={"model": []}),
         dict(passing, metrics={"wall_clock_seconds": float("inf")}),
         dict(passing, rubric={"verdict": "pass", "criteria": []}),
+        dict(passing, agent={"name": " ", "model": "model-a"}),
+        dict(failing, rubric=dict(failing["rubric"], verdict="pass")),
     ):
         with pytest.raises(ae.EvalError):
             ae.summarize([broken])

@@ -501,8 +501,10 @@ def record(
     exclude: str | None = None,
 ) -> dict[str, Any]:
     """One manual run's record: who ran what, what was skipped, and the rubric result."""
-    if not isinstance(agent.get("name"), str) or not isinstance(agent.get("model"), str):
-        raise EvalError("the agent needs a name and a model")
+    if not all(
+        isinstance(agent.get(field), str) and agent[field].strip() for field in ("name", "model")
+    ):
+        raise EvalError("the agent needs a non-blank name (tool and version) and model")
     for finding in findings:
         if (
             not isinstance(finding, dict)
@@ -563,19 +565,31 @@ def wilson(passed: int, total: int, z: float = 1.96) -> list[float]:
     return [round(max(0.0, centre - half), 3), round(min(1.0, centre + half), 3)]
 
 
+def _verdict(criteria: dict[str, Any]) -> str:
+    statuses = {c["status"] for c in criteria.values()}
+    return "fail" if "fail" in statuses else "incomplete" if "not_run" in statuses else "pass"
+
+
 def summarize(records: list[Any]) -> dict[str, Any]:
-    """Distribution of repeated runs per task revision and model: counts and an interval."""
-    groups: dict[tuple[str, str, str], list[dict[str, Any]]] = {}
+    """Distribution of repeated runs per task revision, tool and model: counts and an interval."""
+    groups: dict[tuple[str, str, str, str], list[dict[str, Any]]] = {}
     for entry in records:
         if not isinstance(entry, dict) or entry.get("schema_version") != SCHEMA_VERSION:
             raise EvalError("every run record must be a schema version 1 object")
         try:
-            key = (entry["task"], entry["task_revision"], entry["agent"]["model"])
+            key = (
+                entry["task"],
+                entry["task_revision"],
+                entry["agent"]["name"],
+                entry["agent"]["model"],
+            )
             verdict = entry["rubric"]["verdict"]
         except (KeyError, TypeError) as exc:
             raise EvalError(f"run record without {exc}") from exc
-        if not all(isinstance(part, str) and part for part in key):
-            raise EvalError("run record task, task_revision and agent.model must be strings")
+        if not all(isinstance(part, str) and part.strip() for part in key):
+            raise EvalError(
+                "run record task, task_revision, agent.name and agent.model must be strings"
+            )
         if verdict not in ("pass", "incomplete", "fail"):
             raise EvalError(f"run record with verdict {verdict!r}")
         criteria = entry["rubric"].get("criteria")
@@ -584,6 +598,8 @@ def summarize(records: list[Any]) -> dict[str, Any]:
             for c in criteria.values()
         ):
             raise EvalError("run record criteria must map names to pass/fail/not_run statuses")
+        if verdict != _verdict(criteria):
+            raise EvalError(f"run record verdict {verdict!r} disagrees with its criteria")
         metrics = entry.get("metrics", {})
         if not isinstance(metrics, dict) or not all(_metric(v) for v in metrics.values()):
             raise EvalError("run record metrics must be an object of finite non-negative numbers")
@@ -592,7 +608,7 @@ def summarize(records: list[Any]) -> dict[str, Any]:
             raise EvalError("run record 'excluded' must be null or a reason")
         groups.setdefault(key, []).append(entry)
     summary = []
-    for (task_id, revision, model), entries in sorted(groups.items()):
+    for (task_id, revision, tool, model), entries in sorted(groups.items()):
         runs = [e for e in entries if e.get("excluded") is None]
         verdicts = {v: 0 for v in ("pass", "incomplete", "fail")}
         failed: dict[str, int] = {}
@@ -610,6 +626,7 @@ def summarize(records: list[Any]) -> dict[str, Any]:
             {
                 "task": task_id,
                 "task_revision": revision,
+                "tool": tool,
                 "model": model,
                 "runs": len(runs),
                 "excluded": len(entries) - len(runs),
@@ -833,8 +850,7 @@ def grade(task: dict[str, Any], patch: str, report: Any, results: Any | None) ->
     criteria["claims"] = _claims(task, hunks, report, live_passed)
     criteria["evidence"] = _evidence(task, report, live_passed)
 
-    statuses = {c["status"] for c in criteria.values()}
-    verdict = "fail" if "fail" in statuses else "incomplete" if "not_run" in statuses else "pass"
+    verdict = _verdict(criteria)
     return {
         "schema_version": SCHEMA_VERSION,
         "task": task["id"],
