@@ -107,6 +107,9 @@ python scripts/agent_eval.py validate     # validate the task manifests only
 python scripts/agent_eval.py run --task ID --patch patch.diff --output results.json
 python scripts/agent_eval.py grade --task ID --patch patch.diff --report report.json \
     --results results.json
+python scripts/agent_eval.py prompt --task ID        # the task statement for a manual run
+python scripts/agent_eval.py record ...              # one manual run's record (below)
+python scripts/agent_eval.py summarize RUN.json...   # distribution of repeated runs
 ```
 
 `run` is the local dry run:
@@ -140,6 +143,99 @@ changed file and the rule, a report entry or statement by index, and a malformed
 artifact entry by index. No SQL payload, credential or log text from a candidate
 reaches grader output, CI logs or PR comments. Only file paths are echoed, because the
 scope check needs them.
+
+## Manual agent runs
+
+Running an agent is manual and opt-in. It never happens in CI, and nothing in the
+repository starts one. A run never merges, pushes, tags or publishes anything, and it
+never touches production data, service accounts or a write-capable shared instance.
+
+1. **Isolate the checkout.** Clone into a fresh directory inside a disposable VM or
+   container that holds no credentials. Check out the task's base SHA. Remove every
+   later commit and the push remote, so the agent can neither read the fix from the
+   history nor publish:
+
+   ```bash
+   git clone https://github.com/cubrid-lab/cubrid-mcp-server.git eval-run
+   cd eval-run
+   git checkout --detach BASE_SHA
+   git remote remove origin
+   git for-each-ref --format='%(refname)' refs/heads refs/tags | xargs -r -n1 git update-ref -d
+   git reflog expire --expire=now --all && git gc --prune=now --quiet
+   ```
+
+   Run the agent there with these limits:
+   - no `GH_TOKEN`, `GITHUB_TOKEN`, PyPI token, cloud key, credential helper or
+     `CUBRID_*` setting;
+   - a fixed time limit, for example `timeout 1800 <agent command>`; record the limit.
+
+   The issue and the fix are public, so a run in which the agent looked them up is not
+   a fair sample. Record it with `--exclude "REASON"`: the record is kept, but it is
+   left out of every summary.
+2. **Give the agent the prompt.** In a separate shell, from this repository's own
+   checkout (the isolated clone predates the evaluator), run
+   `python scripts/agent_eval.py prompt --task ID > prompt.md`, then hand only
+   `prompt.md` to the agent.
+   - The prompt names the base SHA, the issue, the problem, the non-goals, the offline
+     and live checks, and the `report.json` format.
+   - It leaves out the grading key: the fix commit, allowed files, docs decision,
+     hidden tests and expected result.
+
+   Use it unchanged; `record` stores its SHA-256.
+3. **Collect the artifacts.** Keep the agent's `report.json` outside the clone. Stage
+   everything with `git add -A && git diff --cached BASE_SHA > ../patch.diff`, so
+   new files are included, and note the wall-clock time.
+4. **Dry run and record**, from this repository's checkout:
+
+   ```bash
+   python scripts/agent_eval.py run --task ID --patch patch.diff --output results.json \
+       --require-isolation
+   python scripts/agent_eval.py record --task ID --patch patch.diff --report report.json \
+       --results results.json --prompt-file prompt.md --agent "TOOL VERSION" \
+       --model "MODEL ID AND REVISION" --findings findings.json --wall-clock-seconds 1234 \
+       --timeout-seconds 1800 --rework-rounds 1 --output run.json
+   ```
+
+The run record (`run.json`) holds:
+
+- the agent tool and version, and the model identity and revision;
+- the task revision (SHA-256 of `task.json`), the prompt digest and the starting
+  (base) SHA;
+- the patch digest and changed files;
+- the commands the agent reported and those the dry run observed;
+- the live checks reported as not run or skipped;
+- whether the dry run had network access disabled;
+- the metrics you pass: wall clock, time limit and review rework rounds, all finite and
+  non-negative;
+- review findings;
+- the exclusion reason (`null` unless `--exclude` was given);
+- the rubric result.
+
+`findings.json` is a list of
+`{"source": ..., "severity": "critical"|"major"|"minor"|"info", "summary": ...}`.
+Leave it out when nobody reviewed the run. Write findings without SQL payloads,
+credentials or log excerpts.
+
+### Repeated runs and publishing
+
+Agents are not deterministic, so one run says little. Summarize repeated runs with
+`python scripts/agent_eval.py summarize run1.json run2.json ...`. It groups records by
+task revision and model, and for each group reports:
+
+- the number of runs, and the excluded and not-isolated counts;
+- the verdict counts and how often each criterion did not pass;
+- the range of each metric;
+- a 95% Wilson interval for the pass rate.
+
+Report that distribution with the number of runs, never as a bare pass percentage.
+Three passes in three runs is an interval of about 0.44 to 1.0, not 100%. Runs of
+different task revisions or models are never pooled. Note the limitations of each
+group: the not-isolated runs, the excluded runs and how few runs there were.
+
+Publish run records or summaries, with the tool and model versions they name, only
+when the tool's terms and the maintainers allow it. Never publish them in CI artifacts
+or PR comments that could carry candidate text. No score is a gate until a baseline has
+been observed and the maintainers decide to use one.
 
 ## Scoring
 

@@ -451,3 +451,121 @@ def test_cli_exit_codes(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> N
         text=True,
     )
     assert done.returncode == 0, done.stderr
+
+
+@pytest.mark.parametrize("task_id", TASK_IDS)
+def test_prompt_leaves_out_the_grading_key(task_id: str) -> None:
+    task = ae.load_task(task_id)
+    text = ae.prompt(task)
+    assert text == ae.prompt(task)
+    for shown in (task["base_sha"], task["problem"], task["issue"]):
+        assert shown in text
+    for hidden in (task["fix_commit"], task["fix_commit"][:7], task["expected"]):
+        assert hidden not in text
+    assert "allowed files" not in text.lower() and "hidden" not in text.lower()
+    assert not [g for g in task["hidden_tests"] if g in text]
+    for word in (*ae.EVIDENCE_KINDS, *ae.RESULTS):
+        assert word in text
+
+
+def _record(**overrides: Any) -> dict[str, Any]:
+    task = ae.load_task(RO)
+    patch, report, results = _fixture(RO, "reference")
+    args: dict[str, Any] = {
+        "task": task,
+        "revision": ae.task_revision(RO),
+        "prompt_text": ae.prompt(task),
+        "agent": {"name": "tool 1.0", "model": "model-a 2026-10"},
+        "patch": patch,
+        "report": report,
+        "results": results,
+        "metrics": {"wall_clock_seconds": 60.0, "timeout_seconds": 1800, "rework_rounds": 1},
+        "findings": [{"source": "maintainer", "severity": "minor", "summary": "wording"}],
+    }
+    args.update(overrides)
+    return ae.record(**args)
+
+
+def test_record_holds_tool_model_base_and_rubric() -> None:
+    entry = _record()
+    task = ae.load_task(RO)
+    assert entry["agent"] == {"name": "tool 1.0", "model": "model-a 2026-10"}
+    assert entry["start_sha"] == task["base_sha"]
+    assert entry["task_revision"] == ae.task_revision(RO)
+    assert entry["network"] == "disabled"
+    assert entry["skipped_live_checks"] == task["validation"]["live"]
+    assert entry["metrics"] == {
+        "rework_rounds": 1,
+        "timeout_seconds": 1800,
+        "wall_clock_seconds": 60.0,
+    }
+    assert entry["rubric"]["verdict"] == "pass" and entry["excluded"] is None
+    assert ae.dump(entry) == ae.dump(_record())
+    offline = _record(results=None)
+    assert offline["network"] is None and offline["rubric"]["verdict"] == "incomplete"
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"agent": {"name": "tool"}},
+        {"findings": [{"source": "x", "severity": "blocker", "summary": "y"}]},
+        {"metrics": {"wall_clock_seconds": float("nan")}},
+        {"metrics": {"tokens": 5}},
+        {"metrics": {"rework_rounds": -1}},
+        {"exclude": " "},
+    ],
+)
+def test_record_rejects_bad_identity_findings_metrics_and_exclusion(overrides: Any) -> None:
+    with pytest.raises(ae.EvalError):
+        _record(**overrides)
+
+
+def test_summarize_reports_counts_intervals_and_exclusions() -> None:
+    passing = _record()
+    failing = copy.deepcopy(passing)
+    failing["rubric"]["verdict"] = "fail"
+    failing["rubric"]["criteria"]["policy"]["status"] = "fail"
+    failing["metrics"] = {"wall_clock_seconds": 120.0, "rework_rounds": 3}
+    failing["network"] = "not isolated"
+    other = copy.deepcopy(passing)
+    other["agent"]["model"] = "model-b"
+    excluded = _record(exclude="the agent read the public fix")
+    first, second = ae.summarize([passing, failing, other, excluded])["groups"]
+    assert (first["model"], first["runs"], first["excluded"]) == ("model-a 2026-10", 2, 1)
+    assert first["verdicts"] == {"pass": 1, "incomplete": 0, "fail": 1}
+    assert first["criteria_not_passed"] == {"policy": 1}
+    assert first["pass_interval_95"] == ae.wilson(1, 2)
+    assert first["not_isolated"] == 1
+    assert first["metrics"]["rework_rounds"] == {"min": 1, "median": 2.0, "max": 3}
+    assert (second["model"], second["runs"]) == ("model-b", 1)
+    assert ae.wilson(3, 3) == [0.438, 1.0] and ae.wilson(0, 0) == [0.0, 1.0]
+    for broken in (
+        {"schema_version": 1},
+        dict(passing, agent={"model": []}),
+        dict(passing, metrics={"wall_clock_seconds": float("inf")}),
+        dict(passing, rubric={"verdict": "pass", "criteria": []}),
+    ):
+        with pytest.raises(ae.EvalError):
+            ae.summarize([broken])
+
+
+def test_cli_prompt_record_summarize(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    assert ae.main(["prompt", "--task", RO]) == 0
+    prompt_file = tmp_path / "prompt.md"
+    prompt_file.write_text(capsys.readouterr().out, encoding="utf-8")
+    ref = ae.EVALS / "tasks" / RO / "fixtures" / "reference"
+    out = tmp_path / "run.json"
+    args = ["record", "--task", RO, "--patch", str(ref / "patch.diff")]
+    args += ["--report", str(ref / "report.json"), "--results", str(ref / "results.json")]
+    args += ["--prompt-file", str(prompt_file), "--agent", "tool 1.0", "--model", "m"]
+    args += ["--wall-clock-seconds", "12.5", "--timeout-seconds", "1800", "--rework-rounds", "0"]
+    assert ae.main([*args, "--output", str(out)]) == 0
+    entry = json.loads(out.read_text(encoding="utf-8"))
+    assert entry["prompt_sha256"] == hashlib.sha256(prompt_file.read_bytes()).hexdigest()
+    capsys.readouterr()
+    assert ae.main(["summarize", str(out), str(out)]) == 0
+    assert json.loads(capsys.readouterr().out)["groups"][0]["runs"] == 2
+    bad = tmp_path / "findings.json"
+    bad.write_text("{}", encoding="utf-8")
+    assert ae.main([*args, "--findings", str(bad), "--output", str(out)]) == 2
