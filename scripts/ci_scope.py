@@ -61,9 +61,13 @@ TOOLING = (
     "demos/*",
     # Checked against pyproject.toml by tests/test_third_party_licenses.py (#218).
     "THIRD_PARTY_LICENSES.md",
+    # The site notice template and its mkdocs.yml wiring, rendered and checked by
+    # tests/test_docs_channel_notice.py (#355, #361).
+    "docs/overrides/*",
+    "mkdocs.yml",
 )
 # Docs-only: no unit job, no CUBRID.
-DOCS = ("*.md", "docs/*", "LICENSE", "NOTICE", "llms.txt", "mkdocs.yml")
+DOCS = ("*.md", "docs/*", "LICENSE", "NOTICE", "llms.txt")
 
 FULL_EVENTS = {"push", "workflow_dispatch", "schedule"}
 

@@ -25,6 +25,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### CI
 
+- **A change to the site notice template runs its tests (#361)** — `scripts/ci_scope.py` classified `docs/overrides/` and `mkdocs.yml` as documentation only, so a pull request that changed only the notice template or its `mkdocs.yml` wiring selected no unit lane, and `tests/test_docs_channel_notice.py` did not run. Both are now tooling paths: they select the Python 3.12 unit lane and start no CUBRID. `CONTRIBUTING.md`'s lane table is updated.
+
 - **The site notice template tests run in CI (#361)** — `tests/test_docs_channel_notice.py` skipped its seven rendering tests in every `lint-and-test` lane, because `.[dev]` did not install Jinja2 and the documentation build runs no tests. The `dev` extra now includes `jinja2>=3.1`, and the test imports it directly instead of skipping, so a lane without it fails. `THIRD_PARTY_LICENSES.md` records Jinja2 and MarkupSafe. No workflow changes.
 
 - **`agent-review` no longer counts empty reply-only Copilot records as review rounds (#348)** — a Copilot record with no body and no thread-opening comment, such as a reply to an existing thread, is now ignored like an error or quota notice. It used to count as a summary-only round, so one substantive review plus two such records put a PR past the two-round budget and rejected valid evidence. A record that opens a thread still counts. The same change goes unchanged to the cookbook, pycubrid and sqlalchemy-cubrid copies (Refs cubrid-lab/sqlalchemy-cubrid#933).

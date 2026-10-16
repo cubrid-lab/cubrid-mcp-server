@@ -50,7 +50,7 @@ def pr(*paths: str) -> dict[str, object]:
     [
         ["README.md"],
         ["docs/TOOLS.md", "docs/ko/quickstart.md", "CHANGELOG.md"],
-        ["AGENTS.md", "LICENSE", "NOTICE", "llms.txt", "mkdocs.yml"],
+        ["AGENTS.md", "LICENSE", "NOTICE", "llms.txt"],
         [".github/PULL_REQUEST_TEMPLATE.md", "docs/demo.gif"],
     ],
 )
@@ -58,6 +58,19 @@ def test_docs_only_pr_runs_no_unit_and_no_cubrid(paths: list[str]) -> None:
     scope = pr(*paths)
     assert scope["tier"] == "docs"
     assert scope["unit"] is False
+
+
+@pytest.mark.parametrize(
+    "path", ["docs/overrides/main.html", "docs/overrides/partials/channel.html", "mkdocs.yml"]
+)
+def test_site_notice_template_selects_the_unit_lane_only(path: str) -> None:
+    # tests/test_docs_channel_notice.py renders the template and checks its
+    # mkdocs.yml wiring, so these paths run the unit lane but start no CUBRID.
+    scope = pr(path)
+    assert scope["tier"] == "pr"
+    assert scope["unit"] is True
+    assert scope["live"] is False
+    assert scope["lowest"] is False
     assert scope["live"] is False
     assert scope["lowest"] is False
 
