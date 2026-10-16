@@ -2,7 +2,7 @@
 
 ``docs/overrides/partials/channel.html`` labels the site as built from the
 ``main`` branch and names the commit when the build records one. These tests
-render the partial with Jinja2 (installed with MkDocs; skipped without it) and
+render the partial with Jinja2, which the ``dev`` extra installs (#361), and
 check that the label never depends on a version, a manifest or ``server.json``.
 """
 
@@ -12,6 +12,7 @@ import re
 from pathlib import Path
 from types import SimpleNamespace
 
+import jinja2
 import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -21,7 +22,6 @@ SHA = "c0f900b76fe72523e51e5ae4e84fe197324284f8"
 
 
 def _render(revision: str | None, url: str = "quickstart/") -> str:
-    jinja2 = pytest.importorskip("jinja2")
     env = jinja2.Environment(
         loader=jinja2.FileSystemLoader(str(PARTIAL.parent.parent)), autoescape=True
     )

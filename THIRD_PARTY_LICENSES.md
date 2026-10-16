@@ -90,6 +90,11 @@ uv pip install -p /tmp/tpl-dev/bin/python ".[dev]"
     --exclude cubrid-mcp-server --required-by --extra dev
 ```
 
+#361 added `jinja2` to the `dev` extra. A fresh `.[dev]` install on 2026-10-16
+(CPython 3.12, uv) with the second command above added `Jinja2` and `MarkupSafe`,
+and only those two rows were copied from that run's output; the other rows are
+the snapshot above.
+
 The development table lists only the packages that the `.[dev]` environment
 adds to the runtime tree. **Required by** evaluates every environment marker
 for the recorded interpreter and follows only the extras actually requested
@@ -188,7 +193,7 @@ regenerating the tables, not by the test.
 | watchfiles | 1.3.0 | MIT License | Permissive | https://github.com/samuelcolvin/watchfiles | fastmcp-slim |
 | websockets | 17.2 | BSD-3-Clause | Permissive | https://github.com/python-websockets/websockets | fastmcp-slim |
 
-## Development / test dependencies: `.[dev]` additions (37 packages, not distributed)
+## Development / test dependencies: `.[dev]` additions (39 packages, not distributed)
 
 | Name | Version | License | Category | URL | Required by |
 |---|---|---|---|---|---|
@@ -203,7 +208,9 @@ regenerating the tables, not by the test.
 | id | 1.6.1 | Apache Software License | Permissive | https://pypi.org/project/id/ | twine |
 | identify | 2.6.20 | MIT | Permissive | https://github.com/pre-commit/identify | pre_commit |
 | iniconfig | 2.3.1 | MIT | Permissive | https://github.com/pytest-dev/iniconfig | pytest |
+| Jinja2 | 3.1.6 | BSD License | Permissive | https://github.com/pallets/jinja/ | cubrid-mcp-server |
 | librt | 0.16.0 | MIT | Permissive | https://github.com/mypyc/librt | mypy |
+| MarkupSafe | 3.0.4 | BSD-3-Clause | Permissive | https://github.com/pallets/markupsafe/ | Jinja2 |
 | mypy | 2.4.0 | MIT | Permissive | https://www.mypy-lang.org/ | cubrid-mcp-server |
 | mypy_extensions | 1.1.0 | MIT | Permissive | https://github.com/python/mypy_extensions | mypy |
 | nh3 | 0.3.7 | MIT | Permissive | https://github.com/messense/nh3 | readme_renderer |
