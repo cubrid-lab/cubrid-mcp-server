@@ -27,6 +27,8 @@ class _Cursor:
 
     def execute(self, sql: str, params: Any = ()) -> None:
         self.conn.executed.append(sql)
+        if sql == "SELECT 1" and self.conn.fail_at == "timeout":
+            raise TimeoutError("evaluator query timeout")
         if sql == "SET TRACE OFF" and self.conn.fail_at == "trace_off":
             raise pycubrid.OperationalError("evaluator trace-off failure")
 
@@ -42,6 +44,7 @@ class _Conn:
         self.fail_at = fail_at
         self.executed: list[str] = []
         self.cursors = 0
+        self.rollbacks = 0
 
     def cursor(self) -> _Cursor:
         self.cursors += 1
@@ -50,6 +53,7 @@ class _Conn:
         return _Cursor(self)
 
     def rollback(self) -> None:
+        self.rollbacks += 1
         if self.fail_at == "rollback":
             raise pycubrid.OperationalError("evaluator rollback failure")
 
@@ -78,8 +82,27 @@ def _traced(db: Database) -> list[tuple[str]]:
 def test_failed_cleanup_retires_the_connection(monkeypatch, fail_at):
     db, created = _db(monkeypatch, fail_at)
     assert _traced(db) == [("plan",)]
+    # Cleanup stops at the first failure and does not reconnect by itself.
+    assert len(created) == 1, "cleanup opened a new connection"
+    if fail_at in ("cursor", "trace_off"):
+        assert created[0].rollbacks == 0, "cleanup went on after the first failure"
     _traced(db)
     assert len(created) == 2, "the connection with a failed cleanup was reused"
+
+
+def test_a_query_timeout_sends_no_cleanup_and_retires_the_connection(monkeypatch):
+    db, created = _db(monkeypatch, "timeout")
+    with pytest.raises(Exception) as raised:
+        _traced(db)
+    # The timeout still reaches the caller, as the server's timeout error or the raw one.
+    assert "timeout" in type(raised.value).__name__.lower() or isinstance(
+        raised.value.__cause__, TimeoutError
+    )
+    dead = created[0]
+    assert "SET TRACE OFF" not in dead.executed and dead.rollbacks == 0
+    assert dead.cursors == 1, "a cleanup cursor was opened on the dead socket"
+    _traced(db)
+    assert len(created) == 2
 
 
 def test_healthy_cleanup_keeps_the_connection(monkeypatch):

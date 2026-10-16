@@ -3,7 +3,7 @@
   "base_sha": "58621d96876f6bda73ff9f9b802c0c7101d0eb80",
   "commands": [
     {
-      "command": "python -m pytest -q -p no:cacheprovider tests/test_audit.py",
+      "command": "python -m pytest -q -p no:cacheprovider tests/test_audit.py tests/test_safety.py",
       "exit_code": 1,
       "kind": "offline",
       "outcome": "failed"

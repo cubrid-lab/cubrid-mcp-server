@@ -46,6 +46,35 @@ def test_read_only_check_rejects_writes(sql):
         safety.ensure_read_only(sql)
 
 
+@pytest.mark.parametrize(
+    "sql", ["DELETE FROM t", "DROP TABLE t", "TRUNCATE t", "SELECT 1; DELETE FROM t"]
+)
+def test_the_query_whitelist_rejects_writes_and_ddl(sql):
+    # The path execute_query takes when read-only mode is off still refuses changes.
+    with pytest.raises(safety.UnsafeSQLError):
+        safety.ensure_query_statement(sql)
+
+
+@pytest.mark.parametrize(
+    "sql",
+    [
+        "DROP TABLE t",
+        "TRUNCATE t",
+        "GRANT SELECT ON t TO u",
+        "SELECT 1",
+        "INSERT INTO t VALUES (1); DROP TABLE t",
+    ],
+)
+def test_write_mode_allows_only_single_dml(sql):
+    with pytest.raises(safety.UnsafeSQLError):
+        safety.ensure_write_allowed(sql)
+
+
+def test_write_mode_still_allows_single_dml():
+    safety.ensure_write_allowed("UPDATE t SET a = 1 WHERE id = 2")
+    safety.ensure_query_statement("SELECT a FROM t")
+
+
 def test_read_only_check_allows_a_plain_select():
     safety.ensure_read_only("SELECT a FROM t WHERE b = 1")
 

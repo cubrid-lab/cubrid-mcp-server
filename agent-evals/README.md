@@ -61,6 +61,8 @@ each task's base and fix, and it checks:
 
 - the default configuration is read-only, with write mode and the audit log off;
 - the read-only check rejects writes, DDL and stacked statements;
+- the query whitelist (read-only off) still rejects writes and DDL, and write mode
+  accepts only a single INSERT, UPDATE or DELETE;
 - an audit record holds no raw SQL or literal value, and nothing reaches stdout;
 - the package has no `print()` to stdout (no `file=` or `file=None`) and no use of
   `sys.stdout`.
@@ -187,7 +189,9 @@ fixture. The failures cover:
 - stale evidence: results recorded for another patch;
 - an unrelated modification;
 - a false live claim;
-- a missing *not verified* statement.
+- a missing *not verified* statement;
+- cleanup that keeps going after its first failure;
+- cleanup statements sent after a query timeout.
 
 `make agent-eval-check` fails when any fixture grades differently from its
 `expected.json`.

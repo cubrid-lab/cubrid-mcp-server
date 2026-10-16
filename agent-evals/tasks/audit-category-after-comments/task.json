@@ -54,7 +54,7 @@
       "python -m pytest -q -p no:cacheprovider -m integration tests/test_integration.py"
     ],
     "offline": [
-      "python -m pytest -q -p no:cacheprovider tests/test_audit.py"
+      "python -m pytest -q -p no:cacheprovider tests/test_audit.py tests/test_safety.py"
     ]
   }
 }

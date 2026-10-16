@@ -9,7 +9,7 @@
   ],
   "tests": [
     {
-      "command": "python -m pytest -q -p no:cacheprovider tests/test_audit.py",
+      "command": "python -m pytest -q -p no:cacheprovider tests/test_audit.py tests/test_safety.py",
       "evidence": "offline",
       "result": "passed"
     },

@@ -92,6 +92,8 @@ def test_missing_results_is_incomplete_never_pass(task_id: str) -> None:
         (TRACE, "wrong_behavior", "behavior"),
         (TRACE, "stdout_contamination", "policy"),
         (TRACE, "unrelated_modification", "scope"),
+        (TRACE, "cleanup_continues_after_failure", "behavior"),
+        (TRACE, "cleanup_after_timeout", "behavior"),
     ],
 )
 def test_each_negative_fixture_fails_closed(task_id: str, fixture: str, criterion: str) -> None:
