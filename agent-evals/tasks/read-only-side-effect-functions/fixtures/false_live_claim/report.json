@@ -1,0 +1,22 @@
+{
+  "agent": {
+    "model": "n/a (historical commit d17bf58)",
+    "name": "reference fix"
+  },
+  "statements": [
+    "Offline: the unit tests and the evaluator's checks pass against mocks.",
+    "Verified against a live CUBRID 11.4 server: the SELECT-only user cannot change data."
+  ],
+  "tests": [
+    {
+      "command": "python -m pytest -q -p no:cacheprovider tests/test_safety.py",
+      "evidence": "offline",
+      "result": "passed"
+    },
+    {
+      "command": "python -m pytest -q -p no:cacheprovider -m integration tests/test_integration.py -k select_only_user_cannot_change_data",
+      "evidence": "live_integration",
+      "result": "not run"
+    }
+  ]
+}

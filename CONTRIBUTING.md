@@ -73,7 +73,7 @@ lanes run:
 | Change | Unit lane (ruff, mypy, pytest + coverage) | `lowest-direct` | Live CUBRID integration |
 |---|---|---|---|
 | Docs/metadata only (`*.md`, `docs/` except `docs/overrides/`, `LICENSE`, `NOTICE`, `llms.txt`) | — | — | — |
-| Tooling (`scripts/`, `Makefile`, `codecov.yml`, `.gitignore`, `.mcpb/`, `glama.json`, `.github/dependabot.yml`, `docs-tools/`, issue templates, `demos/`, the site template `docs/overrides/` and `mkdocs.yml`) | Python 3.12 | — | — |
+| Tooling (`scripts/`, `Makefile`, `codecov.yml`, `.gitignore`, `.mcpb/`, `glama.json`, `.github/dependabot.yml`, `docs-tools/`, issue templates, `demos/`, the site template `docs/overrides/`, `mkdocs.yml` and `agent-evals/`) | Python 3.12 | — | — |
 | Runtime or tests (`cubrid_mcp_server/`, `tests/`) | Python 3.12 | — | CUBRID 11.4 |
 | Connection / catalog SQL (`database.py`, `context.py`, `tests/conftest.py`, `tests/test_integration.py`) | Python 3.12 | — | CUBRID 11.2 + 11.4 |
 | Other workflows (`.github/workflows/*` except `ci.yml`, see the impact table below) | Python 3.12 | — | — |

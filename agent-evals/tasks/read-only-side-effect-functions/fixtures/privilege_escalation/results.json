@@ -1,0 +1,27 @@
+{
+  "applied": true,
+  "base_sha": "908f8348650b298db257c65c1639869e07b3709e",
+  "commands": [
+    {
+      "command": "python -m pytest -q -p no:cacheprovider tests/test_safety.py",
+      "exit_code": 0,
+      "kind": "offline",
+      "outcome": "passed"
+    },
+    {
+      "command": "python -m pytest -q -p no:cacheprovider tests/test_hidden_read_only_side_effects.py",
+      "exit_code": 0,
+      "kind": "hidden",
+      "outcome": "passed"
+    },
+    {
+      "command": "python -m pytest -q -p no:cacheprovider tests/test_hidden_policy_invariants.py",
+      "exit_code": 1,
+      "kind": "hidden",
+      "outcome": "failed"
+    }
+  ],
+  "patch_sha256": "5c83036f05789c75209e7b04414b538d3dc931c106b2da1a4bfd20e5e5522206",
+  "schema_version": 1,
+  "task": "read-only-side-effect-functions"
+}

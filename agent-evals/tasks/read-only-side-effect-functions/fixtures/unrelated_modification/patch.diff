@@ -1,0 +1,576 @@
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index 39d5c4f..dcbbe66 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -14,6 +14,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
+ - **SQL checks read comments, quotes and statements with CUBRID's rules** — `ensure_read_only`, `ensure_query_statement` and `ensure_write_allowed` no longer rely on `sqlparse`'s generic lexer for comment, quote and `;` boundaries, which differ from CUBRID's: `sqlparse` does not know CUBRID's `//` line comments, reads `#` and `$$ … $$` as a comment and a string where CUBRID does not, and reads a backslash as a quote escape. A comment that names an allowed keyword can no longer hide the real leading statement, and input that CUBRID would split into more than one statement is rejected. Input with an unterminated quote, or whose quote boundaries depend on the server parameter `no_backslash_escapes`, is now rejected; escape a quote by doubling the quote character used (`''` or `""`).
+ - **The release workflow is named `publish-pypi.yml` again** — `.github/workflows/release.yml` is renamed back to `.github/workflows/publish-pypi.yml`, the workflow filename registered as the PyPI Trusted Publisher (environment `pypi`). Under the `release.yml` name the 0.5.0 run failed at the PyPI upload with "Publisher with matching claims was not found". The shared release scripts (`release_detect.py`, `release_summary.py`, `verify_dist.py`, `pypi_duplicate_guard.py`, `reconcile_release_labels.py`) are again byte-identical with pycubrid and sqlalchemy-cubrid, and `RELEASING.md`, `CONTRIBUTING.md`, `AGENTS.md`, the `Makefile` and the workflow tests name `publish-pypi.yml`. `RELEASING.md` notes that the filename is the Trusted Publisher identity and must not be renamed. No runtime change.
+ 
++### Security
++
++- **Read-only mode rejects `INCR`, `DECR`, serial advances and the click counter** — `ensure_read_only` checked only `sqlparse` keyword tokens, so `SELECT INCR(cnt) …`, `DECR(…)`, `serial.NEXT_VALUE`, `serial.NEXTVAL`, `SERIAL_NEXT_VALUE(serial, n)` and `SELECT … WITH INCREMENT FOR col` / `WITH DECREMENT FOR col` passed `execute_query` and `explain_query` and changed data. The rollback after the read does not undo these changes, and a `SELECT`-only grant does not prevent them: on CUBRID 11.4 a user granted only `SELECT` on a table increased a column in it and advanced a serial it had no grant on. Read-only mode now rejects these names when they are called or used as an attribute, in any case, bare or quoted (`"INCR"`, `[incr]`, `` `incr` ``), with whitespace or comments in between, anywhere in the statement, including subqueries and CTEs; string literals and longer names such as `incr_total` are not matched. `CURRENT_VALUE`, `CURRVAL` and `SERIAL_CURRENT_VALUE` stay allowed. A qualified column with one of these names (`t.next_value`) is now rejected. With `CUBRID_MCP_READONLY=0`, `execute_query` still does not reject these forms. `docs/SECURITY_MODEL.md`, `SECURITY.md`, `docs/TOOLS.md` and the README say that a `SELECT`-only grant does not stop them.
++
+ ### Documentation
+ 
+ - **Korean README lists the related projects** — `docs/README.ko.md` now has the Related Projects section (pycubrid, sqlalchemy-cubrid, cubrid-cookbook-python) that the English README already had.
+diff --git a/README.md b/README.md
+index e7d0805..e2918a5 100644
+--- a/README.md
++++ b/README.md
+@@ -227,6 +227,8 @@ Add to `.cursor/mcp.json`:
+ 
+ The server is **read-only by default**. A code-level SQL whitelist allows only `SELECT`, `SHOW`, `DESC`, `DESCRIBE`, and `WITH` statements. Multi-statement queries are rejected. CUBRID has no `EXPLAIN` statement; use the `explain_query` tool for execution plans (it executes the statement under `SET TRACE ON` and rolls back).
+ 
++Read-only mode also rejects `INCR`, `DECR`, serial advances (`NEXT_VALUE`, `NEXTVAL`, `SERIAL_NEXT_VALUE`) and the click counter `WITH INCREMENT FOR`: they change data inside a `SELECT`, the rollback does not undo them, and **a `SELECT`-only grant does not prevent them**. See the [Security Model](docs/SECURITY_MODEL.md).
++
+ > **The SQL keyword checks are a guardrail and defense-in-depth, not a security boundary.** The primary control is a dedicated least-privilege database account: **run the server as a CUBRID user that has `SELECT` only on the tables the model needs**, never reuse `dba` or the owner account, and keep the account to the minimum privileges required, with no DDL rights. See [`SECURITY.md`](./SECURITY.md).
+ 
+ For production use, also configure a read-only database user. See [`SECURITY.md`](./SECURITY.md) for the recommended setup.
+@@ -240,7 +242,7 @@ Constraints and rationale:
+ - **Single-statement DML only.** Standalone reads, DDL (`CREATE`/`ALTER`/`DROP`/`TRUNCATE`), transaction-control, and multi-statement input are rejected. (A single DML statement may still legally contain subqueries, e.g. `INSERT ... SELECT`.)
+ - **DDL is intentionally unsupported.** `execute_write` is a DML tool (`INSERT`/`UPDATE`/`DELETE`) and `execute_query` is read-only, so `CREATE`/`ALTER`/`DROP`/`TRUNCATE` are rejected by both. (The server runs pycubrid with autocommit off; on the CUBRID versions tested (10.2, 11.2, 11.4) DDL is transactional and is rolled back if it is not committed, so the exclusion rests on the tool contracts, not on DDL auto-commit.)
+ - **Write mode is per-connection.** `execute_write` accepts the same optional `connection` argument as the read tools and runs against that connection; a connection whose `CUBRID_<NAME>_MCP_WRITE` is off refuses the write even when another connection enables it.
+-- `execute_query` remains **read-only regardless** of the write-mode flag and of `CUBRID_MCP_READONLY`: with `CUBRID_MCP_READONLY=0` it still rejects write, DDL and transaction-control statements before they run, and rolls back any statement that returns no result set. Clients that sent writes through `execute_query` with `CUBRID_MCP_READONLY=0` must switch to `execute_write`.
++- `execute_query` never becomes a write path through the write-mode flag or `CUBRID_MCP_READONLY`: with `CUBRID_MCP_READONLY=0` it still rejects write, DDL and transaction-control statements before they run, and rolls back any statement that returns no result set, but it does not reject `INCR`, `DECR`, serial advances or the click counter, which change data inside a `SELECT`. Clients that sent writes through `execute_query` with `CUBRID_MCP_READONLY=0` must switch to `execute_write`.
+ - Enforcement is defense-in-depth; still run the server as a CUBRID user granted only the privileges it needs. See [`SECURITY.md`](./SECURITY.md).
+ 
+ ## Logging
+diff --git a/SECURITY.md b/SECURITY.md
+index 40bd637..77faa2e 100644
+--- a/SECURITY.md
++++ b/SECURITY.md
+@@ -28,10 +28,14 @@ Additional hardening:
+ - If the LLM only needs a subset of tables, grant `SELECT` on those tables specifically rather than the whole schema.
+ - Restrict network reachability: run CUBRID on a private network and only expose it to the host running the MCP server.
+ 
++> **A `SELECT`-only grant does not stop every write.** CUBRID lets a user who may only `SELECT` from a table change data through the read itself: `INCR(col)` and `DECR(col)` update the row they read, the click counter `SELECT ... WITH INCREMENT FOR col` (or `WITH DECREMENT FOR col`) does the same, and `serial.NEXT_VALUE`, `serial.NEXTVAL` and `SERIAL_NEXT_VALUE(serial, n)` advance a serial, even one the user was granted nothing on. These changes persist: the rollback that ends every read does not undo them. The read-only checks (Layer 2) reject these forms; with `CUBRID_MCP_READONLY=0`, `execute_query` does not.
++
+ ## Layer 2 — code-level read-only whitelist
+ 
+ When `CUBRID_MCP_READONLY=1` (the default) the server parses every statement with `sqlparse` and rejects anything that is not `SELECT`, `SHOW`, `DESC`, `DESCRIBE`, or `WITH` (CTE). CUBRID has no `EXPLAIN` statement; use the `explain_query` tool for execution plans. Multi-statement input is rejected. Comments, quotes and statement boundaries are read with CUBRID's rules, not `sqlparse`'s: `--`, `//` and `/* ... */` are comments (block comments do not nest), `#` is not a comment, and a backslash is an ordinary character inside quotes. Input whose quote boundaries depend on whether a backslash escapes a quote (the server parameter `no_backslash_escapes`), or that has an unterminated quote, is rejected.
+ 
++Read-only mode also rejects the CUBRID forms that change data inside a `SELECT`, which a `SELECT`-only grant does not prevent (see Layer 1): the functions `INCR` and `DECR`, the serial advances `NEXT_VALUE`, `NEXTVAL` and `SERIAL_NEXT_VALUE`, and the click counter `WITH INCREMENT FOR` / `WITH DECREMENT FOR`. A name is matched when it is called (followed by `(`) or used as an attribute (after `.`, as in `owner.serial.NEXT_VALUE`), in any case, bare or quoted (`"INCR"`, `[incr]`, `` `incr` ``), with any whitespace or comments in between, anywhere in the statement, including subqueries and CTEs. String literals and longer names such as `incr_total` are not matched. `CURRENT_VALUE`, `CURRVAL` and `SERIAL_CURRENT_VALUE` only read a serial and stay allowed. A column that has one of these names is rejected when it is qualified (`t.next_value`); select it unqualified instead.
++
+ These keyword checks are a guardrail and defense-in-depth, not a security boundary. The primary control is a dedicated least-privilege database account (Layer 1): grant `SELECT` only on the tables the model needs, do not reuse `dba` or the owner account, and keep the account to the minimum privileges required, with no DDL rights.
+ 
+ You can disable this layer by setting `CUBRID_MCP_READONLY=0`, but only do so when:
+@@ -39,6 +43,8 @@ You can disable this layer by setting `CUBRID_MCP_READONLY=0`, but only do so wh
+ - the underlying DB user is already read-only (Layer 1 is in place), **and**
+ - you genuinely need statements outside the whitelist (for example, CUBRID administrative `SHOW` variants that confuse the parser).
+ 
++With `CUBRID_MCP_READONLY=0`, `execute_query` does not reject `INCR`, `DECR`, serial advances or the click counter, so a statement that uses them changes data although it returns a result set; `explain_query` still rejects them.
++
+ **`explain_query` always applies the read-only checks**, independent of `CUBRID_MCP_READONLY`; only `execute_query` honors `CUBRID_MCP_READONLY=0`. Note that `explain_query` executes the `SELECT`/`WITH` statement under `SET TRACE ON` to produce the trace and then rolls the transaction back as best-effort cleanup, so it uses real database resources.
+ 
+ ## Layer 2b — opt-in write mode (`CUBRID_MCP_WRITE`)
+diff --git a/cubrid_mcp_server/database.py b/cubrid_mcp_server/database.py
+index 3b86b37..7b3184e 100644
+--- a/cubrid_mcp_server/database.py
++++ b/cubrid_mcp_server/database.py
+@@ -457,3 +457,5 @@ class Database:
+                         rows.append(row)
+             self._end_read_transaction()
+             return rows, truncated
++
++# Unrelated note added by the candidate.
+diff --git a/cubrid_mcp_server/safety.py b/cubrid_mcp_server/safety.py
+index 773bbda..f2001e9 100644
+--- a/cubrid_mcp_server/safety.py
++++ b/cubrid_mcp_server/safety.py
+@@ -14,6 +14,7 @@ configure CUBRID with a read-only user account for production use. See
+ 
+ from __future__ import annotations
+ 
++import re
+ from typing import Any
+ 
+ import sqlparse
+@@ -83,6 +84,29 @@ FORBIDDEN_KEYWORDS: frozenset[str] = frozenset(
+ )
+ 
+ 
++# CUBRID functions and serial attributes that change data although they appear in
++# a SELECT: ``INCR(col)``/``DECR(col)`` update the row they read, and
++# ``serial.NEXT_VALUE``, ``serial.NEXTVAL`` and ``SERIAL_NEXT_VALUE(serial, n)``
++# advance a serial. The server rollback after a read does not undo either, and a
++# SELECT-only grant does not prevent them. ``sqlparse`` reads these names as
++# ``Name`` tokens (or as a string symbol when double-quoted), so they are never
++# seen by the keyword scan; :func:`_side_effect` finds them instead. A name counts
++# when it is followed by ``(`` or preceded by ``.``, whether bare or quoted, in
++# any case. ``CURRENT_VALUE``, ``CURRVAL`` and ``SERIAL_CURRENT_VALUE`` only read
++# a serial and stay allowed.
++SIDE_EFFECT_NAMES: frozenset[str] = frozenset(
++    {"INCR", "DECR", "NEXT_VALUE", "NEXTVAL", "SERIAL_NEXT_VALUE"}
++)
++
++# The click-counter clause ``SELECT ... WITH INCREMENT FOR col`` (or
++# ``WITH DECREMENT FOR col``) updates ``col`` in the rows it reads.
++CLICK_COUNTER_NAMES: frozenset[str] = frozenset({"INCREMENT", "DECREMENT"})
++
++# A CUBRID identifier (``#`` is an identifier character, so ``incr#`` is one name),
++# a number, or one other non-space character.
++_CODE_TOKEN = re.compile(r"[^\W\d][\w#]*|\d+|[^\w\s]")
++
++
+ class UnsafeSQLError(ValueError):
+     """Raised when a statement is rejected by the read-only checker."""
+ 
+@@ -253,6 +277,12 @@ def ensure_read_only(sql: str) -> None:
+     forbidden = _forbidden_keywords(statement)
+     if forbidden:
+         raise UnsafeSQLError(f"{sorted(forbidden)[0]} is not permitted in read-only mode")
++    side_effect = _side_effect(sql)
++    if side_effect is not None:
++        raise UnsafeSQLError(
++            f"{side_effect} is not permitted in read-only mode: it changes data "
++            "even inside a SELECT, and the rollback after the read does not undo it"
++        )
+     if more_by_cubrid:
+         raise _multi_statement_error("read-only mode")
+ 
+@@ -339,3 +369,54 @@ def _collect_forbidden(token: Any, found: set[str]) -> None:
+                 found.add(upper)
+         if hasattr(child, "tokens"):
+             _collect_forbidden(child, found)
++
++
++def _code_tokens(sql: str) -> list[tuple[str, str]]:
++    """Return ``(kind, upper_text)`` tokens of ``sql``, without whitespace and comments.
++
++    ``kind`` is ``"name"`` for a bare or quoted identifier (``"..."``, ```...```,
++    ``[...]``, unquoted with doubled quote characters undone and whitespace kept, since
++    CUBRID reads ``"incr "`` as a different name), ``"literal"``
++    for a ``'...'`` string and ``"code"`` for anything else. Comments are dropped,
++    so ``INCR/**/(`` reads as ``INCR (``. Callers have already rejected input whose
++    quote boundaries are ambiguous or unterminated (see :func:`_cubrid_statements`).
++    """
++    tokens: list[tuple[str, str]] = []
++    for kind, text in lex_sql(sql, backslash_escapes=False):
++        if kind == "comment":
++            continue
++        if kind != "code":
++            quote = text[0]
++            if quote == "'":
++                tokens.append(("literal", ""))
++            elif quote == "[":
++                tokens.append(("name", text[1:-1].upper()))
++            else:
++                inner = text[1:-1].replace(quote * 2, quote)
++                tokens.append(("name", inner.upper()))
++            continue
++        for match in _CODE_TOKEN.finditer(text):
++            value = match.group().upper()
++            is_name = value[0].isalpha() or value[0] == "_"
++            tokens.append(("name" if is_name else "code", value))
++    return tokens
++
++
++def _side_effect(sql: str) -> str | None:
++    """Return the first data-changing function, serial advance or click counter in ``sql``.
++
++    See :data:`SIDE_EFFECT_NAMES` and :data:`CLICK_COUNTER_NAMES`. The whole input
++    is scanned, so subqueries and CTEs are covered; string literals are not names,
++    and a longer name such as ``incr_total`` is a different identifier.
++    """
++    tokens = _code_tokens(sql)
++    for i, (kind, value) in enumerate(tokens):
++        if kind != "name":
++            continue
++        before = tokens[i - 1] if i > 0 else ("", "")
++        after = tokens[i + 1] if i + 1 < len(tokens) else ("", "")
++        if value in SIDE_EFFECT_NAMES and (after == ("code", "(") or before == ("code", ".")):
++            return value
++        if value in CLICK_COUNTER_NAMES and before[1] == "WITH" and after[1] == "FOR":
++            return f"WITH {value} FOR"
++    return None
+diff --git a/docs/README.ko.md b/docs/README.ko.md
+index 328ebb9..8777502 100644
+--- a/docs/README.ko.md
++++ b/docs/README.ko.md
+@@ -197,6 +197,8 @@ cubrid-mcp-server
+ 
+ 서버는 기본적으로 **읽기 전용**입니다. 코드 수준의 SQL 화이트리스트는 `SELECT`, `SHOW`, `DESC`, `DESCRIBE`, `WITH` 문만 허용하며, 다중 문장 쿼리는 거부됩니다. CUBRID에는 `EXPLAIN` 문이 없으므로 실행 계획은 `explain_query` 도구를 사용하세요(`SET TRACE ON` 아래에서 문장을 실행한 뒤 롤백합니다).
+ 
++읽기 전용 모드는 `INCR`, `DECR`, 시리얼 증가(`NEXT_VALUE`, `NEXTVAL`, `SERIAL_NEXT_VALUE`), 클릭 카운터 `WITH INCREMENT FOR`도 거부합니다. 이들은 `SELECT` 안에서 데이터를 바꾸고, 롤백으로 되돌려지지 않으며, **`SELECT` 권한만으로 막을 수 없습니다**. [보안 모델](ko/SECURITY_MODEL.md)을 참고하세요.
++
+ > **SQL 키워드 검사는 가드레일이자 심층 방어이며 보안 경계가 아닙니다.** 주된 통제는 전용 최소 권한 데이터베이스 계정입니다: 모델에 필요한 테이블에만 **SELECT 권한을 가진 CUBRID 사용자**로 서버를 실행하고, `dba`나 소유자 계정을 재사용하지 말며, 계정에는 필요한 최소 권한만 부여하고 DDL 권한은 부여하지 마세요. 자세한 내용은 [`SECURITY.md`](https://github.com/cubrid-lab/cubrid-mcp-server/blob/main/SECURITY.md)를 참고하세요.
+ 
+ ### 쓰기 모드 (옵트인)
+@@ -208,7 +210,7 @@ cubrid-mcp-server
+ - **단일 DML 문만 허용.** 독립 실행형 읽기, DDL(`CREATE`/`ALTER`/`DROP`/`TRUNCATE`), 트랜잭션 제어, 다중 문장 입력은 거부됩니다. (단일 DML 안의 서브쿼리는 합법적으로 허용됩니다.)
+ - **DDL은 의도적으로 미지원.** `execute_write`는 DML 도구(`INSERT`/`UPDATE`/`DELETE`)이고 `execute_query`는 읽기 전용이므로 `CREATE`/`ALTER`/`DROP`/`TRUNCATE`는 양쪽 모두에서 거부됩니다. (서버는 autocommit을 끈 pycubrid를 사용하며, 테스트한 CUBRID 버전(10.2, 11.2, 11.4)에서 DDL은 트랜잭션에 속해 커밋하지 않으면 롤백됩니다. 따라서 이 제외는 DDL 자동 커밋이 아니라 도구 계약에 근거합니다.)
+ - **쓰기 모드는 연결 단위.** 읽기 도구와 동일한 `connection` 인자를 받으며, 대상 연결의 설정으로 강제됩니다.
+-- `execute_query`는 쓰기 모드 플래그 및 `CUBRID_MCP_READONLY`와 무관하게 **항상 읽기 전용**입니다. `CUBRID_MCP_READONLY=0`이어도 쓰기·DDL·트랜잭션 제어 문장은 실행 전에 거부되고, 결과 집합을 반환하지 않는 문장은 롤백됩니다. `CUBRID_MCP_READONLY=0`으로 `execute_query`를 통해 쓰기를 보내던 클라이언트는 `execute_write`로 전환해야 합니다.
++- `execute_query`는 쓰기 모드 플래그나 `CUBRID_MCP_READONLY` 때문에 쓰기 경로가 되지 않습니다. `CUBRID_MCP_READONLY=0`이어도 쓰기·DDL·트랜잭션 제어 문장은 실행 전에 거부되고, 결과 집합을 반환하지 않는 문장은 롤백됩니다. 다만 `SELECT` 안에서 데이터를 바꾸는 `INCR`, `DECR`, 시리얼 증가, 클릭 카운터는 거부하지 않습니다. `CUBRID_MCP_READONLY=0`으로 `execute_query`를 통해 쓰기를 보내던 클라이언트는 `execute_write`로 전환해야 합니다.
+ 
+ ## 로깅
+ 
+diff --git a/docs/SECURITY_MODEL.md b/docs/SECURITY_MODEL.md
+index f951bdf..cae7699 100644
+--- a/docs/SECURITY_MODEL.md
++++ b/docs/SECURITY_MODEL.md
+@@ -21,15 +21,21 @@ GRANT SELECT ON orders TO mcp_reader;
+ 
+ Grant `SELECT` only on the tables the model needs, and keep the account to the minimum privileges required, with no DDL rights.
+ 
++> **A `SELECT`-only grant does not stop every write.** CUBRID lets a user who may only `SELECT` from a table change data through the read itself: `INCR(col)` and `DECR(col)` update the row they read, the click counter `SELECT ... WITH INCREMENT FOR col` (or `WITH DECREMENT FOR col`) does the same, and `serial.NEXT_VALUE`, `serial.NEXTVAL` and `SERIAL_NEXT_VALUE(serial, n)` advance a serial, even one the user was granted nothing on. These changes persist: the rollback that ends every read does not undo them. The read-only checks (Layer 2) reject these forms; with `CUBRID_MCP_READONLY=0`, `execute_query` does not.
++
+ Additional hardening: use a long random password from a secret manager, rotate it on your normal cadence, grant per-table rather than schema-wide, and keep CUBRID on a network only the MCP-server host can reach. See [`SECURITY.md`](https://github.com/cubrid-lab/cubrid-mcp-server/blob/main/SECURITY.md) for the full policy.
+ 
+ ## Layer 2 — read-only SQL whitelist
+ 
+ The server is **read-only by default**. When `CUBRID_MCP_READONLY=1` (the default), every statement is parsed with `sqlparse` and rejected unless it is `SELECT`, `SHOW`, `DESC`, `DESCRIBE`, or `WITH` (CTE). CUBRID has no `EXPLAIN` statement; use the `explain_query` tool for execution plans. Multi-statement input is rejected. Comments, quotes and statement boundaries are read with CUBRID's rules, not `sqlparse`'s: `--`, `//` and `/* ... */` are comments (block comments do not nest), `#` is not a comment, and a backslash is an ordinary character inside quotes. Input whose quote boundaries depend on whether a backslash escapes a quote (the server parameter `no_backslash_escapes`), or that has an unterminated quote, is rejected.
+ 
++Read-only mode also rejects the CUBRID forms that change data inside a `SELECT`, which a `SELECT`-only grant does not prevent (see Layer 1): the functions `INCR` and `DECR`, the serial advances `NEXT_VALUE`, `NEXTVAL` and `SERIAL_NEXT_VALUE`, and the click counter `WITH INCREMENT FOR` / `WITH DECREMENT FOR`. A name is matched when it is called (followed by `(`) or used as an attribute (after `.`, as in `owner.serial.NEXT_VALUE`), in any case, bare or quoted (`"INCR"`, `[incr]`, `` `incr` ``), with any whitespace or comments in between, anywhere in the statement, including subqueries and CTEs. String literals and longer names such as `incr_total` are not matched. `CURRENT_VALUE`, `CURRVAL` and `SERIAL_CURRENT_VALUE` only read a serial and stay allowed. A column that has one of these names is rejected when it is qualified (`t.next_value`); select it unqualified instead.
++
+ > The SQL keyword checks are a guardrail and defense-in-depth, not a security boundary. They are a best-effort client-side filter against obvious mistakes; the primary control is the dedicated least-privilege database account (Layer 1), which should have `SELECT` only on the tables the model needs.
+ 
+-`CUBRID_MCP_READONLY=0` relaxes this whitelist — only do so when the DB user is already read-only and you need result-set statements the parser misclassifies. It does **not** make `execute_query` a write path: `execute_query` still rejects statements that lead with a write, DDL or transaction-control keyword (`INSERT`, `UPDATE`, `DELETE`, `REPLACE`, `MERGE`, `CREATE`, `ALTER`, `DROP`, `TRUNCATE`, `RENAME`, `GRANT`, `REVOKE`, `COMMIT`, `ROLLBACK`, `SAVEPOINT`, `SET`, `PREPARE`, `EXECUTE`, `DEALLOCATE`, `DO`) (matching the first word of the leading keyword) and rejects multi-statement and empty input before they reach the database, never commits, and rolls back any statement that returns no result set (keeping the connection) as well as every successful read. `explain_query` always applies the read-only checks regardless of this flag (see below). This keyword check is a guardrail, not a security boundary: the read-only database account remains the security boundary. Use `execute_write` (opt-in write mode) for writes; clients that sent writes through `execute_query` with `CUBRID_MCP_READONLY=0` must switch to it.
++`CUBRID_MCP_READONLY=0` relaxes this whitelist — only do so when the DB user is already read-only and you need result-set statements the parser misclassifies. It does **not** make `execute_query` a write path for statements that lead with a write keyword: `execute_query` still rejects statements that lead with a write, DDL or transaction-control keyword (`INSERT`, `UPDATE`, `DELETE`, `REPLACE`, `MERGE`, `CREATE`, `ALTER`, `DROP`, `TRUNCATE`, `RENAME`, `GRANT`, `REVOKE`, `COMMIT`, `ROLLBACK`, `SAVEPOINT`, `SET`, `PREPARE`, `EXECUTE`, `DEALLOCATE`, `DO`) (matching the first word of the leading keyword) and rejects multi-statement and empty input before they reach the database, never commits, and rolls back any statement that returns no result set (keeping the connection) as well as every successful read. `explain_query` always applies the read-only checks regardless of this flag (see below). This keyword check is a guardrail, not a security boundary: the read-only database account remains the security boundary. Use `execute_write` (opt-in write mode) for writes; clients that sent writes through `execute_query` with `CUBRID_MCP_READONLY=0` must switch to it.
++
++With `CUBRID_MCP_READONLY=0`, `execute_query` does not reject `INCR`, `DECR`, serial advances or the click counter, so a statement that uses them changes data although it returns a result set; `explain_query` still rejects them.
+ 
+ ## Layer 2b — opt-in write mode (`CUBRID_MCP_WRITE`)
+ 
+@@ -40,7 +46,7 @@ Write access is **off by default**. Setting `CUBRID_MCP_WRITE=1` registers a sep
+ - **DDL is intentionally unsupported.** `execute_write` is a DML tool (`INSERT`/`UPDATE`/`DELETE`) and `execute_query` is read-only, so `CREATE`/`ALTER`/`DROP`/`TRUNCATE` are rejected by both. (The server runs pycubrid with autocommit off; on the CUBRID versions tested (10.2, 11.2, 11.4) DDL is transactional and is rolled back if it is not committed, so the exclusion rests on the tool contracts, not on DDL auto-commit.)
+ - **Not registered when disabled.** With write mode off, `execute_write` is absent from MCP capability discovery — the tool is simply not offered. Because the SQL checks are a guardrail, the database account remains what actually limits writes.
+ - **Per-connection gating.** With multiple connections, the tool is registered when **any** connection enables writes, but each write is enforced against the **target** connection's setting — a connection with writes off refuses even when another enables them.
+-- `execute_query` remains **read-only regardless** of the write flag.
++- `execute_query` ignores the write flag: write mode never makes it a write path (see Layer 2 for the `SELECT` side effects that `CUBRID_MCP_READONLY=0` lets through).
+ 
+ ### `explain_query` executes the statement
+ 
+diff --git a/docs/TOOLS.md b/docs/TOOLS.md
+index b874c26..a015443 100644
+--- a/docs/TOOLS.md
++++ b/docs/TOOLS.md
+@@ -222,7 +222,9 @@ Runs **read-only** SQL (`SELECT`, `SHOW`, `DESC`, `DESCRIBE`, `WITH`) and only s
+ 
+ Multi-statement and empty (comment-only or `;`-only) input is rejected, also with `CUBRID_MCP_READONLY=0`. Comments (`--`, `//`, `/* ... */`), quotes and `;` are read with CUBRID's rules, so a comment cannot hide the leading keyword; input with an unterminated quote, or with a backslash that would change where a quote ends, is rejected. Binary values are base64-encoded when small and summarized (`<binary N bytes>`) when large.
+ 
+-Every read ends its own transaction: the server rolls back after the rows are collected (truncated or not), so no locks or snapshot are held between tool calls and the next call sees rows other sessions have committed. `execute_query` never commits and is read-only even with `CUBRID_MCP_READONLY=0`, which only relaxes the whitelist: statements that lead with a write, DDL or transaction-control keyword (`INSERT`, `UPDATE`, `DELETE`, `REPLACE`, `MERGE`, `CREATE`, `ALTER`, `DROP`, `TRUNCATE`, `RENAME`, `GRANT`, `REVOKE`, `COMMIT`, `ROLLBACK`, `SAVEPOINT`, `SET`, `PREPARE`, `EXECUTE`, `DEALLOCATE`, `DO`) are rejected before they reach the database, with an error pointing to `execute_write`; the first word of the leading keyword is matched, so `CREATE OR REPLACE …` is rejected like `CREATE`. This keyword check is a guardrail, not a security boundary: the read-only database account remains the boundary. A statement that still returns no result set is rolled back and fails with `statement produced no result set; execute_query is read-only, use execute_write …`; the connection is kept. Use `execute_write` for writes.
++In read-only mode (the default) `execute_query` also rejects `INCR`, `DECR`, the serial advances `NEXT_VALUE`, `NEXTVAL` and `SERIAL_NEXT_VALUE`, and the click counter `WITH INCREMENT FOR` / `WITH DECREMENT FOR`, in any case, bare or quoted and anywhere in the statement: they change data inside a `SELECT`, the rollback does not undo them, and a `SELECT`-only grant does not prevent them. `CURRENT_VALUE`, `CURRVAL` and `SERIAL_CURRENT_VALUE` stay allowed. With `CUBRID_MCP_READONLY=0` these forms are not rejected. See the [Security Model](SECURITY_MODEL.md).
++
++Every read ends its own transaction: the server rolls back after the rows are collected (truncated or not), so no locks or snapshot are held between tool calls and the next call sees rows other sessions have committed. `execute_query` never commits. `CUBRID_MCP_READONLY=0` relaxes the whitelist but still keeps writes out of `execute_query` as far as the leading keyword shows (the `SELECT` side effects above are the exception): statements that lead with a write, DDL or transaction-control keyword (`INSERT`, `UPDATE`, `DELETE`, `REPLACE`, `MERGE`, `CREATE`, `ALTER`, `DROP`, `TRUNCATE`, `RENAME`, `GRANT`, `REVOKE`, `COMMIT`, `ROLLBACK`, `SAVEPOINT`, `SET`, `PREPARE`, `EXECUTE`, `DEALLOCATE`, `DO`) are rejected before they reach the database, with an error pointing to `execute_write`; the first word of the leading keyword is matched, so `CREATE OR REPLACE …` is rejected like `CREATE`. This keyword check is a guardrail, not a security boundary: the read-only database account remains the boundary. A statement that still returns no result set is rolled back and fails with `statement produced no result set; execute_query is read-only, use execute_write …`; the connection is kept. Use `execute_write` for writes.
+ 
+ > **Migration:** clients that sent `INSERT`/`UPDATE`/`DELETE` through `execute_query` with `CUBRID_MCP_READONLY=0` must use `execute_write` (`CUBRID_MCP_WRITE=1`) instead.
+ 
+@@ -248,7 +250,7 @@ Error calling tool 'execute_query': DELETE is not permitted in read-only mode; a
+ 
+ #### `explain_query(sql, connection=None)`
+ 
+-Returns the execution plan/trace for a `SELECT` or `WITH` statement via CUBRID `SHOW TRACE`. The statement is **actually executed** under `SET TRACE ON` (it consumes real database resources and can run as long as the query itself); the trace is read, tracing is turned off and the transaction is rolled back as best-effort cleanup. If that cleanup fails (the cleanup cursor cannot be opened, `SET TRACE OFF` fails or the rollback fails), the plan is still returned, the failure is logged to stderr and the connection is discarded, so the next call opens a fresh one; after a query timeout no cleanup statement is sent. It applies the read-only checks independent of the `CUBRID_MCP_READONLY` flag, and the database account's privileges still apply. CUBRID has no `EXPLAIN` statement; this is the tool for execution plans.
++Returns the execution plan/trace for a `SELECT` or `WITH` statement via CUBRID `SHOW TRACE`. The statement is **actually executed** under `SET TRACE ON` (it consumes real database resources and can run as long as the query itself); the trace is read, tracing is turned off and the transaction is rolled back as best-effort cleanup. If that cleanup fails (the cleanup cursor cannot be opened, `SET TRACE OFF` fails or the rollback fails), the plan is still returned, the failure is logged to stderr and the connection is discarded, so the next call opens a fresh one; after a query timeout no cleanup statement is sent. It applies the read-only checks independent of the `CUBRID_MCP_READONLY` flag, so it also rejects `INCR`, `DECR`, serial advances and the click counter, which would otherwise change data when the statement runs; the database account's privileges still apply. CUBRID has no `EXPLAIN` statement; this is the tool for execution plans.
+ 
+ Example: `explain_query(sql="SELECT name, price FROM product WHERE category = 'furniture'")` returns
+ 
+diff --git a/docs/ko/SECURITY_MODEL.md b/docs/ko/SECURITY_MODEL.md
+index 3443f47..77c6641 100644
+--- a/docs/ko/SECURITY_MODEL.md
++++ b/docs/ko/SECURITY_MODEL.md
+@@ -23,15 +23,21 @@ GRANT SELECT ON orders TO mcp_reader;
+ 
+ 모델에 필요한 테이블에만 `SELECT`를 부여하고, 계정에는 필요한 최소 권한만 부여하고 DDL 권한은 부여하지 마세요.
+ 
++> **`SELECT` 권한만으로 모든 쓰기를 막을 수는 없습니다.** CUBRID에서는 테이블에 `SELECT`만 할 수 있는 사용자도 읽기 자체로 데이터를 바꿀 수 있습니다. `INCR(col)`과 `DECR(col)`은 읽은 행을 갱신하고, 클릭 카운터 `SELECT ... WITH INCREMENT FOR col`(또는 `WITH DECREMENT FOR col`)도 같으며, `serial.NEXT_VALUE`, `serial.NEXTVAL`, `SERIAL_NEXT_VALUE(serial, n)`은 시리얼을 증가시킵니다. 사용자에게 아무 권한도 부여하지 않은 시리얼도 마찬가지입니다. 이 변경은 유지되며, 모든 읽기를 끝내는 롤백으로 되돌려지지 않습니다. 읽기 전용 검사(계층 2)는 이 형태를 거부하지만, `CUBRID_MCP_READONLY=0`일 때 `execute_query`는 거부하지 않습니다.
++
+ 추가 강화: 시크릿 매니저의 긴 무작위 비밀번호 사용, 정기적 로테이션, 스키마 전체가 아닌 테이블 단위 부여, MCP 서버 호스트만 접근 가능한 네트워크에 CUBRID 두기. 전체 정책은 [`SECURITY.md`](https://github.com/cubrid-lab/cubrid-mcp-server/blob/main/SECURITY.md)를 참고하세요.
+ 
+ ## 계층 2 — 읽기 전용 SQL 화이트리스트
+ 
+ 서버는 **기본적으로 읽기 전용**입니다. `CUBRID_MCP_READONLY=1`(기본값)이면 모든 문장이 `sqlparse`로 파싱되어 `SELECT`, `SHOW`, `DESC`, `DESCRIBE`, `WITH`(CTE)가 아니면 거부됩니다. CUBRID에는 `EXPLAIN` 문이 없으므로 실행 계획은 `explain_query` 도구를 사용하세요. 다중 문장 입력은 거부됩니다. 주석, 따옴표, 문장 경계는 `sqlparse`가 아니라 CUBRID 규칙으로 읽습니다. `--`, `//`, `/* ... */`가 주석이고(블록 주석은 중첩되지 않음), `#`은 주석이 아니며, 따옴표 안의 백슬래시는 일반 문자입니다. 백슬래시가 따옴표를 이스케이프하는지(서버 파라미터 `no_backslash_escapes`)에 따라 따옴표 경계가 달라지는 입력과 닫히지 않은 따옴표가 있는 입력은 거부됩니다.
+ 
++읽기 전용 모드는 `SELECT` 안에서 데이터를 바꾸는 CUBRID 형태도 거부합니다. 이 형태는 `SELECT` 권한만으로 막을 수 없습니다(계층 1 참고). 대상은 함수 `INCR`, `DECR`, 시리얼 증가 `NEXT_VALUE`, `NEXTVAL`, `SERIAL_NEXT_VALUE`, 클릭 카운터 `WITH INCREMENT FOR` / `WITH DECREMENT FOR`입니다. 이름은 호출될 때(`(`가 뒤따를 때)나 속성으로 쓰일 때(`owner.serial.NEXT_VALUE`처럼 `.` 뒤에 올 때) 대소문자와 무관하게, 따옴표 없이든 따옴표 안이든(`"INCR"`, `[incr]`, `` `incr` ``), 사이에 공백이나 주석이 있어도, 서브쿼리와 CTE를 포함해 문장 어디에서든 찾습니다. 문자열 리터럴과 `incr_total` 같은 더 긴 이름은 해당하지 않습니다. `CURRENT_VALUE`, `CURRVAL`, `SERIAL_CURRENT_VALUE`는 시리얼을 읽기만 하므로 계속 허용됩니다. 이런 이름의 컬럼은 한정해서(`t.next_value`) 쓰면 거부되므로 한정 없이 선택하세요.
++
+ > SQL 키워드 검사는 가드레일이자 심층 방어이며 보안 경계가 아닙니다. 명백한 실수를 막는 클라이언트 측 최선 노력(best-effort) 필터일 뿐이며, 주된 통제는 전용 최소 권한 데이터베이스 계정(계층 1)입니다. 모델에 필요한 테이블에만 `SELECT`를 부여하세요.
+ 
+-`CUBRID_MCP_READONLY=0`은 이 화이트리스트를 완화합니다 — 데이터베이스 사용자가 이미 읽기 전용이고 파서가 오판하는 결과 집합 문장이 필요할 때만 사용하세요. 이 설정이 `execute_query`를 쓰기 경로로 만들지는 **않습니다**: `execute_query`는 쓰기·DDL·트랜잭션 제어 키워드(`INSERT`, `UPDATE`, `DELETE`, `REPLACE`, `MERGE`, `CREATE`, `ALTER`, `DROP`, `TRUNCATE`, `RENAME`, `GRANT`, `REVOKE`, `COMMIT`, `ROLLBACK`, `SAVEPOINT`, `SET`, `PREPARE`, `EXECUTE`, `DEALLOCATE`, `DO`)로 시작하는 문장(선두 키워드의 첫 단어로 비교)과 다중 문장·빈 입력을 데이터베이스에 도달하기 전에 거부하고, 커밋하지 않으며, 결과 집합을 반환하지 않는 문장(연결은 유지)과 성공한 모든 읽기를 롤백합니다. `explain_query`는 이 플래그와 무관하게 **항상** 읽기 전용 검사를 적용합니다(아래 참고). 이 키워드 검사는 보안 경계가 아니라 가드레일이며, 보안 경계는 여전히 읽기 전용 데이터베이스 계정입니다. 쓰기에는 `execute_write`(옵트인 쓰기 모드)를 사용하세요. `CUBRID_MCP_READONLY=0`으로 `execute_query`를 통해 쓰기를 보내던 클라이언트는 이것으로 전환해야 합니다.
++`CUBRID_MCP_READONLY=0`은 이 화이트리스트를 완화합니다 — 데이터베이스 사용자가 이미 읽기 전용이고 파서가 오판하는 결과 집합 문장이 필요할 때만 사용하세요. 이 설정이 쓰기 키워드로 시작하는 문장에 대해 `execute_query`를 쓰기 경로로 만들지는 **않습니다**: `execute_query`는 쓰기·DDL·트랜잭션 제어 키워드(`INSERT`, `UPDATE`, `DELETE`, `REPLACE`, `MERGE`, `CREATE`, `ALTER`, `DROP`, `TRUNCATE`, `RENAME`, `GRANT`, `REVOKE`, `COMMIT`, `ROLLBACK`, `SAVEPOINT`, `SET`, `PREPARE`, `EXECUTE`, `DEALLOCATE`, `DO`)로 시작하는 문장(선두 키워드의 첫 단어로 비교)과 다중 문장·빈 입력을 데이터베이스에 도달하기 전에 거부하고, 커밋하지 않으며, 결과 집합을 반환하지 않는 문장(연결은 유지)과 성공한 모든 읽기를 롤백합니다. `explain_query`는 이 플래그와 무관하게 **항상** 읽기 전용 검사를 적용합니다(아래 참고). 이 키워드 검사는 보안 경계가 아니라 가드레일이며, 보안 경계는 여전히 읽기 전용 데이터베이스 계정입니다. 쓰기에는 `execute_write`(옵트인 쓰기 모드)를 사용하세요. `CUBRID_MCP_READONLY=0`으로 `execute_query`를 통해 쓰기를 보내던 클라이언트는 이것으로 전환해야 합니다.
++
++`CUBRID_MCP_READONLY=0`이면 `execute_query`는 `INCR`, `DECR`, 시리얼 증가, 클릭 카운터를 거부하지 않으므로, 이를 사용하는 문장은 결과 집합을 반환하더라도 데이터를 바꿉니다. `explain_query`는 여전히 거부합니다.
+ 
+ ## 계층 2b — 옵트인 쓰기 모드 (`CUBRID_MCP_WRITE`)
+ 
+@@ -42,7 +48,7 @@ GRANT SELECT ON orders TO mcp_reader;
+ - **DDL은 의도적으로 미지원.** `execute_write`는 DML 도구(`INSERT`/`UPDATE`/`DELETE`)이고 `execute_query`는 읽기 전용이므로 `CREATE`/`ALTER`/`DROP`/`TRUNCATE`는 양쪽 모두에서 거부됩니다. (서버는 autocommit을 끈 pycubrid를 사용하며, 테스트한 CUBRID 버전(10.2, 11.2, 11.4)에서 DDL은 트랜잭션에 속해 커밋하지 않으면 롤백됩니다. 따라서 이 제외는 DDL 자동 커밋이 아니라 도구 계약에 근거합니다.)
+ - **비활성 시 미등록.** 쓰기 모드가 꺼져 있으면 `execute_write`는 MCP 기능 탐색에 나타나지 않습니다 — 도구 자체가 제공되지 않습니다. SQL 검사는 가드레일이므로 실제로 쓰기를 제한하는 것은 여전히 데이터베이스 계정입니다.
+ - **연결별 게이팅.** 멀티커넥션에서 어떤 연결이 쓰기를 켜면 도구가 등록되지만, 매 쓰기는 **대상** 연결의 설정으로 강제됩니다 — 쓰기가 꺼진 연결은 다른 연결이 켜져 있어도 거부합니다.
+-- `execute_query`는 쓰기 플래그와 무관하게 **항상 읽기 전용**입니다.
++- `execute_query`는 쓰기 플래그의 영향을 받지 않으며, 쓰기 모드가 이를 쓰기 경로로 만들지 않습니다(`CUBRID_MCP_READONLY=0`이 허용하는 `SELECT` 부작용은 계층 2 참고).
+ 
+ ### `explain_query`는 문장을 실행합니다
+ 
+diff --git a/docs/ko/TOOLS.md b/docs/ko/TOOLS.md
+index 754b052..2d0aa9a 100644
+--- a/docs/ko/TOOLS.md
++++ b/docs/ko/TOOLS.md
+@@ -224,7 +224,9 @@ CUBRID `CLASS` 상속 관계 — 어느 테이블이 어느 테이블을 상속
+ 
+ 다중 문장 입력과 빈 입력(주석만 있거나 `;`만 있는 입력)은 `CUBRID_MCP_READONLY=0`에서도 거부됩니다. 주석(`--`, `//`, `/* ... */`), 따옴표, `;`는 CUBRID 규칙으로 읽으므로 주석이 선행 키워드를 숨길 수 없습니다. 닫히지 않은 따옴표가 있거나 백슬래시 때문에 따옴표가 끝나는 위치가 달라질 수 있는 입력은 거부됩니다. 바이너리 값은 작으면 base64로 인코딩되고 크면 요약됩니다(`<binary N bytes>`).
+ 
+-모든 읽기는 자체 트랜잭션을 종료합니다. 서버는 행을 수집한 뒤(잘림 여부와 무관하게) 롤백하므로 도구 호출 사이에 잠금이나 스냅샷이 유지되지 않으며, 다음 호출은 다른 세션이 커밋한 행을 봅니다. `execute_query`는 절대 커밋하지 않으며, 화이트리스트만 완화하는 `CUBRID_MCP_READONLY=0`에서도 읽기 전용입니다. 쓰기·DDL·트랜잭션 제어 키워드(`INSERT`, `UPDATE`, `DELETE`, `REPLACE`, `MERGE`, `CREATE`, `ALTER`, `DROP`, `TRUNCATE`, `RENAME`, `GRANT`, `REVOKE`, `COMMIT`, `ROLLBACK`, `SAVEPOINT`, `SET`, `PREPARE`, `EXECUTE`, `DEALLOCATE`, `DO`)로 시작하는 문장은 데이터베이스에 도달하기 전에 거부되며, 오류 메시지가 `execute_write`를 안내합니다. 선두 키워드의 첫 단어를 비교하므로 `CREATE OR REPLACE …`도 `CREATE`와 같이 거부됩니다. 이 키워드 검사는 보안 경계가 아니라 가드레일이며, 보안 경계는 여전히 읽기 전용 데이터베이스 계정입니다. 그래도 결과 집합을 반환하지 않는 문장은 롤백되고 `statement produced no result set; execute_query is read-only, use execute_write …` 오류로 실패하며, 연결은 유지됩니다. 쓰기에는 `execute_write`를 사용하세요.
++읽기 전용 모드(기본값)에서 `execute_query`는 `INCR`, `DECR`, 시리얼 증가 `NEXT_VALUE`, `NEXTVAL`, `SERIAL_NEXT_VALUE`, 클릭 카운터 `WITH INCREMENT FOR` / `WITH DECREMENT FOR`도 대소문자, 따옴표 여부, 문장 내 위치와 무관하게 거부합니다. 이들은 `SELECT` 안에서 데이터를 바꾸고, 롤백으로 되돌려지지 않으며, `SELECT` 권한만으로 막을 수 없습니다. `CURRENT_VALUE`, `CURRVAL`, `SERIAL_CURRENT_VALUE`는 계속 허용됩니다. `CUBRID_MCP_READONLY=0`이면 이 형태는 거부되지 않습니다. [보안 모델](SECURITY_MODEL.md)을 참고하세요.
++
++모든 읽기는 자체 트랜잭션을 종료합니다. 서버는 행을 수집한 뒤(잘림 여부와 무관하게) 롤백하므로 도구 호출 사이에 잠금이나 스냅샷이 유지되지 않으며, 다음 호출은 다른 세션이 커밋한 행을 봅니다. `execute_query`는 절대 커밋하지 않습니다. `CUBRID_MCP_READONLY=0`은 화이트리스트를 완화하지만, 선두 키워드로 알 수 있는 범위에서는 여전히 쓰기를 `execute_query`에서 막습니다(위의 `SELECT` 부작용은 예외입니다). 쓰기·DDL·트랜잭션 제어 키워드(`INSERT`, `UPDATE`, `DELETE`, `REPLACE`, `MERGE`, `CREATE`, `ALTER`, `DROP`, `TRUNCATE`, `RENAME`, `GRANT`, `REVOKE`, `COMMIT`, `ROLLBACK`, `SAVEPOINT`, `SET`, `PREPARE`, `EXECUTE`, `DEALLOCATE`, `DO`)로 시작하는 문장은 데이터베이스에 도달하기 전에 거부되며, 오류 메시지가 `execute_write`를 안내합니다. 선두 키워드의 첫 단어를 비교하므로 `CREATE OR REPLACE …`도 `CREATE`와 같이 거부됩니다. 이 키워드 검사는 보안 경계가 아니라 가드레일이며, 보안 경계는 여전히 읽기 전용 데이터베이스 계정입니다. 그래도 결과 집합을 반환하지 않는 문장은 롤백되고 `statement produced no result set; execute_query is read-only, use execute_write …` 오류로 실패하며, 연결은 유지됩니다. 쓰기에는 `execute_write`를 사용하세요.
+ 
+ > **마이그레이션:** `CUBRID_MCP_READONLY=0`으로 `execute_query`를 통해 `INSERT`/`UPDATE`/`DELETE`를 보내던 클라이언트는 대신 `execute_write`(`CUBRID_MCP_WRITE=1`)를 사용해야 합니다.
+ 
+@@ -250,7 +252,7 @@ Error calling tool 'execute_query': DELETE is not permitted in read-only mode; a
+ 
+ #### `explain_query(sql, connection=None)`
+ 
+-CUBRID `SHOW TRACE`를 통해 `SELECT`/`WITH` 문의 실행 계획/트레이스를 반환합니다. 문장은 `SET TRACE ON` 아래에서 **실제로 실행**됩니다(실제 데이터베이스 자원을 사용하며 쿼리 자체만큼 오래 걸릴 수 있음). 트레이스를 읽은 뒤 트레이스를 끄고 트랜잭션을 롤백합니다(최선 노력 방식의 정리). 이 정리가 실패하면(정리용 커서를 열 수 없거나 `SET TRACE OFF` 또는 롤백이 실패하면) 실행 계획은 그대로 반환되고, 실패는 stderr에 기록되며, 연결은 폐기되어 다음 호출은 새 연결을 엽니다. 쿼리 시간 초과 후에는 정리 문장을 보내지 않습니다. `CUBRID_MCP_READONLY` 플래그와 무관하게 읽기 전용 검사를 적용하며, 데이터베이스 계정의 권한도 그대로 적용됩니다. CUBRID에는 `EXPLAIN` 문이 없으므로 실행 계획에는 이 도구를 사용하세요.
++CUBRID `SHOW TRACE`를 통해 `SELECT`/`WITH` 문의 실행 계획/트레이스를 반환합니다. 문장은 `SET TRACE ON` 아래에서 **실제로 실행**됩니다(실제 데이터베이스 자원을 사용하며 쿼리 자체만큼 오래 걸릴 수 있음). 트레이스를 읽은 뒤 트레이스를 끄고 트랜잭션을 롤백합니다(최선 노력 방식의 정리). 이 정리가 실패하면(정리용 커서를 열 수 없거나 `SET TRACE OFF` 또는 롤백이 실패하면) 실행 계획은 그대로 반환되고, 실패는 stderr에 기록되며, 연결은 폐기되어 다음 호출은 새 연결을 엽니다. 쿼리 시간 초과 후에는 정리 문장을 보내지 않습니다. `CUBRID_MCP_READONLY` 플래그와 무관하게 읽기 전용 검사를 적용하므로, 문장이 실행될 때 데이터를 바꾸는 `INCR`, `DECR`, 시리얼 증가, 클릭 카운터도 거부합니다. 데이터베이스 계정의 권한도 그대로 적용됩니다. CUBRID에는 `EXPLAIN` 문이 없으므로 실행 계획에는 이 도구를 사용하세요.
+ 
+ 예시: `explain_query(sql="SELECT name, price FROM product WHERE category = 'furniture'")` 응답
+ 
+diff --git a/tests/test_integration.py b/tests/test_integration.py
+index e181f7e..a28ed1e 100644
+--- a/tests/test_integration.py
++++ b/tests/test_integration.py
+@@ -400,3 +400,118 @@ class TestCubridIntegration:
+ 
+         with pytest.raises(UnsafeSQLError):
+             ensure_read_only("DROP TABLE nonexistent")
++
++    def test_select_only_user_cannot_change_data_through_read_tools(self) -> None:
++        """INCR, DECR, serial advances and the click counter are rejected (#295).
++
++        A SELECT-only grant does not stop them: the control query below changes
++        data as that user. Both read tools reject every form before execution.
++        """
++        from dataclasses import replace
++
++        import pycubrid
++
++        from cubrid_mcp_server import server
++        from cubrid_mcp_server.context import AppContext
++        from cubrid_mcp_server.database import Database
++        from cubrid_mcp_server.safety import UnsafeSQLError
++
++        table, serial, user = "mcp_it_side_effects", "mcp_it_side_serial", "mcp_it_select_only"
++        owner = self.config.user
++        for sql in (
++            f"DROP TABLE IF EXISTS {table}",
++            f"DROP SERIAL IF EXISTS {serial}",
++            f"CREATE TABLE {table} (id INT PRIMARY KEY, cnt INT)",
++            f"INSERT INTO {table} VALUES (1, 10)",
++            f"CREATE SERIAL {serial} START WITH 100",
++        ):
++            self.db.execute_write(sql)
++        admin = self._second_session()
++        try:
++            cursor = admin.cursor()
++            cursor.execute(f"SELECT COUNT(*) FROM db_user WHERE name = '{user.upper()}'")
++            if cursor.fetchall()[0][0]:
++                cursor.execute(f"DROP USER {user}")
++            cursor.execute(f"CREATE USER {user} PASSWORD 'pw295'")
++            cursor.execute(f"GRANT SELECT ON {table} TO {user}")
++            # Start the serial so later NEXT_VALUE calls visibly advance it.
++            cursor.execute(f"SELECT {serial}.NEXT_VALUE")
++            # Serials are owner-qualified from CUBRID 11.2 on, and global before it.
++            cursor.execute("SELECT VERSION()")
++            version = tuple(int(part) for part in str(cursor.fetchall()[0][0]).split(".")[:2])
++            serial_ref = f"{owner}.{serial}" if version >= (11, 2) else serial
++            admin.commit()
++
++            def state() -> tuple[Any, Any]:
++                cursor.execute(f"SELECT cnt FROM {table} WHERE id = 1")
++                cnt = cursor.fetchall()[0][0]
++                cursor.execute(f"SELECT current_val FROM db_serial WHERE name = '{serial}'")
++                current = cursor.fetchall()[0][0]
++                admin.commit()
++                return cnt, int(current)
++
++            # Control: sent directly, INCR and NEXT_VALUE change data as the
++            # SELECT-only user, and the rollback does not undo either change.
++            limited = pycubrid.connect(
++                host=self.config.host,
++                port=self.config.port,
++                user=user,
++                password="pw295",
++                database=self.config.database,
++                connect_timeout=10,
++                read_timeout=30,
++            )
++            try:
++                before = state()
++                limited_cursor = limited.cursor()
++                limited_cursor.execute(f"SELECT INCR(cnt) FROM {owner}.{table} WHERE id = 1")
++                limited_cursor.fetchall()
++                limited_cursor.execute(f"SELECT {serial_ref}.NEXT_VALUE")
++                limited_cursor.fetchall()
++                limited.rollback()
++                assert state() == (before[0] + 1, before[1] + 1)
++            finally:
++                limited.close()
++
++            config = replace(self.config, user=user, password="pw295", readonly=True)
++            database = Database(config)
++            server._context = AppContext.single(config=config, database=database)
++            qualified = f"{owner}.{table}"
++            forms = [
++                f"SELECT INCR(cnt) FROM {qualified} WHERE id = 1",
++                f"SELECT incr /* c */ (cnt) FROM {qualified} WHERE id = 1",
++                f"SELECT [incr](cnt) FROM {qualified} WHERE id = 1",
++                f"SELECT DECR(cnt) FROM {qualified} WHERE id = 1",
++                f"SELECT * FROM {qualified} WHERE id = 1 WITH INCREMENT FOR cnt",
++                f"SELECT * FROM {qualified} WHERE id = 1 WITH DECREMENT FOR cnt",
++                f"SELECT {serial_ref}.NEXT_VALUE",
++                f"SELECT {serial_ref} . next_value",
++                f"SELECT {serial_ref}.NEXTVAL",
++                f"SELECT SERIAL_NEXT_VALUE({serial_ref}, 3)",
++                f"SELECT (SELECT {serial_ref}.NEXT_VALUE) FROM {qualified}",
++            ]
++            try:
++                before = state()
++                for sql in forms:
++                    with pytest.raises(UnsafeSQLError, match="not permitted in read-only mode"):
++                        server.execute_query(sql)
++                    with pytest.raises(UnsafeSQLError, match="not permitted in read-only mode"):
++                        server.explain_query(sql)
++                assert state() == before
++                # Reading the serial and the table still works for this user.
++                current = server.execute_query(f"SELECT {serial_ref}.CURRENT_VALUE")["rows"]
++                assert int(current[0][0]) == before[1]
++                rows = server.execute_query(f"SELECT cnt FROM {qualified} WHERE id = 1")["rows"]
++                assert rows == [[before[0]]]
++                assert state() == before
++            finally:
++                database.close()
++        finally:
++            cursor = admin.cursor()
++            cursor.execute(f"DROP TABLE IF EXISTS {table}")
++            cursor.execute(f"DROP SERIAL IF EXISTS {serial}")
++            cursor.execute(f"SELECT COUNT(*) FROM db_user WHERE name = '{user.upper()}'")
++            if cursor.fetchall()[0][0]:
++                cursor.execute(f"DROP USER {user}")
++            admin.commit()
++            admin.close()
+diff --git a/tests/test_safety.py b/tests/test_safety.py
+index af87ce3..7faeaee 100644
+--- a/tests/test_safety.py
++++ b/tests/test_safety.py
+@@ -368,3 +368,76 @@ def test_strip_comments_uses_cubrid_comment_rules() -> None:
+     assert strip_comments("// c\nSELECT 1").split() == ["SELECT", "1"]
+     assert strip_comments("SELECT 'x -- y' -- z").split() == ["SELECT", "''"]
+     assert strip_comments("SELECT 1 # x").split() == ["SELECT", "1", "x"]
++
++
++# Functions, serial attributes and the click counter that change data inside a
++# SELECT (#295). Each form below changed data on a CUBRID 11.4 server, except the
++# NEXT_VALUE(...) / NEXTVAL(...) call forms, which are rejected as a precaution.
++_SIDE_EFFECT_SQL = [
++    ("SELECT INCR(cnt) FROM t WHERE id = 1", "INCR"),
++    ("select incr(cnt) from t where id = 1", "INCR"),
++    ("SELECT DECR(cnt) FROM t WHERE id = 1", "DECR"),
++    ("SELECT InCr (cnt) FROM t WHERE id = 1", "INCR"),
++    ("SELECT INCR\n(cnt) FROM t WHERE id = 1", "INCR"),
++    ("SELECT INCR/**/(cnt) FROM t WHERE id = 1", "INCR"),
++    ("SELECT INCR -- note\n(cnt) FROM t WHERE id = 1", "INCR"),
++    ("SELECT INCR // note\n(cnt) FROM t WHERE id = 1", "INCR"),
++    ('SELECT "INCR"(cnt) FROM t WHERE id = 1', "INCR"),
++    ("SELECT [incr](cnt) FROM t WHERE id = 1", "INCR"),
++    ("SELECT `decr`(cnt) FROM t WHERE id = 1", "DECR"),
++    ("SELECT INCR(t.cnt) FROM t WHERE id = 1", "INCR"),
++    ("SELECT * FROM (SELECT INCR(cnt) FROM t) x", "INCR"),
++    ("WITH q AS (SELECT DECR(cnt) AS c FROM t) SELECT * FROM q", "DECR"),
++    ("SELECT s.NEXT_VALUE", "NEXT_VALUE"),
++    ("SELECT s . next_value", "NEXT_VALUE"),
++    ("SELECT s./* c */next_value", "NEXT_VALUE"),
++    ("SELECT dba.s.NEXT_VALUE", "NEXT_VALUE"),
++    ("SELECT [s].[next_value]", "NEXT_VALUE"),
++    ('SELECT "s"."NEXT_VALUE"', "NEXT_VALUE"),
++    ("SELECT s.NEXTVAL", "NEXTVAL"),
++    ("SELECT dba.s.nextval FROM db_root", "NEXTVAL"),
++    ("SELECT (SELECT s.next_value) FROM t", "NEXT_VALUE"),
++    ("SELECT id FROM t WHERE id < s.next_value", "NEXT_VALUE"),
++    ("SELECT SERIAL_NEXT_VALUE(s, 3)", "SERIAL_NEXT_VALUE"),
++    ("SELECT serial_next_value (s, 1)", "SERIAL_NEXT_VALUE"),
++    ("SELECT [serial_next_value](s, 1)", "SERIAL_NEXT_VALUE"),
++    ("SELECT NEXT_VALUE(s)", "NEXT_VALUE"),
++    ("SELECT NEXTVAL(s)", "NEXTVAL"),
++    ("SELECT * FROM t WHERE id = 1 WITH INCREMENT FOR cnt", "WITH INCREMENT FOR"),
++    ("SELECT * FROM t WHERE id = 1 with decrement for cnt", "WITH DECREMENT FOR"),
++    ("SELECT * FROM t WHERE id = 1 WITH /* c */ INCREMENT\n FOR cnt", "WITH INCREMENT FOR"),
++    ("SELECT * FROM t WHERE id = 1 WITH INCREMENT FOR [cnt]", "WITH INCREMENT FOR"),
++]
++
++
++@pytest.mark.parametrize(("sql", "name"), _SIDE_EFFECT_SQL)
++def test_ensure_read_only_rejects_side_effect_functions(sql: str, name: str) -> None:
++    with pytest.raises(UnsafeSQLError, match=f"^{name} is not permitted in read-only mode"):
++        ensure_read_only(sql)
++
++
++@pytest.mark.parametrize(
++    "sql",
++    [
++        "SELECT s.CURRENT_VALUE",
++        "SELECT dba.s.current_value",
++        "SELECT s.CURRVAL",
++        "SELECT SERIAL_CURRENT_VALUE(s)",
++        "SELECT incr_total, decr_count, next_value_at FROM t",
++        "SELECT t.incr_total FROM t",
++        "SELECT my_incr(cnt) FROM t",
++        "SELECT incr# FROM t",
++        'SELECT "incr "(cnt) FROM t',
++        "SELECT [ incr](cnt) FROM t",
++        "SELECT 'INCR(cnt)', 's.NEXT_VALUE', 'WITH INCREMENT FOR x' FROM t",
++        "SELECT * FROM t WHERE note = 'incr(' AND label = '.nextval'",
++        "SELECT cnt AS incr FROM t",
++        "SELECT next_value FROM t",
++        "SELECT 1 -- INCR(cnt)\nFROM t",
++        "SELECT /* s.NEXT_VALUE */ 1 FROM t",
++        "WITH increment AS (SELECT 1 AS x) SELECT x FROM increment",
++        "SELECT * FROM t WHERE increment > 0 FOR x",
++    ],
++)
++def test_ensure_read_only_allows_lookalikes_of_side_effect_functions(sql: str) -> None:
++    ensure_read_only(sql)
+diff --git a/tests/test_server.py b/tests/test_server.py
+index 5074349..a568ccd 100644
+--- a/tests/test_server.py
++++ b/tests/test_server.py
+@@ -1142,3 +1142,40 @@ def test_execute_query_readonly_whitelist_error_unchanged(fake_db: FakeDatabase)
+     with pytest.raises(UnsafeSQLError, match="INSERT is not permitted in read-only mode"):
+         server.execute_query("INSERT INTO t VALUES (1)")
+     assert fake_db.calls == []
++
++
++_SIDE_EFFECT_SELECTS = [
++    "SELECT INCR(cnt) FROM t WHERE id = 1",
++    "SELECT DECR/**/(cnt) FROM t WHERE id = 1",
++    "SELECT [incr](cnt) FROM t WHERE id = 1",
++    "SELECT dba.s.NEXT_VALUE",
++    "SELECT s.nextval",
++    "SELECT SERIAL_NEXT_VALUE(s, 2)",
++    "SELECT * FROM t WHERE id = 1 WITH INCREMENT FOR cnt",
++    "WITH q AS (SELECT s.NEXT_VALUE AS v) SELECT v FROM q",
++]
++
++
++@pytest.mark.parametrize("sql", _SIDE_EFFECT_SELECTS)
++def test_execute_query_rejects_side_effect_functions(fake_db: FakeDatabase, sql: str) -> None:
++    """INCR, DECR, serial advances and the click counter never reach the database (#295)."""
++    with pytest.raises(UnsafeSQLError, match="is not permitted in read-only mode"):
++        server.execute_query(sql)
++    assert fake_db.calls == []
++
++
++@pytest.mark.parametrize("sql", _SIDE_EFFECT_SELECTS)
++def test_explain_query_rejects_side_effect_functions(
++    sql: str, monkeypatch: pytest.MonkeyPatch
++) -> None:
++    """explain_query executes its statement, so it rejects the same forms (#295)."""
++    fake = FakeConnDatabase()
++    monkeypatch.setattr(server, "_context", AppContext.single(config=_TEST_CONFIG, database=fake))
++    with pytest.raises(UnsafeSQLError, match="is not permitted in read-only mode"):
++        server.explain_query(sql)
++    assert fake.cursors == []
++
++
++def test_execute_query_allows_current_value(fake_db: FakeDatabase) -> None:
++    fake_db.queue([(1,)])
++    assert server.execute_query("SELECT dba.s.CURRENT_VALUE")["rows"] == [[1]]

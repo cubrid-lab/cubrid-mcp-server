@@ -1,4 +1,4 @@
-.PHONY: help install lint format typecheck check test integration clean release-check
+.PHONY: help install lint format typecheck check test integration clean release-check agent-eval-check
 
 PYTHON = python3
 PYTEST = python3 -m pytest
@@ -27,6 +27,10 @@ check: lint typecheck ## Run lint + type checks (no tests)
 
 test: ## Run unit tests (excludes integration)
 	$(PYTEST) -m "not integration" -q
+
+agent-eval-check: ## Validate the agent-evals tasks and re-grade their fixtures (offline; no model, no DB)
+	$(PYTHON) scripts/agent_eval.py validate
+	$(PYTHON) scripts/agent_eval.py check
 
 integration: ## Run integration tests (requires live CUBRID)
 	$(PYTEST) -m "integration" -q

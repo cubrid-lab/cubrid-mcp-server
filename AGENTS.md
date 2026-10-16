@@ -42,6 +42,7 @@ cubrid_mcp_server/
 - `make check` — ruff lint + mypy typecheck
 - `make test` — unit tests (excludes integration)
 - `make integration` — integration tests (requires a live CUBRID)
+- `make agent-eval-check` — re-grade the opt-in agent evaluation fixtures in [`agent-evals/`](agent-evals/README.md) (offline; no model, no database)
 - `make release-check VERSION=x.y.z` — read-only release consistency gate (run by `release-please.yml` and `publish-pypi.yml`)
 
 ## Release Process

@@ -1,0 +1,22 @@
+{
+  "agent": {
+    "model": "n/a (historical commit d17bf58)",
+    "name": "reference fix"
+  },
+  "statements": [
+    "Offline: the unit tests and the evaluator's checks pass against mocks.",
+    "The live integration test was not run: no isolated lab CUBRID was available, so behavior on a live server is not verified."
+  ],
+  "tests": [
+    {
+      "command": "python -m pytest -q -p no:cacheprovider tests/test_safety.py",
+      "evidence": "offline",
+      "result": "passed"
+    },
+    {
+      "command": "python -m pytest -q -p no:cacheprovider -m integration tests/test_integration.py -k select_only_user_cannot_change_data",
+      "evidence": "live_integration",
+      "result": "not run"
+    }
+  ]
+}

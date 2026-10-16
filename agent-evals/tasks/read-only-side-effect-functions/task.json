@@ -1,0 +1,60 @@
+{
+  "allowed_files": [
+    "cubrid_mcp_server/safety.py",
+    "tests/test_safety.py",
+    "tests/test_server.py",
+    "tests/test_integration.py",
+    "docs/SECURITY_MODEL.md",
+    "docs/TOOLS.md",
+    "docs/ko/SECURITY_MODEL.md",
+    "docs/ko/TOOLS.md",
+    "README.md",
+    "docs/README.ko.md",
+    "SECURITY.md",
+    "CHANGELOG.md"
+  ],
+  "base_sha": "908f8348650b298db257c65c1639869e07b3709e",
+  "changelog": {
+    "section": "Security"
+  },
+  "docs": [
+    [
+      "docs/SECURITY_MODEL.md"
+    ],
+    [
+      "docs/TOOLS.md"
+    ]
+  ],
+  "evidence": {
+    "live": "absent",
+    "required_kinds": [
+      "offline"
+    ]
+  },
+  "expected": "ensure_read_only raises UnsafeSQLError for INCR/DECR calls and serial advances in any case and spacing, and allows serial reads, columns such as incr_count and string literals that mention INCR. The policy invariants still hold. This is offline evidence; whether a SELECT-only user can change data on a server is shown only by the live integration test.",
+  "fix_commit": "d17bf584d9987f39752357398e5f0d05ee23f23a",
+  "hidden_tests": [
+    "test_hidden_read_only_side_effects.py",
+    "test_hidden_policy_invariants.py"
+  ],
+  "id": "read-only-side-effect-functions",
+  "issue": "#295",
+  "non_goals": [
+    "no change to write mode, the whitelist off path or any other read-only rule",
+    "no claim that a live CUBRID rejected the statements unless a live run is recorded"
+  ],
+  "problem": "ensure_read_only scans only sqlparse Keyword tokens, so a SELECT that calls INCR(col) or DECR(col), advances a serial (serial.NEXT_VALUE, serial.NEXTVAL, SERIAL_NEXT_VALUE(serial, n)) or uses SELECT ... WITH INCREMENT/DECREMENT FOR col passes execute_query and explain_query and changes data that the rollback after the read does not undo, even for a user granted only SELECT. Make read-only mode reject these in any case, bare or quoted, with comments or whitespace between tokens, while serial reads (CURRENT_VALUE, CURRVAL, SERIAL_CURRENT_VALUE) and columns whose names merely contain the words stay allowed. Do not loosen any other check and do not change write mode.",
+  "required_tests": [
+    "tests/test_safety.py"
+  ],
+  "schema_version": 1,
+  "title": "Reject read-only queries that change data through INCR, DECR or serial advances",
+  "validation": {
+    "live": [
+      "python -m pytest -q -p no:cacheprovider -m integration tests/test_integration.py -k select_only_user_cannot_change_data"
+    ],
+    "offline": [
+      "python -m pytest -q -p no:cacheprovider tests/test_safety.py"
+    ]
+  }
+}

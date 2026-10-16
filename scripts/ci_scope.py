@@ -65,6 +65,9 @@ TOOLING = (
     # tests/test_docs_channel_notice.py (#355, #361).
     "docs/overrides/*",
     "mkdocs.yml",
+    # Agent evaluation tasks, fixtures and their README, graded offline by
+    # tests/test_agent_eval.py in the unit lane; never a live CUBRID (#318).
+    "agent-evals/*",
 )
 # Docs-only: no unit job, no CUBRID.
 DOCS = ("*.md", "docs/*", "LICENSE", "NOTICE", "llms.txt")

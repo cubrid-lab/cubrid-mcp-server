@@ -162,6 +162,11 @@ def test_workflow_edit_with_dependency_metadata_keeps_lowest_direct() -> None:
         ".github/dependabot.yml",
         "docs-tools/requirements.txt",
         "THIRD_PARTY_LICENSES.md",
+        # The agent evaluations, Markdown included, are graded in the unit lane (#318).
+        "agent-evals/README.md",
+        "agent-evals/tasks/read-only-side-effect-functions/task.json",
+        "agent-evals/tasks/read-only-side-effect-functions/fixtures/reference/patch.diff",
+        "agent-evals/tasks/read-only-side-effect-functions/hidden/test_hidden_policy_invariants.py",
     ],
 )
 def test_tooling_and_metadata_run_unit_but_never_cubrid(path: str) -> None:

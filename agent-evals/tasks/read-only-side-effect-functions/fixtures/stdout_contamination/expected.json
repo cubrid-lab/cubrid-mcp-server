@@ -1,0 +1,7 @@
+{
+  "criteria": {
+    "behavior": "fail",
+    "policy": "fail"
+  },
+  "verdict": "fail"
+}

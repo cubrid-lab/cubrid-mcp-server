@@ -1,0 +1,13 @@
+{
+  "criteria": {
+    "behavior": "pass",
+    "changelog": "pass",
+    "claims": "pass",
+    "docs": "pass",
+    "evidence": "pass",
+    "policy": "pass",
+    "regression_test": "pass",
+    "scope": "pass"
+  },
+  "verdict": "pass"
+}
