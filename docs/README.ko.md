@@ -15,6 +15,13 @@
 
 <sub>실제 MCP stdio 세션의 터미널 녹화입니다(<code>demos/mcp_demo.py</code>, <code>demos/record_demo.sh</code>로 녹화).</sub>
 
+## 여기서 시작하세요
+
+CUBRID나 MCP가 처음이라면 [빠른 시작 가이드](ko/quickstart.md)를 따라 하세요. 일회용 로컬 CUBRID
+실습 환경을 시작하고, 예제 테이블과 읽기 전용 전용 계정을 준비하고, MCP 클라이언트 하나(짧은 Python
+스크립트)를 연결해 첫 쿼리를 실행합니다. 각 결과의 의미와 정리 방법도 보여 줍니다. 아래 섹션은 설정,
+도구, 클라이언트 구성의 레퍼런스입니다.
+
 ## 기능
 
 | 도구 | 설명 |
@@ -62,6 +69,10 @@
 | `write_cubrid_sql` | `natural_language` | 자연어 → CUBRID SQL 생성 |
 
 ## 빠른 시작
+
+아래 값은 여러분의 데이터베이스와 계정을 위한 자리 표시자입니다.
+[빠른 시작 가이드](ko/quickstart.md)는 준비된 실습 환경에서 [SECURITY.md](https://github.com/cubrid-lab/cubrid-mcp-server/blob/main/SECURITY.md)의 계정
+`mcp_reader`로 같은 설정을 단계별로 안내합니다.
 
 ### 설정
 

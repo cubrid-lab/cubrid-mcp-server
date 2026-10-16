@@ -17,6 +17,14 @@ A [Model Context Protocol](https://modelcontextprotocol.io) server for [CUBRID](
 
 <sub>Terminal recording of a real MCP stdio session (<code>demos/mcp_demo.py</code>, recorded with <code>demos/record_demo.sh</code>).</sub>
 
+## Start here
+
+New to CUBRID or to MCP? Follow the [Quick Start guide](docs/quickstart.md). It
+starts a disposable local CUBRID lab, prepares a sample table and a dedicated
+read-only account, connects one MCP client (a short Python script) and runs a
+first query, showing what each result means and how to clean up. The sections
+below are the reference for configuration, tools and client setup.
+
 ## Features
 
 | Tool | Description |
@@ -70,6 +78,10 @@ the underlying tools (`execute_query`/`explain_query` via `safety.py`).
 | `write_cubrid_sql` | `natural_language` | Generate valid CUBRID SQL from natural language |
 
 ## Quick Start
+
+The values below are placeholders for your own database and account. The
+[Quick Start guide](docs/quickstart.md) walks through the same settings with a
+prepared lab, using the account `mcp_reader` from [SECURITY.md](SECURITY.md).
 
 ### Configure
 

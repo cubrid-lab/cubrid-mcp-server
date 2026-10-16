@@ -34,7 +34,7 @@ See the full [Tools reference](TOOLS.md) for parameters and return shapes, the [
 
 ## Documentation
 
-- [Quick Start](quickstart.md) — configure, run, and connect your first MCP client
+- [Quick Start](quickstart.md) — start here: a disposable lab, a read-only account and a first query from one MCP client
 - [Tools](TOOLS.md) — the complete tool, resource, and prompt reference
 - [Security Model](SECURITY_MODEL.md) — read-only enforcement, opt-in writes, audit logging
 - [Multi-Connection](MULTI_CONNECTION.md) — named connections and per-connection settings
