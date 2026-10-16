@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+
+{#- #355: every page of this site is built from the main branch, so it says so,
+    with the commit it was built from when the build records one (GITHUB_SHA in
+    GitHub Actions). The label never comes from __version__, the release
+    manifest or .mcpb/server.json. -#}
+{% block announce %}
+  {% include "partials/channel.html" %}
+{% endblock %}

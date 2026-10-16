@@ -27,6 +27,20 @@
 처음부터 끝까지 같은 이름을 사용합니다. 데이터베이스는 `testdb`, 테이블은
 `dba.mcp_quickstart_books`, 계정은 `mcp_reader`입니다.
 
+!!! note "이 안내가 설명하는 버전"
+    - **문서 원본:** 사이트 맨 위 안내대로 `main` 브랜치입니다. `main`은 최근 배포된 릴리스보다 앞서
+      있을 수 있습니다.
+    - **패키지 릴리스:** `pip install cubrid-mcp-server`는 사용 중인 Python을 지원하는
+      [PyPI](https://pypi.org/project/cubrid-mcp-server/)의 최신 버전을 설치하며, 릴리스 노트는
+      [릴리스 목록](https://github.com/cubrid-lab/cubrid-mcp-server/releases)에 있습니다. 소스의
+      버전(`__version__`, `.mcpb/server.json`)은 그 버전이 배포되었다는 증거가 아니며, 열려 있는
+      릴리스 PR은 후보일 뿐입니다.
+    - **확인한 조합:** #356(2026-10-16 병합)에 기록된 기본 경로뿐입니다. Linux x86_64, bash, Docker,
+      Python 3.12, PyPI의 cubrid-mcp-server 0.5.1, FastMCP 4.1.0(mcp 2.3.0, pycubrid 1.13.0),
+      `cubrid/cubrid:11.4`입니다. 이 실행은 도구 목록 확인에 그치지 않고 `health_check`의
+      `"ok":true`와 첫 쿼리까지 확인했습니다. 이 페이지 끝의 채팅 클라이언트, 다른 플랫폼, 다른 CUBRID
+      버전은 실행하지 않았습니다.
+
 ---
 
 ## 1단계: 일회용 CUBRID 실습 환경 시작

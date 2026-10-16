@@ -1,0 +1,23 @@
+{#- Development-channel notice (#355). Inputs: config.extra.source_revision (a
+    full commit SHA, or empty for a local build) and page.url ("ko/..." pages
+    and the Korean README get the Korean text). Covered by
+    tests/test_docs_channel_notice.py. -#}
+{%- set repo = "https://github.com/cubrid-lab/cubrid-mcp-server" -%}
+{%- set rev = (config.extra.source_revision or "") | trim -%}
+{%- set ko = page is defined and page and (page.url.startswith("ko/") or page.url.startswith("README.ko")) -%}
+{%- if ko -%}
+<span class="cubrid-mcp-channel">
+  <strong>개발 문서:</strong> 이 사이트는 <code>main</code> 브랜치의
+  {%- if rev %} 커밋 <a href="{{ repo }}/commit/{{ rev }}"><code>{{ rev[:7] }}</code></a>에서{% else %} 소스에서(이 빌드에는 커밋이 기록되지 않음){% endif %}
+  빌드되었으며, 아직 배포되지 않은 변경을 설명할 수 있습니다. 배포된 버전의 문서는
+  <a href="{{ repo }}/releases">릴리스 목록</a>에서 그 버전의 태그를 열고 <code>docs/</code> 폴더를 보세요.
+</span>
+{%- else -%}
+<span class="cubrid-mcp-channel">
+  <strong>Development documentation:</strong> this site is built from the <code>main</code> branch
+  {%- if rev %} at commit <a href="{{ repo }}/commit/{{ rev }}"><code>{{ rev[:7] }}</code></a>{% else %} (this build recorded no commit){% endif %}
+  and can describe changes that are not in a published release. For the documentation of a
+  published version, open its tag from the <a href="{{ repo }}/releases">release list</a> and read
+  its <code>docs/</code> folder.
+</span>
+{%- endif -%}

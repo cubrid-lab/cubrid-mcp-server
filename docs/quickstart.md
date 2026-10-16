@@ -27,6 +27,24 @@ against the `cubrid/cubrid:11.4` image. It keeps the same names throughout:
 the database `testdb`, the table `dba.mcp_quickstart_books` and the account
 `mcp_reader`.
 
+!!! note "Which versions this walkthrough describes"
+    - **Document source:** the `main` branch, as the notice at the top of the
+      site says. `main` can be ahead of the latest published release.
+    - **Package release:** `pip install cubrid-mcp-server` installs the newest
+      version on [PyPI](https://pypi.org/project/cubrid-mcp-server/) that
+      supports your Python; its notes are on the
+      [release list](https://github.com/cubrid-lab/cubrid-mcp-server/releases).
+      The version in the source (`__version__`, `.mcpb/server.json`) is not
+      proof that a version is published, and an open release pull request is
+      only a candidate.
+    - **Verified combination:** only the main path, as recorded in #356
+      (merged 2026-10-16): Linux x86_64, bash, Docker, Python 3.12,
+      cubrid-mcp-server 0.5.1 from PyPI, FastMCP 4.1.0 (mcp 2.3.0, pycubrid
+      1.13.0) and `cubrid/cubrid:11.4`. That run reached `health_check`
+      `"ok":true` and the first query, not only tool discovery. The chat
+      clients at the end of this page, other platforms and other CUBRID
+      versions were not run.
+
 ---
 
 ## Step 1: Start a disposable CUBRID lab
