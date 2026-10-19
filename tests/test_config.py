@@ -1,6 +1,6 @@
 import pytest
 
-from cubrid_mcp_server.config import Config, ConfigError, ConnectionRegistry
+from cubrid_mcp_server.config import Config, ConfigError, ConnectionRegistry, _parse_bool
 
 
 BASE_ENV = {
@@ -81,6 +81,34 @@ def test_from_env_invalid_max_chars() -> None:
 def test_from_env_invalid_readonly() -> None:
     with pytest.raises(ConfigError, match="boolean"):
         Config.from_env(BASE_ENV | {"CUBRID_MCP_READONLY": "maybe"})
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        ("1", True),
+        ("true", True),
+        ("yes", True),
+        ("on", True),
+        ("0", False),
+        ("false", False),
+        ("no", False),
+        ("off", False),
+        ("TrUe", True),
+        ("FaLsE", False),
+        ("OFF", False),
+        ("  Yes\t", True),
+        (" no ", False),
+    ],
+)
+def test_parse_bool_accepted_aliases(value: str, expected: bool) -> None:
+    assert _parse_bool(value) is expected
+
+
+@pytest.mark.parametrize("value", ["", " ", "maybe", "2", "y", "enabled"])
+def test_parse_bool_invalid_aliases(value: str) -> None:
+    with pytest.raises(ConfigError, match="boolean"):
+        _parse_bool(value)
 
 
 def test_from_env_max_rows_override() -> None:
