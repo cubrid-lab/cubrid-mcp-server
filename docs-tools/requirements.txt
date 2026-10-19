@@ -2,4 +2,4 @@
 # `mkdocs build --strict`; Dependabot keeps these current (see dependabot.yml).
 mkdocs==1.6.1
 mkdocs-material==9.7.7
-pymdown-extensions==12.2
+pymdown-extensions==12.3
