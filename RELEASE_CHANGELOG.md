@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.5.2](https://github.com/cubrid-lab/cubrid-mcp-server/compare/v0.5.1...v0.5.2) (2026-10-20)
+
+
+### Fixed
+
+* **agent-review:** do not count empty reply-only Copilot records as review rounds ([#349](https://github.com/cubrid-lab/cubrid-mcp-server/issues/349)) ([6d75295](https://github.com/cubrid-lab/cubrid-mcp-server/commit/6d75295e4a724302099c3789213f14cb922e9253))
+* **agent-review:** fail closed when a review thread lacks author or resolver identity ([#347](https://github.com/cubrid-lab/cubrid-mcp-server/issues/347)) ([09d746e](https://github.com/cubrid-lab/cubrid-mcp-server/commit/09d746ec158d165b2d9700f346ee3c49eb127b1d)), closes [#346](https://github.com/cubrid-lab/cubrid-mcp-server/issues/346)
+* **database:** preserve serial-probe failures and fence the cache to its connection ([#357](https://github.com/cubrid-lab/cubrid-mcp-server/issues/357)) ([0832251](https://github.com/cubrid-lab/cubrid-mcp-server/commit/08322518dd85efeb3e0fe743ebc827deee93788d))
+
+
+### Documentation
+
+* **agents:** accept an independent reviewer agent in the standalone-agent review route ([#342](https://github.com/cubrid-lab/cubrid-mcp-server/issues/342)) ([bbfe3a4](https://github.com/cubrid-lab/cubrid-mcp-server/commit/bbfe3a476fee5c8a63c3f35b823ba305c627eb66))
+* **agents:** require a Copilot or maintainer review in the standalone-agent route ([#344](https://github.com/cubrid-lab/cubrid-mcp-server/issues/344)) ([3b18cdf](https://github.com/cubrid-lab/cubrid-mcp-server/commit/3b18cdfbd46a83a70268a2642a18fd5e540cad46)), closes [#317](https://github.com/cubrid-lab/cubrid-mcp-server/issues/317)
+* **contributing:** clarify good-first-issue access for human contributors ([#322](https://github.com/cubrid-lab/cubrid-mcp-server/issues/322)) ([b319f9f](https://github.com/cubrid-lab/cubrid-mcp-server/commit/b319f9fe33c7576f412d17c9ca1397a6f89ba246))
+* fix Korean documentation typos and links ([#320](https://github.com/cubrid-lab/cubrid-mcp-server/issues/320)) ([6f49f05](https://github.com/cubrid-lab/cubrid-mcp-server/commit/6f49f059ae8e6cf7e9f12d2ed6d31b5641d54680))
+* **ko:** fix a typo and broken cross-page links ([#319](https://github.com/cubrid-lab/cubrid-mcp-server/issues/319)) ([6f49f05](https://github.com/cubrid-lab/cubrid-mcp-server/commit/6f49f059ae8e6cf7e9f12d2ed6d31b5641d54680))
+* **onboarding:** provide a safe single-client walkthrough with a prepared read-only lab ([#356](https://github.com/cubrid-lab/cubrid-mcp-server/issues/356)) ([e3e0185](https://github.com/cubrid-lab/cubrid-mcp-server/commit/e3e0185f21e25ffe08f5a866a30c2557505b519a)), closes [#352](https://github.com/cubrid-lab/cubrid-mcp-server/issues/352)
+* **release:** add a release review checklist to the runbook ([#360](https://github.com/cubrid-lab/cubrid-mcp-server/issues/360)) ([f196135](https://github.com/cubrid-lab/cubrid-mcp-server/commit/f196135b82298e6af701469925e57424f345dab0)), closes [#355](https://github.com/cubrid-lab/cubrid-mcp-server/issues/355)
+* **site:** label the site as main-branch documentation with its build commit ([#359](https://github.com/cubrid-lab/cubrid-mcp-server/issues/359)) ([08550e7](https://github.com/cubrid-lab/cubrid-mcp-server/commit/08550e7655260de42c78e879bb5eb1580106d67d)), closes [#355](https://github.com/cubrid-lab/cubrid-mcp-server/issues/355)
+* **structure:** group the site by reader and make Korean pages peers ([#358](https://github.com/cubrid-lab/cubrid-mcp-server/issues/358)) ([c0f900b](https://github.com/cubrid-lab/cubrid-mcp-server/commit/c0f900b76fe72523e51e5ae4e84fe197324284f8)), closes [#354](https://github.com/cubrid-lab/cubrid-mcp-server/issues/354)
+
 ## [0.5.1](https://github.com/cubrid-lab/cubrid-mcp-server/compare/v0.5.0...v0.5.1) (2026-10-14)
 
 
