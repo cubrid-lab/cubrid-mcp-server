@@ -82,6 +82,13 @@ def test_filter_table_names(fake_db: FakeDatabase) -> None:
     assert server.filter_table_names("user") == ["users", "user_roles"]
 
 
+def test_filter_table_names_no_match(fake_db: FakeDatabase) -> None:
+    fake_db.queue([("users",), ("orders",)])
+    assert server.filter_table_names("absent") == []
+    assert len(fake_db.calls) == 1
+    assert "db_class" in fake_db.calls[0][0]
+
+
 def test_filter_table_names_empty(fake_db: FakeDatabase) -> None:
     assert server.filter_table_names("   ") == []
 

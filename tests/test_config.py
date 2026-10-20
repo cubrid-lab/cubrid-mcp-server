@@ -213,8 +213,10 @@ def test_registry_named_selection_is_case_insensitive() -> None:
         "CUBRID_REPORTING_DATABASE": "reports",
     }
     registry = ConnectionRegistry.from_env(env)
-    assert registry.config_for("reporting").host == "reporting-db"
-    assert registry.config_for("REPORTING").host == "reporting-db"
+    reporting = registry.config_for("reporting")
+    assert reporting.host == "reporting-db"
+    assert registry.config_for("REPORTING") is reporting
+    assert registry.config_for("  RePoRtInG  ") is reporting
 
 
 def test_registry_missing_named_vars_fail_with_name() -> None:
