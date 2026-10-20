@@ -219,6 +219,33 @@ def test_registry_named_selection_is_case_insensitive() -> None:
     assert registry.config_for("  RePoRtInG  ") is reporting
 
 
+def test_registry_named_connection_does_not_inherit_bare_settings() -> None:
+    env = BASE_ENV | {
+        "CUBRID_PORT": "30000",
+        "CUBRID_MCP_MAX_ROWS": "250",
+        "CUBRID_MCP_MAX_CHARS": "8000",
+        "CUBRID_MCP_READONLY": "0",
+        "CUBRID_CONNECTIONS": "reporting",
+        "CUBRID_REPORTING_HOST": "reporting-db",
+        "CUBRID_REPORTING_USER": "ru",
+        "CUBRID_REPORTING_PASSWORD": "rp",
+        "CUBRID_REPORTING_DATABASE": "reports",
+    }
+    registry = ConnectionRegistry.from_env(env)
+    default = registry.config_for()
+    assert default.port == 30000
+    assert default.max_rows == 250
+    assert default.max_chars == 8000
+    assert default.readonly is False
+
+    # The named connection does not inherit the bare CUBRID_* / CUBRID_MCP_* variables.
+    reporting = registry.config_for("reporting")
+    assert reporting.port == 33000
+    assert reporting.max_rows == 1000
+    assert reporting.max_chars == 4000
+    assert reporting.readonly is True
+
+
 def test_registry_missing_named_vars_fail_with_name() -> None:
     env = BASE_ENV | {"CUBRID_CONNECTIONS": "reporting"}
     with pytest.raises(ConfigError, match="CUBRID_REPORTING_HOST"):
