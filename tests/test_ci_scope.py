@@ -157,7 +157,7 @@ def test_workflow_edit_with_dependency_metadata_keeps_lowest_direct() -> None:
     "path",
     [
         "scripts/lint_changelog.py",
-        "Makefile",
+        "scripts/doctor.py",
         ".mcpb/server.json",
         ".github/dependabot.yml",
         "docs-tools/requirements.txt",
@@ -174,6 +174,17 @@ def test_tooling_and_metadata_run_unit_but_never_cubrid(path: str) -> None:
     assert scope["unit"] is True
     assert scope["live"] is False
     assert scope["python"] == ["3.12"]
+
+
+@pytest.mark.parametrize("path", ["Makefile", "scripts/run_integration.py"])
+def test_live_lane_implementation_selects_the_default_live_lane(path: str) -> None:
+    # The live job runs `make integration`; editing it must run it (#381).
+    scope = pr(path)
+    assert scope["tier"] == "pr"
+    assert scope["unit"] is True
+    assert scope["live"] is True
+    assert scope["cubrid"] == ["11.4"]
+    assert scope["lowest"] is False
 
 
 @pytest.mark.parametrize(

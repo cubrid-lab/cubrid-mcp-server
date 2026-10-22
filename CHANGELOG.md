@@ -22,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### CI
 
 - **CI calls the Make targets (#379)** — the unit lane runs `make lint`, `make format-check`, `make typecheck` and `make test` (the Codecov upload of `coverage.xml` stays a CI-only step), and the live jobs in `ci.yml` and `integration-full.yml` run `make integration CUBRID_VERSION=${{ matrix.cubrid }}` instead of inline `docker run`, readiness and `docker logs` steps; the container log is still printed on a failure. The live container no longer publishes the unused CUBRID master port 1523. The Python and CUBRID matrices, the lane selection, the coverage threshold and the test selection are unchanged; `lowest-direct` and the upstream canary still run pytest directly without coverage. Refs #379.
+- **Editing `make integration` runs the live lane (#381)** — `scripts/ci_scope.py` now selects the default live CUBRID lane, besides the unit lane, for a pull request that changes the `Makefile` or `scripts/run_integration.py`, which implement the live job's `make integration`. Before, both were unit-only tooling, so a PR that broke the integration lifecycle passed PR CI. Other `scripts/*` files stay unit-only. Refs #381.
 
 ### Tests
 

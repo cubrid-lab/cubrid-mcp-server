@@ -8,7 +8,8 @@ Tiers:
 
 * ``docs``  - docs/metadata-only PR: no unit job, no live CUBRID, changelog lint only.
 * ``pr``    - ordinary PR: representative Python unit lane, plus risk-selected lanes
-  (one default live CUBRID lane for runtime/test changes, lowest-direct for
+  (one default live CUBRID lane for runtime/test changes and for the Makefile and
+  ``scripts/run_integration.py`` that run it, lowest-direct for
   dependency metadata, Python/CUBRID endpoints for compatibility changes).
   Workflow edits other than ``ci.yml`` select the unit lane only (#232).
 * ``full``  - push to main, manual dispatch, or a change to the CI policy itself:
@@ -43,6 +44,10 @@ LIVE_ENDPOINTS = (
 )
 # Runtime and tests: unit plus one default live CUBRID lane.
 RUNTIME = ("cubrid_mcp_server/*", "tests/*")
+# The live lane runs `make integration`, implemented by the Makefile recipe and
+# its runner, so a change to either must start CUBRID too (#381). Checked before
+# TOOLING, which would otherwise match both.
+LIVE_TOOLING = ("Makefile", "scripts/run_integration.py")
 # Tooling and metadata exercised by unit tests only; never starts CUBRID.
 TOOLING = (
     "scripts/*",
@@ -97,7 +102,7 @@ def classify(event: str, paths: Iterable[str]) -> dict[str, object]:
             unit = lowest = live = py_endpoints = cubrid_endpoints = True
         elif _match(path, LIVE_ENDPOINTS):
             unit = live = cubrid_endpoints = True
-        elif _match(path, RUNTIME):
+        elif _match(path, RUNTIME) or _match(path, LIVE_TOOLING):
             unit = live = True
         elif _match(path, TOOLING):
             unit = True
