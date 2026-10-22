@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Upgrade notes
+
+- **`make integration` now starts its own CUBRID (#379)** — it used to run `pytest -m integration` against a CUBRID you had already started. It now starts a uniquely named `cubrid/cubrid:$(CUBRID_VERSION)` container (default 11.4) with `demodb`, publishes the broker on host port `$(INTEGRATION_PORT)` (default 33000), waits for `demodb`, runs the integration tests against `127.0.0.1:$(INTEGRATION_PORT)/demodb` as `dba` (exported `CUBRID_*` connection variables are ignored), and always removes that container, so it needs Docker. The old behavior is `make integration-local`. `make test` now also measures coverage and fails below `fail_under = 95` and writes `coverage.xml`, `make lint` checks the whole repository (`ruff check .`) instead of `cubrid_mcp_server/` and `tests/`, and `make check` adds `format-check`, so all three can fail where they passed before.
+
+### Changed
+
+- **The Makefile is the canonical local and CI interface (#379)** — new targets: `doctor` (checks Python 3.11+, `ruff`, `mypy`, `pytest`, `pytest-cov` and `pytest-asyncio`; exits non-zero without a success line if any is missing), `format-check` (`ruff format --check .`), `verify` (`check` + `test`, no Docker), `integration` (the run-owned Docker lifecycle in `scripts/run_integration.py`: start, readiness wait, `pytest -m integration -v`, the container log on a failure, removal of the container and its anonymous volumes on success, failure, SIGINT or SIGTERM; the first failing step's exit status, or 128 + the signal number) and `integration-local`. `lint`, `format-check` and `typecheck` use the same paths and flags as CI, `format` is the only target that edits files, `test` takes extra pytest arguments in `PYTEST_ARGS`, `clean` also removes `.ruff_cache`, `.coverage`, `coverage.xml` and `htmlcov` (all gitignored, generated files), and `make help` groups the targets by purpose. Refs #379.
+
+### Documentation
+
+- **Make targets in the contributor docs (#379)** — `CONTRIBUTING.md`, `AGENTS.md`, the PR template and the README development section (English and Korean) describe the new targets, the `make integration` variables and that CI calls the same targets. Refs #379.
+
+### CI
+
+- **CI calls the Make targets (#379)** — the unit lane runs `make lint`, `make format-check`, `make typecheck` and `make test` (the Codecov upload of `coverage.xml` stays a CI-only step), and the live jobs in `ci.yml` and `integration-full.yml` run `make integration CUBRID_VERSION=${{ matrix.cubrid }}` instead of inline `docker run`, readiness and `docker logs` steps; the container log is still printed on a failure. The live container no longer publishes the unused CUBRID master port 1523. The Python and CUBRID matrices, the lane selection, the coverage threshold and the test selection are unchanged; `lowest-direct` and the upstream canary still run pytest directly without coverage. Refs #379.
+
+### Tests
+
+- **Makefile semantics and CI parity tests (#379)** — `tests/test_makefile.py` reads each target with `make -n` and pins its commands (CI paths and flags, `check` and `verify` composition, coverage enforcement, only `format` mutating, `clean` removing only gitignored untracked paths, grouped `help`, a fail-closed `doctor`) and that the CI jobs call the targets; `tests/test_run_integration.py` drives `scripts/run_integration.py` with a fake `docker` and checks cleanup and exit statuses on success, test failure, start failure, readiness timeout, cleanup failure, missing Docker, SIGINT and SIGTERM. Refs #379.
+
 ## [0.5.2] - 2026-10-20
 
 ### Fixed

@@ -38,10 +38,17 @@ cubrid_mcp_server/
 
 ## Development
 
-- `make install` — install in development mode
-- `make check` — ruff lint + mypy typecheck
-- `make test` — unit tests (excludes integration)
-- `make integration` — integration tests (requires a live CUBRID)
+The Makefile is the canonical local and CI interface (CI's lint, type, unit and live
+jobs call these targets); `make help` lists them by group.
+
+- `make install` — install in development mode; `make doctor` — check the required tools (fails closed)
+- `make check` — `lint` (`ruff check .`) + `format-check` (`ruff format --check .`) + `typecheck` (mypy)
+- `make format` — the only target that rewrites files
+- `make test` — offline unit tests with coverage, enforcing `fail_under` (95); no database
+- `make verify` — `check` + `test`; no Docker
+- `make integration` — integration tests on a run-owned Docker CUBRID that is always removed
+  (`CUBRID_VERSION`, default 11.4; `INTEGRATION_PORT`, default 33000)
+- `make integration-local` — integration tests against an already-running CUBRID (`CUBRID_*` variables)
 - `make agent-eval-check` — re-grade the opt-in agent evaluation fixtures in [`agent-evals/`](agent-evals/README.md) (offline; no model, no database)
 - `make release-check VERSION=x.y.z` — read-only release consistency gate (run by `release-please.yml` and `publish-pypi.yml`)
 

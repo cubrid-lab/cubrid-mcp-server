@@ -38,7 +38,11 @@ def test_tests_that_read_workflows_run_in_the_unit_lane() -> None:
 def test_unit_lane_deselects_only_integration_tests() -> None:
     ci = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text())
     runs = [s.get("run", "") for s in ci["jobs"]["lint-and-test"]["steps"]]
-    assert any('pytest -m "not integration"' in run for run in runs)
+    # The unit lane runs `make test` (#379); its recipe deselects integration tests.
+    assert "make test" in [run.strip() for run in runs]
+    recipe = re.search(r"^test:.*\n\t(.*)$", (ROOT / "Makefile").read_text(), re.M)
+    assert recipe is not None
+    assert '-m "not integration"' in recipe.group(1)
 
 
 def test_workflow_readers_exist() -> None:

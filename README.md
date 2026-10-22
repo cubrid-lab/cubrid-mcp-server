@@ -293,19 +293,25 @@ The **raw SQL text, bound parameters, and literal values are never logged**, so 
 git clone https://github.com/cubrid-lab/cubrid-mcp-server.git
 cd cubrid-mcp-server
 python -m venv .venv && source .venv/bin/activate
-pip install -e ".[dev]"
+make install        # pip install -e ".[dev]"
+make doctor         # check the required tools
 
-# Lint & type check
-ruff check .
-mypy cubrid_mcp_server
+# Lint, format check & type check (ruff check ., ruff format --check ., mypy)
+make check
 
-# Unit tests
-pytest -m "not integration"
+# Unit tests with the 95% coverage floor (no database)
+make test
 
-# Integration tests (requires running CUBRID)
+# Integration tests on a Docker CUBRID that make starts and always removes
+make integration    # CUBRID_VERSION=11.4 INTEGRATION_PORT=33000 by default
+
+# Integration tests against a CUBRID you already run
 export CUBRID_HOST=localhost CUBRID_USER=dba CUBRID_PASSWORD="" CUBRID_DATABASE=demodb
-pytest -m integration
+make integration-local
 ```
+
+CI calls the same Make targets; `make help` lists them all and
+[CONTRIBUTING.md](CONTRIBUTING.md) describes each one.
 
 The live shared-session concurrency regression can also be run on its own:
 

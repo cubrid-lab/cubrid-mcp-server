@@ -256,19 +256,25 @@ cubrid-mcp-server
 git clone https://github.com/cubrid-lab/cubrid-mcp-server.git
 cd cubrid-mcp-server
 python -m venv .venv && source .venv/bin/activate
-pip install -e ".[dev]"
+make install        # pip install -e ".[dev]"
+make doctor         # 필요한 도구 확인
 
-# 린트 및 타입 검사
-ruff check .
-mypy cubrid_mcp_server
+# 린트, 포맷 검사 및 타입 검사 (ruff check ., ruff format --check ., mypy)
+make check
 
-# 단위 테스트
-pytest -m "not integration"
+# 95% 커버리지 하한을 적용한 단위 테스트 (데이터베이스 불필요)
+make test
 
-# 통합 테스트 (실행 중인 CUBRID 필요)
+# make가 시작하고 항상 제거하는 Docker CUBRID에서 통합 테스트
+make integration    # 기본값 CUBRID_VERSION=11.4 INTEGRATION_PORT=33000
+
+# 이미 실행 중인 CUBRID에서 통합 테스트
 export CUBRID_HOST=localhost CUBRID_USER=dba CUBRID_PASSWORD="" CUBRID_DATABASE=demodb
-pytest -m integration
+make integration-local
 ```
+
+CI도 같은 Make 타깃을 호출합니다. `make help`로 전체 목록을 볼 수 있고, 각 타깃은
+[CONTRIBUTING.md](https://github.com/cubrid-lab/cubrid-mcp-server/blob/main/CONTRIBUTING.md)에 설명되어 있습니다.
 
 실제 서버를 사용하는 공유 세션 동시 호출 회귀 테스트만 실행할 수도 있습니다:
 

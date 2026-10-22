@@ -1,42 +1,69 @@
-.PHONY: help install lint format typecheck check test integration clean release-check agent-eval-check
+.PHONY: help install doctor lint format-check format typecheck check test verify integration integration-local agent-eval-check clean release-check
 
 PYTHON = python3
 PYTEST = python3 -m pytest
 RUFF = ruff
 MYPY = mypy
 SRC = cubrid_mcp_server
-TESTS = tests
+# Extra pytest arguments for `make test`, e.g. PYTEST_ARGS="-k config -x".
+PYTEST_ARGS ?=
+# `make integration`: the cubrid/cubrid image tag and the host port for its broker.
+CUBRID_VERSION ?= 11.4
+INTEGRATION_PORT ?= 33000
 
-help: ## Show this help message
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
+##@ General
 
-install: ## Install in development mode
+help: ## Show this help message, grouped by purpose
+	@awk 'BEGIN {FS = ":.*## "} /^##@ / {printf "\n%s\n", substr($$0, 5)} /^[a-zA-Z_-]+:.*## / {printf "  %-20s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
+
+##@ Setup
+
+install: ## Install in development mode (pip install -e ".[dev]")
 	pip install -e ".[dev]"
 
-lint: ## Run ruff linter
-	$(RUFF) check $(SRC)/ $(TESTS)/
+doctor: ## Check the required development tools; fails if any is missing
+	$(PYTHON) scripts/doctor.py
 
-format: ## Format code with ruff
-	$(RUFF) format $(SRC)/ $(TESTS)/
-	$(RUFF) check --fix $(SRC)/ $(TESTS)/
+##@ Quality (CI lint and type jobs)
 
-typecheck: ## Run mypy type checker
-	$(MYPY) $(SRC)/
+lint: ## Run ruff check on the whole repository (same as CI)
+	$(RUFF) check .
 
-check: lint typecheck ## Run lint + type checks (no tests)
+format-check: ## Check formatting with ruff format --check (same as CI)
+	$(RUFF) format --check .
 
-test: ## Run unit tests (excludes integration)
-	$(PYTEST) -m "not integration" -q
+format: ## Format and auto-fix code with ruff (the only mutating target)
+	$(RUFF) format .
+	$(RUFF) check --fix .
+
+typecheck: ## Run mypy (strict) on the package (same as CI)
+	$(MYPY) $(SRC)
+
+check: lint format-check typecheck ## Run lint, format-check and typecheck (no tests)
+
+##@ Tests
+
+test: ## Run offline unit tests with coverage; fails below fail_under (writes coverage.xml)
+	$(PYTEST) -m "not integration" --cov=$(SRC) --cov-report=term-missing --cov-report=xml $(PYTEST_ARGS)
+
+verify: check test ## Run check and test (offline; no Docker, no database)
+
+integration: ## Start a run-owned Docker CUBRID, run integration tests, always remove it (CUBRID_VERSION, INTEGRATION_PORT)
+	$(PYTHON) scripts/run_integration.py --cubrid-version "$(CUBRID_VERSION)" --port "$(INTEGRATION_PORT)" --pytest "$(PYTEST)"
+
+integration-local: ## Run integration tests against an already-running CUBRID (CUBRID_HOST, CUBRID_PORT, ...)
+	$(PYTEST) -m "integration" -q
 
 agent-eval-check: ## Validate the agent-evals tasks and re-grade their fixtures (offline; no model, no DB)
 	$(PYTHON) scripts/agent_eval.py validate
 	$(PYTHON) scripts/agent_eval.py check
 
-integration: ## Run integration tests (requires live CUBRID)
-	$(PYTEST) -m "integration" -q
+##@ Maintenance
 
-clean: ## Clean build artifacts
-	rm -rf build/ dist/ *.egg-info .pytest_cache .mypy_cache
+clean: ## Remove generated build, cache and coverage artifacts
+	rm -rf build/ dist/ *.egg-info .pytest_cache .mypy_cache .ruff_cache .coverage coverage.xml htmlcov
+
+##@ Release
 
 release-check: ## Read-only release consistency gate (run by release-please.yml and publish-pypi.yml). Usage: make release-check VERSION=x.y.z
 	@if [ -z "$(VERSION)" ]; then echo "Usage: make release-check VERSION=x.y.z"; exit 1; fi

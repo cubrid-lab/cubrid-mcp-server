@@ -26,40 +26,72 @@ python3 -m venv .venv && source .venv/bin/activate
 make install
 ```
 
-`make install` runs `pip install -e ".[dev]"`.
+`make install` runs `pip install -e ".[dev]"`. `make doctor` then checks that
+Python 3.11+, `ruff`, `mypy`, `pytest`, `pytest-cov` and `pytest-asyncio` are
+available; it exits non-zero, without a success line, if any is missing. Docker
+is reported but optional (only `make integration` needs it). `make help` lists
+every target, grouped by purpose.
 
 ## Local Checks Before Pushing
 
-Run these before opening a PR — they mirror what CI runs, so passing them
-locally is the fastest way to avoid a red build:
+The Makefile is the canonical interface: CI's lint, type, unit and live jobs call
+these same targets (#379), so passing them locally is the fastest way to avoid a
+red build:
 
 ```bash
-make lint        # ruff check
-make format      # ruff format + ruff check --fix
-make typecheck   # mypy (strict) on cubrid_mcp_server/
-make check       # lint + typecheck in one go (no tests)
+make lint          # ruff check .                (same scope as CI)
+make format-check  # ruff format --check .
+make typecheck     # mypy (strict) on cubrid_mcp_server
+make check         # lint + format-check + typecheck (no tests)
+make format        # ruff format . + ruff check --fix . (the only target that edits files)
 ```
 
 ## Tests
 
 ```bash
-make test         # unit tests only (pytest -m "not integration")
-make integration  # integration tests — requires a live CUBRID (see below)
+make test               # offline unit tests with coverage; fails below fail_under (95)
+make verify             # make check + make test; no Docker, no database
+make integration        # integration tests on a Docker CUBRID it starts and removes
+make integration-local  # integration tests against a CUBRID you already run
 ```
+
+`make test` runs `pytest -m "not integration"` with `--cov=cubrid_mcp_server`,
+so the `fail_under = 95` floor in `pyproject.toml` is enforced locally exactly as
+in CI. It writes `coverage.xml` (CI uploads that file to Codecov); extra pytest
+arguments go in `PYTEST_ARGS`, for example `make test PYTEST_ARGS="-k config -x"`.
+`make clean` removes only generated, gitignored artifacts (build output, caches,
+`.coverage`, `coverage.xml`, `htmlcov/`).
 
 ### Running the Integration Suite
 
-The integration tests need a running CUBRID with the `demodb` database. CI
-starts `cubrid/cubrid:<version>` (11.4 by default, see the tiers below) in
-Docker and waits for `demodb` to be ready; you can do the same locally, then
-point the tests at it:
+`make integration` needs only Docker. It starts its own uniquely named
+`cubrid/cubrid:<CUBRID_VERSION>` container (11.4 by default) with `demodb`,
+publishes the broker on host port `INTEGRATION_PORT` (33000 by default), waits
+for `demodb` to answer, runs `pytest -m integration -v` against it and then
+always removes that container and its anonymous volumes, on success, failure or
+Ctrl-C (SIGINT/SIGTERM). On a failure it prints the container log first. The
+exit status is the first failing step's; a cleanup failure fails an otherwise
+successful run. CI's live jobs run the same target with the matrix version:
+
+```bash
+make integration                                            # CUBRID 11.4 on port 33000
+make integration CUBRID_VERSION=11.2 INTEGRATION_PORT=33524  # another version or a free port
+```
+
+The test endpoint is pinned to `127.0.0.1:$INTEGRATION_PORT/demodb` as `dba`, so
+exported `CUBRID_*` variables cannot redirect the run. No other container, image
+or named volume is touched.
+
+To run the suite against a CUBRID you manage yourself (with `demodb`), point the
+tests at it and use `make integration-local`:
 
 ```bash
 export CUBRID_HOST=localhost
+export CUBRID_PORT=33000
 export CUBRID_USER=dba
 export CUBRID_PASSWORD=""
 export CUBRID_DATABASE=demodb
-make integration
+make integration-local
 ```
 
 ## What CI Enforces
@@ -140,15 +172,22 @@ release smoke venvs, the docs build and the upstream canary keep plain pip.
 
 The lanes check:
 
-- **`ruff check .`** — linting.
-- **`ruff format --check .`** — formatting (run `make format` to fix).
-- **`mypy` in strict mode** — type checking of `cubrid_mcp_server/`.
-- **Pytest with a 95% coverage floor** — `fail_under = 95` in `pyproject.toml`.
-  This is the gate that most often fails a PR; add tests for new code paths.
+- **`make lint`** (`ruff check .`) — linting.
+- **`make format-check`** (`ruff format --check .`) — formatting (run `make format` to fix).
+- **`make typecheck`** (`mypy` in strict mode) — type checking of `cubrid_mcp_server/`.
+- **`make test`** (pytest with a 95% coverage floor) — `fail_under = 95` in
+  `pyproject.toml`. This is the gate that most often fails a PR; add tests for new
+  code paths. Only the Codecov upload of `coverage.xml` is CI-specific.
 - **`lowest-direct` job** — reinstalls with the lowest allowed direct
   dependency versions (`uv pip install --resolution lowest-direct`) and re-runs
-  the unit tests, catching accidental use of newer-than-declared APIs.
-- **`integration`** — `pytest -m integration` against a live CUBRID container.
+  the unit tests, catching accidental use of newer-than-declared APIs. It runs
+  `pytest -m "not integration"` without coverage on purpose: it checks dependency
+  floors, not the coverage gate, so it is a weaker lane than `make test`, not a
+  replacement for it.
+- **`integration`** — `make integration CUBRID_VERSION=<matrix version>`: a
+  run-owned CUBRID container, `pytest -m integration`, the container log on a
+  failure and guaranteed container removal. `integration-full.yml` runs the same
+  target for each matrix cell.
 - **`python scripts/lint_changelog.py`** — checks `CHANGELOG.md` structure and
   version ordering. In `[Unreleased]` and in releases after 0.4.0 it also
   rejects a repeated `###` heading within one version and requires the standard

@@ -76,8 +76,8 @@ See CONTRIBUTING.md#pull-request-and-commit-titles.
 ## Checklist
 
 - [ ] My code follows the project's code style
-- [ ] I have run `make check` (lint + typecheck)
-- [ ] I have run `make test` and all tests pass
+- [ ] I have run `make check` (lint + format-check + typecheck)
+- [ ] I have run `make test` (with the coverage floor) and all tests pass
 - [ ] I have added tests for new functionality (if applicable)
 - [ ] I have filled in the Docs Decision section above (or applied the `docs-not-needed` label)
 - [ ] My changes do not introduce new warnings

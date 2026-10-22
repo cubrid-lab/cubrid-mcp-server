@@ -104,21 +104,20 @@ jobs:
           uv pip install --system -e ".[dev]"
           uv pip freeze --system
 
+      # The Makefile is the canonical interface (#379): these targets run the same
+      # commands locally and in CI. `make test` enforces fail_under and writes the
+      # coverage.xml that the Codecov step uploads.
       - name: Ruff (lint)
-        run: ruff check .
+        run: make lint
 
       - name: Ruff (format check)
-        run: ruff format --check .
+        run: make format-check
 
       - name: Mypy (strict)
-        run: mypy cubrid_mcp_server
+        run: make typecheck
 
       - name: Pytest (unit)
-        run: >-
-          pytest -m "not integration"
-          --cov=cubrid_mcp_server
-          --cov-report=term-missing
-          --cov-report=xml
+        run: make test
 
       - name: Upload coverage to Codecov
         if: matrix.python-version == '3.12' && github.actor != 'dependabot[bot]'
@@ -196,42 +195,11 @@ jobs:
           uv pip install --system -e ".[dev]"
           uv pip freeze --system
 
-      - name: Start CUBRID container
-        run: |
-          docker run -d --name cubrid \
-            --shm-size 512m \
-            -e CUBRID_DB=demodb \
-            -p 33000:33000 \
-            -p 1523:1523 \
-            cubrid/cubrid:${{ matrix.cubrid }}
-          docker ps
-
-      - name: Wait for CUBRID demodb to be ready
-        run: |
-          for i in $(seq 1 60); do
-            if docker exec cubrid bash -lc "csql -u dba demodb -c 'SELECT 1;'" >/dev/null 2>&1; then
-              echo "CUBRID demodb is ready (attempt $i)"
-              exit 0
-            fi
-            echo "Waiting for CUBRID demodb... attempt $i"
-            sleep 5
-          done
-          echo "CUBRID demodb did not become ready in time"
-          docker logs cubrid || true
-          exit 1
-
+      # Starts a run-owned cubrid/cubrid container, waits for demodb, runs
+      # `pytest -m integration -v`, prints the container log on failure and always
+      # removes the container (scripts/run_integration.py, #379).
       - name: Pytest (integration)
-        env:
-          CUBRID_HOST: 127.0.0.1
-          CUBRID_PORT: "33000"
-          CUBRID_USER: dba
-          CUBRID_PASSWORD: ""
-          CUBRID_DATABASE: demodb
-        run: pytest -m integration -v
-
-      - name: CUBRID logs (on failure)
-        if: failure()
-        run: docker logs cubrid || true
+        run: make integration CUBRID_VERSION=${{ matrix.cubrid }}
 
   changelog-lint:
     runs-on: ubuntu-latest
