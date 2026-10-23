@@ -98,6 +98,9 @@ PROTECTED_PATHS = (
     # The gate itself and the tests that pin its behaviour.
     "scripts/agent_review_gate.py",
     "tests/test_agent_review_gate.py",
+    # The App-side publisher of the same verdict (#393).
+    "scripts/agent_review_publish.py",
+    "tests/test_agent_review_publish.py",
 )
 # The code owners in .github/CODEOWNERS (a test keeps the two equal).
 MAINTAINERS = frozenset({"yeongseon", "paikend"})

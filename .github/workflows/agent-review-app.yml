@@ -1,0 +1,80 @@
+name: agent-review-app
+
+# Publishes the agent-review verdict as a check run owned by a GitHub App (#393;
+# decision in #345). A required status check pinned to the App's integration ID
+# cannot be satisfied by any PR workflow, which always publishes as GitHub
+# Actions; the advisory agent-review.yml check stays as it is.
+#
+# Security: `pull_request_target`, `schedule` and `workflow_dispatch` all run
+# this file and the scripts from the default branch. The job checks out `main`
+# only, never the PR, and scripts/agent_review_publish.py only reads the REST and
+# GraphQL APIs and posts a check run. The App key is a secret of the
+# `agent-review-app` environment, whose deployment-branch policy allows `main`
+# only, so a job on a PR branch cannot read it. The job is skipped until the
+# AGENT_REVIEW_APP_ID repository variable is set, and for Dependabot events,
+# which cannot read environment secrets (the schedule covers their PRs).
+#
+# Review events reach this workflow through `workflow_run` when the advisory
+# agent-review.yml run finishes (it also runs from the default branch; the PR is
+# re-read from the API, never taken from the payload). The schedule picks up
+# what starts no run: Copilot's review (its run waits for approval) and thread
+# resolutions. An unchanged verdict is not posted again. One concurrency group
+# queues every run, so an older evaluation is never posted after a newer one; a
+# superseded pending run is dropped and the next run or sweep covers its PR.
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, ready_for_review, edited]
+  workflow_run:
+    workflows: [agent-review]
+    types: [completed]
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: "PR number to evaluate (empty: every open PR into main)"
+        required: false
+        type: string
+
+permissions: {}
+
+concurrency:
+  group: agent-review-app
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: publish verdict
+    if: vars.AGENT_REVIEW_APP_ID != '' && github.actor != 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: agent-review-app
+    permissions:
+      contents: read
+    steps:
+      - name: Check out main (never the PR)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          persist-credentials: false
+      - name: Create an App installation token
+        id: app
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ vars.AGENT_REVIEW_APP_ID }}
+          private-key: ${{ secrets.AGENT_REVIEW_APP_KEY }}
+          permission-checks: write
+          permission-contents: read
+          permission-pull-requests: read
+      - name: Publish the verdict
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          APP_ID: ${{ vars.AGENT_REVIEW_APP_ID }}
+          TARGET_PR: ${{ github.event.pull_request.number || github.event.workflow_run.pull_requests[0].number || inputs.pr }}
+        run: |
+          set -euo pipefail
+          if [ -n "$TARGET_PR" ]; then target=(--pr "$TARGET_PR"); else target=(--all-open); fi
+          python3 -I scripts/agent_review_publish.py --repo "$GITHUB_REPOSITORY" \
+            --app-id "$APP_ID" --base main "${target[@]}"

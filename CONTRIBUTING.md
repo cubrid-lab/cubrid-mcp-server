@@ -343,8 +343,50 @@ integration and release checks remain mandatory.
 > the PR's copy of the workflow) or by adding another workflow with an
 > `agent-review` job. The check cannot prove who produced it. It can become a
 > required check only once its verdict is posted from an identity a pull request
-> cannot impersonate, such as a GitHub App (tracked in its own issue). Until
-> then it is a reading aid for the reviewer and the maintainer who merges.
+> cannot impersonate. The GitHub App publisher below is that identity (#345,
+> #393); until it runs and the ruleset requires the App's check, `agent-review`
+> is a reading aid for the reviewer and the maintainer who merges.
+
+#### App-owned verdict
+
+`.github/workflows/agent-review-app.yml` posts the same verdict as an
+`agent-review` check run owned by a GitHub App (decision in #345, implementation
+#393). A required status check matches its context and its `integration_id`, and
+a pull request's workflows can only publish as GitHub Actions (`15368`), so a
+check required with the App's ID cannot be forged by a pull request.
+
+- **Default-branch code only.** It runs on `pull_request_target`, on
+  `workflow_run` when an advisory `agent-review` run completes (a review event),
+  on a 15-minute `schedule` and on `workflow_dispatch`; all of them use the
+  workflow file and scripts from `main`, and the pull request is re-read from
+  the API, never taken from an event payload. The job checks out `main`, never the pull
+  request, and `scripts/agent_review_publish.py` runs the unchanged
+  `fetch`/`evaluate` of `scripts/agent_review_gate.py` and posts a completed
+  check run on the head it evaluated, only while that is still the head.
+  Every run shares one concurrency group, so an older evaluation is never
+  posted after a newer one.
+- **The schedule** picks up what sends no usable event: Copilot's review (its
+  run waits for approval) and thread resolutions. A verdict whose conclusion and
+  summary equal the App's latest `agent-review` run on that head is not posted
+  again.
+- **Credentials.** The App needs `checks: write`, `pull_requests: read` and
+  `contents: read`. Its ID is the repository variable `AGENT_REVIEW_APP_ID`; its
+  private key is the secret `AGENT_REVIEW_APP_KEY` of the `agent-review-app`
+  environment, whose deployment-branch policy allows only `main`, so a job on a
+  pull request branch cannot read it. The job is skipped until the variable is
+  set, and for Dependabot events (Dependabot runs cannot read environment
+  secrets; the schedule covers those pull requests).
+- **Fails closed.** Missing API data for a pull request posts a failing check;
+  any other API error fails the run.
+- **Rollback.** Remove the App's check from the required checks, delete the
+  workflow, the variable and the environment, and uninstall the App. The
+  advisory workflow keeps working throughout.
+
+Requiring the App's `agent-review` in the `main protection` ruleset is a
+separate change, made only after the App posts verdicts and a pilot shows that a
+forged `agent-review` job does not satisfy the App-pinned check.
+
+#### The advisory check
 
 `.github/workflows/agent-review.yml` publishes the `agent-review` check. It runs
 `scripts/agent_review_gate.py` from the base branch and decides only from the

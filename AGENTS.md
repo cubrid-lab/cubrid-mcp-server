@@ -170,7 +170,9 @@ GitHub evidence: an OpenCode + Oracle PR passes the check when a maintainer,
 after checking the recorded Oracle reviews, approves the head. A PR can publish
 a check with the same name, so the check is a reading aid and must not be made
 a required status check until it is posted from an identity a PR cannot
-impersonate, such as a GitHub App. A run triggered by Copilot's review waits as
+impersonate: `.github/workflows/agent-review-app.yml` posts the same verdict as
+a GitHub App check (#393), and only that App-owned check may later be required,
+pinned to the App's integration ID. A run triggered by Copilot's review waits as
 "action required": re-run it, or edit the PR body, after Copilot reviews.
 
 **Human contributions:** follow ordinary contributor requirements;
