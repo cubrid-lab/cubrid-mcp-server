@@ -330,7 +330,7 @@ write-capable workflows or releases must receive explicit security and
 invariant review confirmed by a maintainer, independent of coding tool.
 Existing tests, live CUBRID requirements and release safeguards remain.
 
-### Agent-review evidence gate (advisory only)
+### Agent-review evidence gate
 
 The existing `agent-review` check can summarize submitted GitHub review
 records using legacy tool-based classifications. It is **not a merge gate**
