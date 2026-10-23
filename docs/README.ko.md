@@ -95,7 +95,7 @@ export CUBRID_DATABASE=mydb
 | `CUBRID_MCP_MAX_ROWS` | `1000` | `execute_query` 최대 행 수 (초과 시 잘림) |
 | `CUBRID_MCP_MAX_SQL_LENGTH` | `65536` | 제출 가능한 SQL 최대 길이 (글자 수) |
 | `CUBRID_MCP_QUERY_TIMEOUT` | `30` | 문장별 소켓 읽기 타임아웃 (초). 서버가 이 시간 내에 데이터를 보내지 않으면 쿼리가 중단되고 연결이 재설정됩니다. 서버 측 문장 타임아웃이 아닙니다. |
-| `CUBRID_MCP_AUDIT_LOG` | `0` | 옵트인 감사 로그. 활성화 시 실행된 문장마다 재던션-safe JSON 기록을 **stderr**에 출력 (연결별 적용: `CUBRID_<NAME>_MCP_AUDIT_LOG`) |
+| `CUBRID_MCP_AUDIT_LOG` | `0` | 옵트인 감사 로그. 활성화 시 실행된 문장마다 민감정보가 제거된(redaction-safe) JSON 기록을 **stderr**에 출력 (연결별 적용: `CUBRID_<NAME>_MCP_AUDIT_LOG`) |
 | `CUBRID_MCP_WRITE` | `0` | 옵트인 쓰기 모드. `1`로 설정하면 단일 DML용 `execute_write` 도구가 등록됩니다 (연결별 적용: `CUBRID_<NAME>_MCP_WRITE`). 기본은 꺼짐 |
 
 ### 다중 연결
@@ -231,7 +231,7 @@ cubrid-mcp-server
 
 ## 로깅
 
-서버는 MCP **stdio 전송**을 사용하며 `stdout`은 JSON-RPC 프로토콜 스트림으로 예약됩니다. **모든 로그는 `stderr`로 출력**되며, 로그 레벨 기본값은 `INFO`입니다. LLM 클라이언트에 반환되는 오류는 **재던션 처리**됩니다 — 예외 카테고리(예: `query failed: OperationalError`)만 반환되고 전체 세부 정보는 운영자를 위해 stderr에 기록됩니다. 스키마 세부 사항, 호스트명, SQL 조각, 설정 값이 클라이언트에 노출되지 않습니다.
+서버는 MCP **stdio 전송**을 사용하며 `stdout`은 JSON-RPC 프로토콜 스트림으로 예약됩니다. **모든 로그는 `stderr`로 출력**되며, 로그 레벨 기본값은 `INFO`입니다. LLM 클라이언트에 반환되는 오류는 **민감정보 제거(redaction) 처리**됩니다 — 예외 카테고리(예: `query failed: OperationalError`)만 반환되고 전체 세부 정보는 운영자를 위해 stderr에 기록됩니다. 스키마 세부 사항, 호스트명, SQL 조각, 설정 값이 클라이언트에 노출되지 않습니다.
 
 ### 감사 로깅 (옵트인)
 
