@@ -26,6 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Tests
 
+- **Release-note extraction edge cases (#385)** — `tests/test_extract_release_notes.py` pins that a tag without the `v` prefix (`1.2.0`) writes notes byte-identical to the prefixed form (`v1.2.0`), including the generated `v1.1.0...v1.2.0` compare link, and that an undated `## [1.3.0]` header and a `## [Unreleased]` header are not release sections: extracting them exits 1 with `Missing dated CHANGELOG section` and writes no `RELEASE_NOTES.md`. Refs #385.
 - **Makefile semantics and CI parity tests (#379)** — `tests/test_makefile.py` reads each target with `make -n` and pins its commands (CI paths and flags, `check` and `verify` composition, coverage enforcement, only `format` mutating, `clean` removing only gitignored untracked paths, grouped `help`, a fail-closed `doctor`) and that the CI jobs call the targets; `tests/test_run_integration.py` drives `scripts/run_integration.py` with a fake `docker` and checks cleanup and exit statuses on success, test failure, start failure, readiness timeout, cleanup failure, missing Docker, SIGINT and SIGTERM. Refs #379.
 
 ## [0.5.2] - 2026-10-20

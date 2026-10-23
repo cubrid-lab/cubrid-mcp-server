@@ -19,6 +19,11 @@ CHANGELOG = (
     "## [1.1.0] - 2026-09-01\n\n### Fixed\n\n- Older.\n\n"
     "## [1.0.0] - 2026-08-01\n\n### Added\n\n- First.\n"
 )
+UNDATED_CHANGELOG = (
+    "# Changelog\n\n## [Unreleased]\n\n### Added\n\n- Not released.\n\n"
+    "## [1.3.0]\n\n### Added\n\n- Undated header.\n\n"
+    "## [1.2.0] - 2026-10-01\n\n### Fixed\n\n- Released.\n"
+)
 
 
 def extract(tmp_path: Path, changelog: str, tag: str) -> subprocess.CompletedProcess[str]:
@@ -55,6 +60,19 @@ def test_existing_compare_link_is_not_duplicated(tmp_path: Path) -> None:
     assert extract(tmp_path, CHANGELOG.replace(SECTION, linked), "v1.2.0").returncode == 0
     assert notes(tmp_path) == linked.strip() + "\n"
     assert "**Full Changelog**" not in notes(tmp_path)
+
+
+def test_unprefixed_tag_extracts_the_same_notes_as_the_prefixed_tag(tmp_path: Path) -> None:
+    expected = SECTION + "\n" + LINK + "v1.1.0...v1.2.0\n"
+    prefixed = tmp_path / "prefixed"
+    prefixed.mkdir()
+    assert extract(prefixed, CHANGELOG, "v1.2.0").returncode == 0
+    assert notes(prefixed) == expected
+
+    unprefixed = tmp_path / "unprefixed"
+    unprefixed.mkdir()
+    assert extract(unprefixed, CHANGELOG, "1.2.0").returncode == 0
+    assert notes(unprefixed) == expected
 
 
 def test_missing_section_still_fails_closed(tmp_path: Path) -> None:
@@ -106,4 +124,23 @@ def test_empty_section_fails_closed(tmp_path: Path) -> None:
     result = extract(tmp_path, empty_section_changelog, "v1.2.0")
     assert result.returncode == 1
     assert "ERROR: Empty CHANGELOG section for 1.2.0" in result.stderr
+    assert not (tmp_path / "RELEASE_NOTES.md").exists()
+
+
+def test_undated_version_header_is_not_a_release_section(tmp_path: Path) -> None:
+    result = extract(tmp_path, UNDATED_CHANGELOG, "v1.3.0")
+    assert result.returncode == 1
+    assert "ERROR: Missing dated CHANGELOG section for 1.3.0" in result.stderr
+    assert not (tmp_path / "RELEASE_NOTES.md").exists()
+
+
+def test_undated_headers_do_not_hide_the_dated_section(tmp_path: Path) -> None:
+    assert extract(tmp_path, UNDATED_CHANGELOG, "v1.2.0").returncode == 0
+    assert notes(tmp_path) == "### Fixed\n\n- Released.\n"
+
+
+def test_unreleased_header_is_not_a_release_section(tmp_path: Path) -> None:
+    result = extract(tmp_path, UNDATED_CHANGELOG, "Unreleased")
+    assert result.returncode == 1
+    assert "ERROR: Missing dated CHANGELOG section for Unreleased" in result.stderr
     assert not (tmp_path / "RELEASE_NOTES.md").exists()
