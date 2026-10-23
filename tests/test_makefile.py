@@ -197,6 +197,49 @@ def test_doctor_fails_closed_without_a_success_line(
     assert "MISSING: command 'mypy' not found" in captured.err
 
 
+def test_doctor_fails_on_a_python_older_than_the_minimum(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    doctor = _load_doctor()
+    monkeypatch.setattr(doctor.shutil, "which", lambda name: f"/usr/bin/{name}")
+    monkeypatch.setattr(doctor.sys, "version_info", (3, 10, 14))
+    assert doctor.main() == 1
+    captured = capsys.readouterr()
+    assert "all required" not in captured.out
+    assert "MISSING: Python 3.10.14 is older than 3.11" in captured.err
+
+
+@pytest.mark.parametrize("module", ["pytest", "pytest_cov", "pytest_asyncio"])
+def test_doctor_fails_on_a_missing_dev_module(
+    module: str, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    doctor = _load_doctor()
+    find_spec = doctor.importlib.util.find_spec
+    monkeypatch.setattr(doctor.shutil, "which", lambda name: f"/usr/bin/{name}")
+    monkeypatch.setattr(
+        doctor.importlib.util, "find_spec", lambda name: None if name == module else find_spec(name)
+    )
+    assert doctor.main() == 1
+    captured = capsys.readouterr()
+    assert "all required" not in captured.out
+    assert f"MISSING: module '{module}' not installed" in captured.err
+    assert "MISSING: command" not in captured.err
+
+
+def test_doctor_only_notes_a_missing_docker(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    doctor = _load_doctor()
+    monkeypatch.setattr(
+        doctor.shutil, "which", lambda name: None if name == "docker" else f"/usr/bin/{name}"
+    )
+    assert doctor.main() == 0
+    captured = capsys.readouterr()
+    assert "note: optional command 'docker' not found" in captured.out
+    assert "doctor: all required development tools found" in captured.out
+    assert captured.err == ""
+
+
 @needs_make
 def test_make_doctor_exits_non_zero_when_tools_are_off_path(tmp_path: Path) -> None:
     assert MAKE is not None
