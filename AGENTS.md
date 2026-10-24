@@ -144,6 +144,29 @@ stdout protocol. Changes to `safety.py`, `database.py`, `audit.py`,
 `server.py`, workflow permissions and publishing require explicit
 security/invariant assessment irrespective of implementation tool.
 
+## PR overlap and execution precedence
+
+- Before creating a PR, check its linked issue's current decision and
+  dependencies, open PRs that affect the same behavior and relevant changes
+  merged to `main`. Record `Supersedes #N`, `Depends on #N` or
+  `Parallel to #N` with a brief reason, or `None`.
+- Select the canonical implementation by accepted behavior, safety, test
+  evidence and maintainer direction, not PR number or creation time. Check
+  again against current `main` before merge. A passing CI job or optional
+  AI review does not waive unresolved prerequisites, read-only/write-mode
+  security reviews, protected-path approval or a release decision.
+- After merging, reconcile displaced open PRs and linked issues: comment
+  and close truly superseded work with its replacement link, or explain why
+  valid parallel work remains. Preserve external contributor discussion and
+  ownership.
+- A policy decision also requires checking open issue/PR instructions and
+  contributor templates for conflicting older text; fix it in the same review
+  cycle or record a focused follow-up.
+- Issue `priority: ...` is urgency, `size: ...` is effort, and PR readiness
+  depends on satisfied prerequisites, required final-head CI, safety and
+  maintainer judgment. Prioritize the next executable item and explain an
+  exception in its local issue. Do not create a new check, bot or merge gate.
+
 ## Issue specification and ownership
 
 Issues and implementation acceptance are repository-local: file work in the
