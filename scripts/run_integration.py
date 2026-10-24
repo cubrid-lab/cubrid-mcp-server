@@ -51,9 +51,16 @@ ROOT = Path(__file__).resolve().parents[1]
 COMPOSE_FILE = "docker-compose.yml"
 SERVICE = "cubrid"
 DATABASE = "demodb"
+<<<<<<< HEAD
+
 PROJECT_PREFIX = "cubrid-mcp-it-"
 REPORTER = ROOT / "scripts" / "report_results.py"
 LANE = "integration"
+
+READY_ATTEMPTS = 60
+READY_INTERVAL = 5.0
+READY_PROBE = f"csql -u dba {DATABASE} -c 'SELECT 1'"
+>>>>>>> 0c54403 (Based on the project's commit convention (from AGENTS.md), here's the commit message to write:)
 
 
 class Interrupted(Exception):
@@ -92,12 +99,27 @@ def _run(
                 process.kill()
                 process.wait()
         raise
-    # A step killed by a signal reports -N; report it as a shell would (128 + N).
-    return 128 - status if status < 0 else status
+    # A step killed by a signal reports -N; convert to shell convention (128 + N).
+    if status < 0:
+        return 128 + (-status)
+    return status
 
 
+<<<<<<< HEAD
 def _compose(project: str) -> list[str]:
     return ["docker", "compose", "--file", COMPOSE_FILE, "--project-name", project]
+=======
+def _wait_ready(name: str) -> int:
+    probe = ["docker", "exec", name, "sh", "-c", READY_PROBE]
+    for attempt in range(1, READY_ATTEMPTS + 1):
+        if _run(probe, quiet=True) == 0:
+            print(f"CUBRID {DATABASE} is ready (attempt {attempt})", flush=True)
+            return 0
+        print(f"Waiting for CUBRID {DATABASE}... attempt {attempt}", flush=True)
+        time.sleep(READY_INTERVAL)
+    print(f"ERROR: CUBRID {DATABASE} did not become ready in time", file=sys.stderr, flush=True)
+    return 1
+>>>>>>> 0c54403 (Based on the project's commit convention (from AGENTS.md), here's the commit message to write:)
 
 
 def _compose_env(args: argparse.Namespace) -> dict[str, str]:
@@ -146,9 +168,17 @@ def _cleanup(args: argparse.Namespace, project: str) -> int:
         print("ERROR: docker not found", file=sys.stderr, flush=True)
         return 127
     if completed.returncode:
+<<<<<<< HEAD
         sys.stderr.write(completed.stderr)
         return completed.returncode
     print(f"Removed Compose project {project} and its volumes", flush=True)
+=======
+        # "No such container" is not an error; the container was already gone.
+        if "No such container" not in completed.stderr and "does not exist" not in completed.stderr:
+            sys.stderr.write(completed.stderr)
+            return completed.returncode
+    print(f"Removed CUBRID container {name}", flush=True)
+>>>>>>> 0c54403 (Based on the project's commit convention (from AGENTS.md), here's the commit message to write:)
     return 0
 
 
