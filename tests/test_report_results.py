@@ -151,3 +151,23 @@ def test_script_runs_standalone_and_keeps_exit_status_zero(tmp_path: Path) -> No
     )  # fmt: skip
     assert done.returncode == 0  # the caller keeps pytest's own status
     assert done.stdout.startswith("t: FAIL selected=1 passed=0 failed=1")
+
+
+def test_step_summary_renders_the_console_line_of_summary_json(tmp_path: Path, capsys: Any) -> None:
+    junit(tmp_path, "pass", "pass")
+    summary = summarize(tmp_path, 0)
+    capsys.readouterr()
+    assert report.main(["step-summary", "--results-dir", str(tmp_path), "--title", "Unit"]) == 0
+    assert capsys.readouterr().out == f"### Unit\n\n`{report.console_line(summary)}`\n"
+
+
+@pytest.mark.parametrize("content", [None, "{not json", '{"lane": "t"}'])
+def test_step_summary_reports_a_missing_or_unreadable_summary(
+    tmp_path: Path, capsys: Any, content: str | None
+) -> None:
+    if content is not None:
+        (tmp_path / "summary.json").write_text(content)
+    assert report.main(["step-summary", "--results-dir", str(tmp_path)]) == 0
+    out = capsys.readouterr().out
+    assert out.startswith("### Test results\n\n")
+    assert "No readable" in out

@@ -118,6 +118,19 @@ jobs:
       - name: Pytest (integration)
         run: make integration CUBRID_VERSION=${{ matrix.cubrid }}
 
+      - name: Publish test results summary
+        if: always()
+        run: python3 scripts/report_results.py step-summary --results-dir test-results/integration --title "Integration tests (Python ${{ matrix.python-version }}, CUBRID ${{ matrix.cubrid }})" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: test-results-integration-py${{ matrix.python-version }}-cubrid${{ matrix.cubrid }}
+          path: test-results/
+          retention-days: 7
+          if-no-files-found: warn
+
   full-matrix-result:
     name: Full compatibility matrix result
     runs-on: ubuntu-latest

@@ -26,6 +26,8 @@ Usage::
 
     python3 scripts/report_results.py summarize --lane test --results-dir test-results/test \
         --exit-code 0 [--coverage test-results/test/coverage.xml]
+    python3 scripts/report_results.py step-summary --results-dir test-results/test \
+        --title "Unit tests (Python 3.12)" >> "$GITHUB_STEP_SUMMARY"
     python3 scripts/report_results.py environment --lane integration \
         --results-dir test-results/integration --command "..." --cubrid-version 11.4
 """
@@ -123,6 +125,17 @@ def console_line(summary: dict[str, Any]) -> str:
     return f"{summary['lane']}: {summary['status']} " + " ".join(parts)
 
 
+def step_summary(results: Path, title: str | None) -> str:
+    """Markdown for ``$GITHUB_STEP_SUMMARY``: the console line of ``summary.json``."""
+    heading = f"### {title or 'Test results'}\n\n"
+    try:
+        summary = json.loads((results / "summary.json").read_text())
+        line = console_line(summary)
+    except (OSError, ValueError, KeyError, TypeError):
+        return f"{heading}No readable `{results / 'summary.json'}` was written (the run stopped early).\n"
+    return f"{heading}`{line}`\n"
+
+
 def package_version() -> str:
     text = (ROOT / "cubrid_mcp_server" / "__init__.py").read_text()
     match = re.search(r'^__version__ = "([^"]+)"', text, re.M)
@@ -151,6 +164,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     sub = parser.add_subparsers(dest="action", required=True)
     summarize = sub.add_parser("summarize", help="write summary.json and print one line")
     environment = sub.add_parser("environment", help="write environment.json")
+    step = sub.add_parser("step-summary", help="print summary.json as Markdown")
+    step.add_argument("--results-dir", required=True, type=Path)
+    step.add_argument("--title", help="heading, e.g. the matrix entry")
     for p in (summarize, environment):
         p.add_argument("--lane", required=True)
         p.add_argument("--results-dir", required=True, type=Path)
@@ -162,6 +178,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     results: Path = args.results_dir
+    if args.action == "step-summary":
+        print(step_summary(results, args.title), end="")
+        return 0
     if args.action == "environment":
         data = build_environment(args.lane, args.command, args.cubrid_version)
         _write_json(results / "environment.json", data)

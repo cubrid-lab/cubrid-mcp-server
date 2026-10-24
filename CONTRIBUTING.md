@@ -89,8 +89,17 @@ The status is `PASS`, `FAIL` (a failed or errored test, or a non-zero exit statu
 as a missed coverage floor) or `INCOMPLETE` (no JUnit file, nothing collected, or no
 test passed because every selected test skipped); `INCOMPLETE` is never `PASS`. The
 exit status of both commands is unchanged. `xpassed` is always 0 because JUnit XML
-cannot distinguish an unexpected pass from a pass. CI does not publish these files
-yet (#405).
+cannot distinguish an unexpected pass from a pass.
+
+CI publishes the same results on every run of `make test` (the `lint-and-test` job of
+`ci.yml`) and `make integration` (`ci.yml` and `integration-full.yml`), pass or fail:
+the one-line summary is appended to the run's job summary
+(`scripts/report_results.py step-summary`), and the whole `test-results/` tree is
+uploaded as the `test-results-test-py<python>`,
+`test-results-integration-cubrid<cubrid>` or
+`test-results-integration-py<python>-cubrid<cubrid>` artifact, kept for 7 days. This adds
+no permissions: the workflows keep `contents: read` and the artifacts are readable by
+anyone who can read the run.
 
 ### Running the Integration Suite
 

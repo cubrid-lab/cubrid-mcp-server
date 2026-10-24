@@ -119,6 +119,19 @@ jobs:
       - name: Pytest (unit)
         run: make test
 
+      - name: Publish test results summary
+        if: always()
+        run: python3 scripts/report_results.py step-summary --results-dir test-results/test --title "Unit tests (Python ${{ matrix.python-version }})" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: test-results-test-py${{ matrix.python-version }}
+          path: test-results/
+          retention-days: 7
+          if-no-files-found: warn
+
       - name: Upload coverage to Codecov
         if: matrix.python-version == '3.12' && github.actor != 'dependabot[bot]'
         uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v5
@@ -200,6 +213,19 @@ jobs:
       # removes the container (scripts/run_integration.py, #379).
       - name: Pytest (integration)
         run: make integration CUBRID_VERSION=${{ matrix.cubrid }}
+
+      - name: Publish test results summary
+        if: always()
+        run: python3 scripts/report_results.py step-summary --results-dir test-results/integration --title "Integration tests (CUBRID ${{ matrix.cubrid }})" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: test-results-integration-cubrid${{ matrix.cubrid }}
+          path: test-results/
+          retention-days: 7
+          if-no-files-found: warn
 
   changelog-lint:
     runs-on: ubuntu-latest
