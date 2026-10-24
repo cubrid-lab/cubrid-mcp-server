@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### CI
+
+- **The release workflow verifies against the current cookbook, and preparation restarts after the abandoned 0.5.3 (#388)** — 0.5.3 was not published: its cookbook candidate verification failed at the pinned cookbook commit `0d8b5bb`, which predates the cookbook's pandas 3.1 golden fix (cubrid-lab/cubrid-cookbook-python#444), so nothing was tagged, released or uploaded. Both `smoke-test.yml@` pins in `publish-pypi.yml` (`verify-candidate` and `verify-cookbook`) move to cookbook `main` `fbaaa8c`; the called workflow's inputs and outputs are unchanged. The top-level `last-release-sha` in `release-please-config.json` is set to the 0.5.3 merge `8633db6` so the next candidate starts after it (RELEASING.md, "A merged X.Y.Z is abandoned"); remove it after the next release is tagged. Refs #388.
+
 ## [0.5.3] - 2026-10-24
 
 ### Upgrade notes
