@@ -194,6 +194,13 @@ def filter_table_names(substring: str, connection: str | None = None) -> list[st
 
 
 def _schema_definitions(table: _Table, connection: str | None = None) -> list[dict[str, Any]]:
+    """Column metadata for an already-resolved ``table``, in definition order.
+
+    Each column carries its name, type, nullability, default and whether it is
+    part of the primary key. The table is selected by owner and name (see
+    :func:`_owner_filter`), so same-named tables of different owners on 11.2 and
+    later never mix; the values are bound parameters.
+    """
     # The conditions come from _owner_filter (fixed column names); values are bound.
     attr_filter, params = _owner_filter(table, "a")
     rows = _db(connection).fetch_all(
@@ -265,6 +272,13 @@ def _describe_table(resolved: _Table, connection: str | None = None) -> dict[str
 
 
 def _list_indexes(table: _Table, connection: str | None = None) -> list[dict[str, Any]]:
+    """Indexes of an already-resolved ``table`` with their key columns and flags.
+
+    One entry per index, in index-name order, with its key columns in key order.
+    The table is selected by owner and name (see :func:`_owner_filter`), and the
+    key rows are joined on the owner too (:func:`_same_owner`), so a same-named
+    index of another owner's table is not merged in.
+    """
     index_filter, params = _owner_filter(table, "i")
     rows = _db(connection).fetch_all(
         f"""
