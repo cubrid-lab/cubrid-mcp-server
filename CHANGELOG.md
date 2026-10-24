@@ -29,6 +29,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **The Makefile is the canonical local and CI interface (#379)** — new targets: `doctor` (checks Python 3.11+, `ruff`, `mypy`, `pytest`, `pytest-cov` and `pytest-asyncio`; exits non-zero without a success line if any is missing), `format-check` (`ruff format --check .`), `verify` (`check` + `test`, no Docker), `integration` (the run-owned Docker lifecycle in `scripts/run_integration.py`: start, readiness wait, `pytest -m integration -v`, the container log on a failure, removal of the container and its anonymous volumes on success, failure, SIGINT or SIGTERM; the first failing step's exit status, or 128 + the signal number) and `integration-local`. `lint`, `format-check` and `typecheck` use the same paths and flags as CI, `format` is the only target that edits files, `test` takes extra pytest arguments in `PYTEST_ARGS`, `clean` also removes `.ruff_cache`, `.coverage`, `coverage.xml` and `htmlcov` (all gitignored, generated files), and `make help` groups the targets by purpose. Refs #379.
 
+### Fixed
+
+- **A failed service-log save no longer skips `make integration` cleanup** — with `--results-dir`, an I/O error while writing `logs/cubrid.log` after a failing lane used to escape before `docker compose down --volumes`, leaving the run-owned project behind and losing the lane's exit status. Saving the log is now best-effort: the error is printed as a warning, the project is still taken down and the summary keeps the lane's status.
+
 ### Documentation
 
 - **Install instructions use the `dev` group (#398)** — `CONTRIBUTING.md`, the README (English and Korean), `scripts/doctor.py` and `THIRD_PARTY_LICENSES.md` replace `.[dev]` with `--group dev`, document the pip 25.1 requirement and the Makefile overrides, and explain that the dev table's `cubrid-mcp-server` attribution is hand-kept because installed metadata does not record group membership. Refs #398.

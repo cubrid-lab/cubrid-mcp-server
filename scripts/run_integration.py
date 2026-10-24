@@ -226,11 +226,18 @@ def _finish(args: argparse.Namespace, project: str, status: int) -> int:
             _run(logs, _compose_env(args))
         else:
             log_file = args.results_dir / "logs" / f"{SERVICE}.log"
-            log_file.parent.mkdir(parents=True, exist_ok=True)
-            with log_file.open("w") as handle:
-                _run(logs, _compose_env(args), handle)
-            sys.stdout.write(log_file.read_text())
-            sys.stdout.flush()
+            try:
+                log_file.parent.mkdir(parents=True, exist_ok=True)
+                with log_file.open("w") as handle:
+                    _run(logs, _compose_env(args), handle)
+                sys.stdout.write(log_file.read_text())
+                sys.stdout.flush()
+            except OSError as exc:
+                # The log is a best-effort diagnostic: it must never skip the cleanup
+                # below or replace the lane's own status.
+                print(
+                    f"WARNING: could not save the service log: {exc}", file=sys.stderr, flush=True
+                )
 
     cleanup = _cleanup(args, project)
     if cleanup:

@@ -274,3 +274,28 @@ def test_results_dir_failure_writes_the_service_log_and_fails(
     assert "fake cubrid log" in out
     assert out.strip().splitlines()[-1].startswith("integration: FAIL")
     assert_taken_down(fake)
+
+
+def test_an_unwritable_service_log_never_skips_cleanup(
+    fake: dict[str, Any],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capfd: pytest.CaptureFixture[str],
+) -> None:
+    # The failure log is best-effort: an I/O error saving it must still take the
+    # project down and keep the lane's own exit status.
+    monkeypatch.setenv("FAKE_PYTEST_STATUS", "3")
+    real_open = Path.open
+
+    def failing_open(self: Path, *args: Any, **kwargs: Any) -> Any:
+        if self.name == "cubrid.log":
+            raise PermissionError(13, "Permission denied", str(self))
+        return real_open(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "open", failing_open)
+    results = tmp_path / "results"
+    assert run_integration.main(reporting_args(fake, results)) == 3
+    assert_taken_down(fake)
+    summary = json.loads((results / "summary.json").read_text())
+    assert summary["status"] == "FAIL" and summary["exit_code"] == 3
+    assert "could not save the service log" in capfd.readouterr().err
