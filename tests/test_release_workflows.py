@@ -1,7 +1,7 @@
 """Static contract checks for the automated release workflows (#204).
 
 Parses publish-pypi.yml, release-please.yml and integration-full.yml offline (PyYAML
-comes with pre-commit in the dev extra). Shared release behavior across pycubrid,
+comes with pre-commit in the dev dependency group). Shared release behavior across pycubrid,
 sqlalchemy-cubrid and cubrid-mcp-server; this repo retains its registered publisher filename.
 """
 

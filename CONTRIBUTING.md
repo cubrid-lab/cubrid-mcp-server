@@ -12,6 +12,7 @@ This document only adds what is repo-specific; it does not repeat the org guide.
 ## Prerequisites
 
 - Python 3.11 or later
+- pip 25.1 or later (to install the `dev` dependency group; `python -m pip install --upgrade pip`)
 - Git
 - Docker (only needed for the integration tests)
 
@@ -21,12 +22,18 @@ This document only adds what is repo-specific; it does not repeat the org guide.
 git clone https://github.com/cubrid-lab/cubrid-mcp-server.git
 cd cubrid-mcp-server
 python3 -m venv .venv && source .venv/bin/activate
+python -m pip install --upgrade pip   # the dev group needs pip >= 25.1
 
-# Editable install with dev extras (ruff, mypy, pytest, ...)
+# Editable install plus the dev dependency group (ruff, mypy, pytest, ...)
 make install
 ```
 
-`make install` runs `pip install -e ".[dev]"`. `make doctor` then checks that
+`make install` runs `python3 -m pip install -e . --group dev`. The contributor tools
+live in the PEP 735 `[dependency-groups] dev` group of `pyproject.toml`, so they are
+not an extra of the published package. The Makefile runs `pytest`, `ruff` and `mypy`
+through the same interpreter (`$(PYTHON) -m ...`, `PYTHON ?= python3`); override
+`PYTHON`, `PYTEST`, `RUFF` or `MYPY` on the command line to use another one, e.g.
+`make lint PYTHON=.venv/bin/python`. `make doctor` then checks that
 Python 3.11+, `ruff`, `mypy`, `pytest`, `pytest-cov` and `pytest-asyncio` are
 available; it exits non-zero, without a success line, if any is missing. Docker
 is reported but optional (only `make integration` needs it). `make help` lists
@@ -164,7 +171,7 @@ Every Python job in `ci.yml` and `integration-full.yml` installs with a pinned
 uv instead of pip (#229): `astral-sh/setup-uv` (pinned to a commit SHA, with
 `version` pinned) runs after `actions/setup-python` with the same
 `python-version`, caches per job (`cache-suffix: ${{ github.job }}`, keyed on
-`pyproject.toml`), installs with `uv pip install --system` and logs the resolved
+`pyproject.toml`), installs with `uv pip install --system -e . --group dev` and logs the resolved
 versions with `uv pip freeze --system`. uv resolves the same package set as pip
 from the same `pyproject.toml` constraints; only the installer changes. The
 release smoke venvs, the docs build and the upstream canary keep plain pip.

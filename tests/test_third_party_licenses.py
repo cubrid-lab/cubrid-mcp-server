@@ -22,7 +22,9 @@ from packaging.utils import canonicalize_name
 
 ROOT = Path(__file__).resolve().parents[1]
 DOC = (ROOT / "THIRD_PARTY_LICENSES.md").read_text(encoding="utf-8")
-PROJECT = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]
+_PYPROJECT = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+PROJECT = _PYPROJECT["project"]
+DEPENDENCY_GROUPS = _PYPROJECT["dependency-groups"]
 
 _spec = importlib.util.spec_from_file_location(
     "_generate_third_party_licenses", ROOT / "scripts" / "generate_third_party_licenses.py"
@@ -33,7 +35,7 @@ _spec.loader.exec_module(generator)
 
 SECTIONS = {
     "runtime": "## Runtime dependencies",
-    "dev": "## Development / test dependencies: `.[dev]` additions",
+    "dev": "## Development / test dependencies: `dev` group additions",
 }
 
 
@@ -59,9 +61,7 @@ def table(scope: str) -> dict[str, dict[str, str]]:
 
 
 def requirements(scope: str) -> list[Requirement]:
-    declared = (
-        PROJECT["dependencies"] if scope == "runtime" else PROJECT["optional-dependencies"][scope]
-    )
+    declared = PROJECT["dependencies"] if scope == "runtime" else DEPENDENCY_GROUPS[scope]
     return [Requirement(req) for req in declared]
 
 
@@ -154,4 +154,4 @@ def test_generation_inputs_are_recorded() -> None:
     assert re.search(r"CPython 3\.\d+\.\d+ on Linux", record)
     assert "scripts/generate_third_party_licenses.py" in record
     assert "--exclude cubrid-mcp-server --required-by" in record
-    assert '".[dev]"' in record
+    assert "pip install -p /tmp/tpl-dev/bin/python . --group dev" in record

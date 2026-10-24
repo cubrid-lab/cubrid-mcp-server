@@ -85,21 +85,24 @@ uv pip install -p /tmp/tpl-runtime/bin/python .
     --exclude cubrid-mcp-server --required-by
 
 uv venv -p 3.12 /tmp/tpl-dev
-uv pip install -p /tmp/tpl-dev/bin/python ".[dev]"
+uv pip install -p /tmp/tpl-dev/bin/python . --group dev
 /tmp/tpl-dev/bin/python scripts/generate_third_party_licenses.py \
-    --exclude cubrid-mcp-server --required-by --extra dev
+    --exclude cubrid-mcp-server --required-by
 ```
 
-#361 added `jinja2` to the `dev` extra. A fresh `.[dev]` install on 2026-10-16
-(CPython 3.12, uv) with the second command above added `Jinja2` and `MarkupSafe`,
+#361 added `jinja2` to the contributor tools. A fresh install of the
+`dev` extra (before #398 moved it to the `dev` dependency group) on 2026-10-16
+(CPython 3.12, uv) added `Jinja2` and `MarkupSafe`,
 and only those two rows were copied from that run's output; the other rows are
 the snapshot above.
 
-The development table lists only the packages that the `.[dev]` environment
-adds to the runtime tree. **Required by** evaluates every environment marker
-for the recorded interpreter and follows only the extras actually requested
-(`--extra dev` for the project, then e.g. `fastmcp-slim[client,server]`), so a
-requirement that applies only to another Python version, platform or unused
+The development table lists only the packages that the `dev` dependency group
+adds to the runtime tree. Installed metadata does not record group membership,
+so the generator cannot attribute the tools declared in the group to the
+project: those rows' **Required by** entry `cubrid-mcp-server` is kept by hand
+(`tests/test_third_party_licenses.py` checks it against `pyproject.toml`). **Required by** evaluates every
+environment marker for the recorded interpreter and follows only the extras
+actually requested (e.g. `fastmcp-slim[client,server]`), so a requirement that applies only to another Python version, platform or unused
 extra is not counted.
 
 `scripts/generate_third_party_licenses.py` is shared with pycubrid,
@@ -193,7 +196,7 @@ regenerating the tables, not by the test.
 | watchfiles | 1.3.0 | MIT License | Permissive | https://github.com/samuelcolvin/watchfiles | fastmcp-slim |
 | websockets | 17.2 | BSD-3-Clause | Permissive | https://github.com/python-websockets/websockets | fastmcp-slim |
 
-## Development / test dependencies: `.[dev]` additions (39 packages, not distributed)
+## Development / test dependencies: `dev` group additions (39 packages, not distributed)
 
 | Name | Version | License | Category | URL | Required by |
 |---|---|---|---|---|---|

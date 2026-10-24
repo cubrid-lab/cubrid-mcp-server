@@ -34,7 +34,19 @@ dependencies = [
     "sqlparse>=0.5,<1",
 ]
 
-[project.optional-dependencies]
+[project.scripts]
+cubrid-mcp-server = "cubrid_mcp_server.__main__:main"
+
+[project.urls]
+Homepage = "https://github.com/cubrid-lab/cubrid-mcp-server"
+Repository = "https://github.com/cubrid-lab/cubrid-mcp-server"
+Issues = "https://github.com/cubrid-lab/cubrid-mcp-server/issues"
+Documentation = "https://cubrid-lab.github.io/cubrid-mcp-server/"
+Changelog = "https://github.com/cubrid-lab/cubrid-mcp-server/blob/main/CHANGELOG.md"
+
+[dependency-groups]
+# Contributor-only tools (PEP 735): `pip install -e . --group dev` (pip >= 25.1).
+# Not part of the published package metadata (#398).
 dev = [
     "pytest>=8.2",
     "pytest-asyncio>=0.24",
@@ -49,16 +61,6 @@ dev = [
     "build",
     "twine",
 ]
-
-[project.scripts]
-cubrid-mcp-server = "cubrid_mcp_server.__main__:main"
-
-[project.urls]
-Homepage = "https://github.com/cubrid-lab/cubrid-mcp-server"
-Repository = "https://github.com/cubrid-lab/cubrid-mcp-server"
-Issues = "https://github.com/cubrid-lab/cubrid-mcp-server/issues"
-Documentation = "https://cubrid-lab.github.io/cubrid-mcp-server/"
-Changelog = "https://github.com/cubrid-lab/cubrid-mcp-server/blob/main/CHANGELOG.md"
 
 [tool.setuptools]
 packages = ["cubrid_mcp_server"]

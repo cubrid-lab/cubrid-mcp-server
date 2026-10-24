@@ -51,10 +51,10 @@ def runs(job: dict[str, Any]) -> list[str]:
 @pytest.mark.parametrize(
     ("target", "expected"),
     [
-        ("lint", ["ruff check ."]),
-        ("format-check", ["ruff format --check ."]),
-        ("typecheck", ["mypy cubrid_mcp_server"]),
-        ("format", ["ruff format .", "ruff check --fix ."]),
+        ("lint", ["python3 -m ruff check ."]),
+        ("format-check", ["python3 -m ruff format --check ."]),
+        ("typecheck", ["python3 -m mypy cubrid_mcp_server"]),
+        ("format", ["python3 -m ruff format .", "python3 -m ruff check --fix ."]),
     ],
 )
 def test_quality_targets_use_the_ci_paths_and_flags(target: str, expected: list[str]) -> None:
@@ -273,3 +273,87 @@ def test_live_jobs_pass_the_matrix_to_make_integration(workflow: str, job: str) 
     steps = runs(jobs(workflow)[job])
     assert "make integration CUBRID_VERSION=${{ matrix.cubrid }}" in steps
     assert not [run for run in steps if "docker" in run or re.search(r"\bpytest\b", run)]
+
+
+@needs_make
+def test_install_uses_the_selected_python_and_the_dev_group() -> None:
+    assert dry_run("install") == ["python3 -m pip install -e . --group dev"]
+    assert dry_run("install", "PYTHON=/venv/bin/python") == [
+        "/venv/bin/python -m pip install -e . --group dev"
+    ]
+
+
+@needs_make
+def test_every_tool_is_bound_to_the_selected_python() -> None:
+    selected = "/venv/bin/python"
+    expected = {
+        "lint": [f"{selected} -m ruff check ."],
+        "format-check": [f"{selected} -m ruff format --check ."],
+        "typecheck": [f"{selected} -m mypy cubrid_mcp_server"],
+    }
+    for target, lines in expected.items():
+        assert dry_run(target, f"PYTHON={selected}") == lines
+    (test,) = dry_run("test", f"PYTHON={selected}")
+    assert test.startswith(f"{selected} -m pytest -m ")
+    (integration,) = dry_run("integration", f"PYTHON={selected}")
+    argv = shlex.split(integration)
+    assert argv[:2] == [selected, "scripts/run_integration.py"]
+    assert argv[argv.index("--pytest") + 1] == f"{selected} -m pytest"
+    # Nothing in the Makefile calls a bare tool that PATH could resolve elsewhere.
+    bare = re.compile(r"^\t@?(pip3?|ruff|mypy|pytest)\b", re.M)
+    assert not bare.findall((ROOT / "Makefile").read_text())
+
+
+@needs_make
+def test_individual_tool_variables_can_be_overridden() -> None:
+    assert dry_run("lint", "RUFF=ruff") == ["ruff check ."]
+    assert dry_run("typecheck", "MYPY=mypy --no-incremental") == [
+        "mypy --no-incremental cubrid_mcp_server"
+    ]
+    (line,) = dry_run("test", "PYTEST=pytest")
+    assert line.startswith("pytest -m ")
+
+
+def test_dev_tools_are_a_dependency_group_not_a_package_extra() -> None:
+    pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text())
+    assert "optional-dependencies" not in pyproject["project"]
+    assert set(pyproject["dependency-groups"]) == {"dev"}
+    dev = " ".join(pyproject["dependency-groups"]["dev"])
+    for tool in ("pytest", "ruff==", "mypy==", "build", "twine"):
+        assert tool in dev, tool
+
+
+def test_no_repository_install_command_uses_the_removed_dev_extra() -> None:
+    removed = re.compile(r"\.\[dev\]|-e \.\[|\[dev\]\"")
+    tracked = subprocess.run(
+        ["git", "-C", str(ROOT), "ls-files", "-z"], capture_output=True, text=True, check=True
+    ).stdout.split("\0")
+    offenders = []
+    for name in filter(None, tracked):
+        path = ROOT / name
+        if path.suffix not in {".md", ".yml", ".yaml", ".py", ".toml", ""} or not path.is_file():
+            continue
+        # The changelog and this file's own pattern record the history.
+        if name in {"CHANGELOG.md", "RELEASE_CHANGELOG.md", "tests/test_makefile.py"}:
+            continue
+        for number, line in enumerate(path.read_text(errors="ignore").splitlines(), 1):
+            if removed.search(line):
+                offenders.append(f"{name}:{number}: {line.strip()}")
+    assert not offenders, offenders
+
+
+def test_ci_workflows_install_the_dev_group() -> None:
+    expected = {
+        "ci.yml": {
+            "uv pip install --system -e . --group dev",
+            "uv pip install --system --resolution lowest-direct -e . --group dev",
+        },
+        "integration-full.yml": {"uv pip install --system -e . --group dev"},
+    }
+    for workflow, installs in expected.items():
+        text = (WORKFLOWS / workflow).read_text()
+        for install in installs:
+            assert install in text, (workflow, install)
+    canary = (WORKFLOWS / "upstream-canary.yml").read_text()
+    assert canary.count("python -m pip install -e . --group dev") == 2
+    assert canary.count('python -m pip install --upgrade "pip>=25.1"') == 2

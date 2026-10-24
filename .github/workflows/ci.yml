@@ -101,7 +101,7 @@ jobs:
 
       - name: Install project and dev tools
         run: |
-          uv pip install --system -e ".[dev]"
+          uv pip install --system -e . --group dev
           uv pip freeze --system
 
       # The Makefile is the canonical interface (#379): these targets run the same
@@ -157,7 +157,7 @@ jobs:
 
       - name: Install with lowest-direct resolution
         run: |
-          uv pip install --system --resolution lowest-direct -e ".[dev]"
+          uv pip install --system --resolution lowest-direct -e . --group dev
           uv pip freeze --system
 
       - name: Pytest (unit)
@@ -192,7 +192,7 @@ jobs:
 
       - name: Install project and dev tools
         run: |
-          uv pip install --system -e ".[dev]"
+          uv pip install --system -e . --group dev
           uv pip freeze --system
 
       # Starts a run-owned cubrid/cubrid container, waits for demodb, runs

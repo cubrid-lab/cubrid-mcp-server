@@ -109,7 +109,7 @@ jobs:
 
       - name: Install project and dev tools
         run: |
-          uv pip install --system -e ".[dev]"
+          uv pip install --system -e . --group dev
           uv pip freeze --system
 
       # Starts a run-owned cubrid/cubrid container, waits for demodb, runs

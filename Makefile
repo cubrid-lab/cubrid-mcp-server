@@ -1,9 +1,12 @@
 .PHONY: help install doctor lint format-check format typecheck check test verify integration integration-local agent-eval-check clean release-check
 
-PYTHON = python3
-PYTEST = python3 -m pytest
-RUFF = ruff
-MYPY = mypy
+# Every tool runs through the selected interpreter, so an activated virtualenv is
+# honored even when PATH lists another one. Override any of them on the command line,
+# e.g. `make lint PYTHON=.venv/bin/python` or `make lint RUFF=ruff`.
+PYTHON ?= python3
+PYTEST ?= $(PYTHON) -m pytest
+RUFF ?= $(PYTHON) -m ruff
+MYPY ?= $(PYTHON) -m mypy
 SRC = cubrid_mcp_server
 # Extra pytest arguments for `make test`, e.g. PYTEST_ARGS="-k config -x".
 PYTEST_ARGS ?=
@@ -18,8 +21,8 @@ help: ## Show this help message, grouped by purpose
 
 ##@ Setup
 
-install: ## Install in development mode (pip install -e ".[dev]")
-	pip install -e ".[dev]"
+install: ## Install in development mode with the dev group (needs pip >= 25.1)
+	$(PYTHON) -m pip install -e . --group dev
 
 doctor: ## Check the required development tools; fails if any is missing
 	$(PYTHON) scripts/doctor.py

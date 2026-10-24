@@ -2,7 +2,7 @@
 """Check the local development tooling (``make doctor``, #379).
 
 Required: Python 3.11+, the ``ruff`` and ``mypy`` commands, and the ``pytest``,
-``pytest_cov`` and ``pytest_asyncio`` modules from ``pip install -e ".[dev]"``.
+``pytest_cov`` and ``pytest_asyncio`` modules from ``pip install -e . --group dev``.
 Docker is reported but optional: only ``make integration`` needs it.
 
 Exits 1 and prints no success line when anything required is missing.
@@ -38,7 +38,10 @@ def main() -> int:
     if missing:
         for problem in missing:
             print(f"MISSING: {problem}", file=sys.stderr)
-        print('Install the dev tools with: make install (pip install -e ".[dev]")', file=sys.stderr)
+        print(
+            "Install the dev tools with: make install (pip install -e . --group dev)",
+            file=sys.stderr,
+        )
         return 1
     print("doctor: all required development tools found")
     return 0

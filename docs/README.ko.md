@@ -256,7 +256,8 @@ cubrid-mcp-server
 git clone https://github.com/cubrid-lab/cubrid-mcp-server.git
 cd cubrid-mcp-server
 python -m venv .venv && source .venv/bin/activate
-make install        # pip install -e ".[dev]"
+python -m pip install --upgrade pip   # dev 그룹은 pip >= 25.1이 필요합니다
+make install        # python -m pip install -e . --group dev
 make doctor         # 필요한 도구 확인
 
 # 린트, 포맷 검사 및 타입 검사 (ruff check ., ruff format --check ., mypy)

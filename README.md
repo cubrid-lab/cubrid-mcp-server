@@ -293,7 +293,8 @@ The **raw SQL text, bound parameters, and literal values are never logged**, so 
 git clone https://github.com/cubrid-lab/cubrid-mcp-server.git
 cd cubrid-mcp-server
 python -m venv .venv && source .venv/bin/activate
-make install        # pip install -e ".[dev]"
+python -m pip install --upgrade pip   # the dev group needs pip >= 25.1
+make install        # python -m pip install -e . --group dev
 make doctor         # check the required tools
 
 # Lint, format check & type check (ruff check ., ruff format --check ., mypy)

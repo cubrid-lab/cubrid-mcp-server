@@ -70,6 +70,9 @@ def test_job_installs_with_uv_and_logs_versions(wf: str, name: str, steps: list[
     runs = [s["run"] for s in steps if "run" in s]
     lines = [line.strip() for run in runs for line in run.splitlines()]
     assert any(line.startswith("uv pip install --system ") for line in lines), name
+    # The project and its contributor tools come from the PEP 735 `dev` group (#398).
+    project = [line for line in lines if line.startswith("uv pip install ") and " -e " in line]
+    assert all(line.endswith("-e . --group dev") for line in project), project
     assert "uv pip freeze --system" in lines, f"{wf}:{name} must log resolved versions"
     for line in lines:
         if PIP_INSTALL.search(line):
