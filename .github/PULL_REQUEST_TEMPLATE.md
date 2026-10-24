@@ -42,25 +42,17 @@ See CONTRIBUTING.md#pull-request-and-commit-titles.
 
 <!-- Docs updated (list), or `Docs: not needed - <reason>`. -->
 
-## Development Route and Review Disposition
+## Review and Final Disposition
 
-<!-- Record the route actually used; human contributors do not need a specific AI tool. -->
-- Development route: OpenCode + Oracle pre/post / trivial OpenCode with recorded Oracle skip / standalone Claude Code / standalone Codex / standalone ChatGPT or other agent (name it) / human (select one).
-- Trivial OpenCode exception, if used: skipped Oracle phases and reason, or not applicable.
-- Actual review evidence: Oracle review references, or the submitted Copilot review URL or maintainer review URL, reviewer, reviewed head SHA, or **pending**. For standalone agents only a Copilot or maintainer review qualifies.
-- Findings: fixed commit + tests / rejected with reason / deferred issue.
-- Open review threads and why, or "none" after verification.
-- Maintainer merge decision: **pending**; complete only after checking the applicable review, final code, required CI and thread dispositions.
-<!-- Review requests, bot approval suggestions and passing CI alone do not complete review.
-     The advisory `agent-review` check reads only GitHub's submitted reviews of the head
-     commit; this section and its checkboxes are records for maintainers, never evidence.
-     Protected paths (safety.py, database.py, audit.py, server.py, config.py, __main__.py,
-     context.py, every workflow, the gate) need a maintainer's APPROVED review.
-     See CONTRIBUTING.md#agent-review-evidence-gate. -->
-
-## Optional: additional AI / tool review
-
-<!-- Supplementary evidence only; does not replace the required development route above. No internal tool installation is required to contribute. -->
+<!-- Human and AI-assisted contributions follow the same criteria.
+     Oracle, Copilot and agent-review are advisory, not mandatory approval
+     routes; preserve independent review for security-sensitive paths,
+     workflow permissions, read-only/write policy and releases. -->
+- Required GitHub CI at final head: **pending**.
+- Optional review findings (Oracle, Copilot, agent-review): links/dispositions or N/A.
+- Findings: fixed + tested / rejected with reason / deferred issue.
+- Open review threads: list or "none" after verification.
+- Maintainer decision: **pending**, after source, risk and required CI review.
 
 ## Type of Change
 
@@ -88,3 +80,8 @@ See CONTRIBUTING.md#pull-request-and-commit-titles.
      Cite sibling dependencies as Refs owner/repo#N, not closing keywords.
      Each repo manages its own work and closure; the PR title check enforces
      no direct auto-closing references to a foreign repository. -->
+
+<!-- Note local Supersedes #N / Depends on #N / Parallel to #N with a reason,
+     or None; recheck before merge and reconcile displaced PRs. -->
+Related PRs and precedence: None
+Unresolved decision or dependency: None
