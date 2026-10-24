@@ -36,7 +36,7 @@ through the same interpreter (`$(PYTHON) -m ...`, `PYTHON ?= python3`); override
 `make lint PYTHON=.venv/bin/python`. `make doctor` then checks that
 Python 3.11+, `ruff`, `mypy`, `pytest`, `pytest-cov` and `pytest-asyncio` are
 available; it exits non-zero, without a success line, if any is missing. Docker
-is reported but optional (only `make integration` needs it). `make help` lists
+is reported but optional (only `make integration` and the `docker-*` targets need it). `make help` lists
 every target, grouped by purpose.
 
 ## Local Checks Before Pushing
@@ -60,6 +60,7 @@ make test               # offline unit tests with coverage; fails below fail_und
 make verify             # make check + make test; no Docker, no database
 make integration        # integration tests on a Docker CUBRID it starts and removes
 make integration-local  # integration tests against a CUBRID you already run
+make docker-up          # a persistent local CUBRID for manual work (Docker Compose)
 ```
 
 `make test` runs `pytest -m "not integration"` with `--cov=cubrid_mcp_server`,
@@ -100,6 +101,41 @@ export CUBRID_PASSWORD=""
 export CUBRID_DATABASE=demodb
 make integration-local
 ```
+
+### A Persistent Local CUBRID (Docker Compose)
+
+For manual work (trying the server from an MCP client, exploring the catalog,
+running `make integration-local` repeatedly), the root `docker-compose.yml`
+defines one service, `cubrid`: `cubrid/cubrid:<CUBRID_VERSION>` (11.4 by default)
+with `demodb`, its broker published only on `127.0.0.1:<CUBRID_TEST_PORT>`
+(33000 by default) and its data in a named volume. The health check runs
+`csql -u dba demodb -c 'SELECT 1;'` inside the container.
+
+```bash
+make docker-up                                             # start it and wait until healthy
+make docker-up CUBRID_VERSION=11.2 CUBRID_TEST_PORT=33400  # another version or a free port
+make docker-down                                           # remove the container and network; keep the data
+make docker-clean                                          # also delete the data volume (and demodb)
+```
+
+`make docker-down` keeps the volume, so the next `make docker-up` opens the same
+`demodb` with your tables in it; `make docker-clean` is the one target that
+deletes it. The service has no fixed container name: Docker Compose names the
+container, network and volume after the project (by default the checkout's
+directory name), so set `COMPOSE_PROJECT_NAME` to keep two checkouts apart, and
+use the same value for `docker-down` and `docker-clean`. Point the tests at it
+with `make integration-local`:
+
+```bash
+make docker-up
+export CUBRID_HOST=127.0.0.1 CUBRID_PORT=33000 CUBRID_USER=dba CUBRID_PASSWORD="" CUBRID_DATABASE=demodb
+make integration-local
+```
+
+`make integration` and CI do not use this service: they keep starting and
+always removing their own run-owned container, so they never touch your
+Compose data, and a running Compose service only matters to them if both use
+the same host port.
 
 ## What CI Enforces
 

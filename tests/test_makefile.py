@@ -26,6 +26,7 @@ WORKFLOWS = ROOT / ".github" / "workflows"
 MAKE = shutil.which("make")
 
 needs_make = pytest.mark.skipif(MAKE is None, reason="make is not installed")
+COMPOSE = ["docker", "compose", "--file", "docker-compose.yml"]
 
 
 def dry_run(*args: str) -> list[str]:
@@ -118,6 +119,77 @@ def test_integration_owns_a_docker_database(overrides: list[str], version: str, 
 @needs_make
 def test_integration_local_uses_an_already_running_database() -> None:
     assert dry_run("integration-local") == ['python3 -m pytest -m "integration" -q']
+
+
+@needs_make
+@pytest.mark.parametrize(
+    ("overrides", "version", "port"),
+    [([], "11.4", "33000"), (["CUBRID_VERSION=11.2", "CUBRID_TEST_PORT=33400"], "11.2", "33400")],
+    ids=["defaults", "overrides"],
+)
+def test_docker_up_starts_the_compose_service_and_waits(
+    overrides: list[str], version: str, port: str
+) -> None:
+    (line,) = dry_run("docker-up", *overrides)
+    assert shlex.split(line) == [
+        f"CUBRID_VERSION={version}",
+        f"CUBRID_TEST_PORT={port}",
+        *COMPOSE,
+        "up",
+        "--detach",
+        "--wait",
+        "cubrid",
+    ]
+
+
+@needs_make
+def test_docker_down_keeps_the_data_volume_and_docker_clean_deletes_it() -> None:
+    (down,) = dry_run("docker-down")
+    (clean,) = dry_run("docker-clean")
+    assert shlex.split(down) == [*COMPOSE, "down"]
+    assert shlex.split(clean) == [*COMPOSE, "down", "--volumes"]
+
+
+@needs_make
+def test_integration_keeps_its_run_owned_container_not_the_compose_service() -> None:
+    # The persistent Compose environment is for manual work only (#378); the live
+    # lane still starts and always removes its own uniquely named container (#379).
+    (line,) = dry_run("integration")
+    assert "compose" not in line
+    assert "compose" not in (ROOT / "scripts" / "run_integration.py").read_text().lower()
+
+
+def test_compose_service_matches_the_makefile_and_the_integration_runner() -> None:
+    compose = yaml.safe_load((ROOT / "docker-compose.yml").read_text())
+    assert set(compose["services"]) == {"cubrid"}
+    service = compose["services"]["cubrid"]
+    assert "container_name" not in service  # the project name keeps instances apart
+    makefile = (ROOT / "Makefile").read_text()
+    version = re.search(r"^CUBRID_VERSION \?= (\S+)$", makefile, re.M)
+    port = re.search(r"^CUBRID_TEST_PORT \?= (\S+)$", makefile, re.M)
+    assert version is not None and port is not None
+    assert service["image"] == f"cubrid/cubrid:${{CUBRID_VERSION:-{version.group(1)}}}"
+    # Broker only, loopback only, with the same default port as the Makefile.
+    assert service["ports"] == [f"127.0.0.1:${{CUBRID_TEST_PORT:-{port.group(1)}}}:33000"]
+    database = _load_run_integration().DATABASE
+    assert service["environment"] == {"CUBRID_DB": database, "CUBRID_DB_HOST": "localhost"}
+    probe = service["healthcheck"]["test"]
+    assert probe[0] == "CMD-SHELL"
+    assert f"csql -u dba {database} " in probe[1] and "SELECT 1" in probe[1]
+    # The data lives in a named volume, which `docker-down` keeps.
+    (volume,) = service["volumes"]
+    name, _, target = volume.partition(":")
+    assert target == "/home/cubrid/CUBRID/databases"
+    assert name in compose["volumes"]
+
+
+def _load_run_integration() -> Any:
+    path = ROOT / "scripts" / "run_integration.py"
+    spec = importlib.util.spec_from_file_location("_run_integration_for_compose", path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 @needs_make

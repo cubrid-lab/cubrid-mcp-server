@@ -309,6 +309,10 @@ make integration    # CUBRID_VERSION=11.4 INTEGRATION_PORT=33000 by default
 # Integration tests against a CUBRID you already run
 export CUBRID_HOST=localhost CUBRID_USER=dba CUBRID_PASSWORD="" CUBRID_DATABASE=demodb
 make integration-local
+
+# A persistent local CUBRID (docker-compose.yml) for manual work; not used by make integration
+make docker-up      # demodb on 127.0.0.1:33000 (CUBRID_VERSION, CUBRID_TEST_PORT)
+make docker-down    # keeps the data volume; make docker-clean deletes it
 ```
 
 CI calls the same Make targets; `make help` lists them all and

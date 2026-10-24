@@ -49,6 +49,9 @@ jobs call these targets); `make help` lists them by group.
 - `make integration` — integration tests on a run-owned Docker CUBRID that is always removed
   (`CUBRID_VERSION`, default 11.4; `INTEGRATION_PORT`, default 33000)
 - `make integration-local` — integration tests against an already-running CUBRID (`CUBRID_*` variables)
+- `make docker-up` / `docker-down` / `docker-clean` — the persistent local CUBRID of `docker-compose.yml`
+  (service `cubrid`, `demodb` on `127.0.0.1:$CUBRID_TEST_PORT`) for manual work; `docker-down` keeps
+  the data volume, `docker-clean` deletes it. `make integration` does not use it.
 - `make agent-eval-check` — re-grade the opt-in agent evaluation fixtures in [`agent-evals/`](agent-evals/README.md) (offline; no model, no database)
 - `make release-check VERSION=x.y.z` — read-only release consistency gate (run by `release-please.yml` and `publish-pypi.yml`)
 

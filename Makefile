@@ -1,4 +1,4 @@
-.PHONY: help install doctor lint format-check format typecheck check test verify integration integration-local agent-eval-check clean release-check
+.PHONY: help install doctor lint format-check format typecheck check test verify integration integration-local docker-up docker-down docker-clean agent-eval-check clean release-check
 
 # Every tool runs through the selected interpreter, so an activated virtualenv is
 # honored even when PATH lists another one. Override any of them on the command line,
@@ -13,6 +13,10 @@ PYTEST_ARGS ?=
 # `make integration`: the cubrid/cubrid image tag and the host port for its broker.
 CUBRID_VERSION ?= 11.4
 INTEGRATION_PORT ?= 33000
+# `make docker-up`: the persistent local CUBRID of docker-compose.yml (manual work only;
+# `make integration` never uses it). CUBRID_VERSION above selects its image tag too.
+COMPOSE ?= docker compose --file docker-compose.yml
+CUBRID_TEST_PORT ?= 33000
 
 ##@ General
 
@@ -60,6 +64,17 @@ integration-local: ## Run integration tests against an already-running CUBRID (C
 agent-eval-check: ## Validate the agent-evals tasks and re-grade their fixtures (offline; no model, no DB)
 	$(PYTHON) scripts/agent_eval.py validate
 	$(PYTHON) scripts/agent_eval.py check
+
+##@ Docker (persistent local CUBRID for manual work; not used by make integration)
+
+docker-up: ## Start the Compose CUBRID (demodb on 127.0.0.1:CUBRID_TEST_PORT) and wait until healthy
+	CUBRID_VERSION="$(CUBRID_VERSION)" CUBRID_TEST_PORT="$(CUBRID_TEST_PORT)" $(COMPOSE) up --detach --wait cubrid
+
+docker-down: ## Stop and remove the Compose container and network; keeps the data volume
+	$(COMPOSE) down
+
+docker-clean: ## Remove the Compose container, network and data volume (deletes demodb)
+	$(COMPOSE) down --volumes
 
 ##@ Maintenance
 

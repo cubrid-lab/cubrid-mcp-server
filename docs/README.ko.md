@@ -272,6 +272,10 @@ make integration    # 기본값 CUBRID_VERSION=11.4 INTEGRATION_PORT=33000
 # 이미 실행 중인 CUBRID에서 통합 테스트
 export CUBRID_HOST=localhost CUBRID_USER=dba CUBRID_PASSWORD="" CUBRID_DATABASE=demodb
 make integration-local
+
+# 수동 작업용 영속 로컬 CUBRID (docker-compose.yml); make integration은 사용하지 않습니다
+make docker-up      # 127.0.0.1:33000의 demodb (CUBRID_VERSION, CUBRID_TEST_PORT)
+make docker-down    # 데이터 볼륨은 유지합니다. make docker-clean은 볼륨을 삭제합니다
 ```
 
 CI도 같은 Make 타깃을 호출합니다. `make help`로 전체 목록을 볼 수 있고, 각 타깃은
