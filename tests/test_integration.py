@@ -28,6 +28,34 @@ skipif_no_cubrid = pytest.mark.skipif(
 )
 
 
+FIXTURE_TABLE = "mcp_it_fixture"
+
+
+@pytest.fixture(scope="module")
+def fixture_table() -> Iterator[str]:
+    """A disposable user table, so the table-dependent tests always run (#403)."""
+    if not _has_cubrid_env():
+        yield FIXTURE_TABLE
+        return
+    from cubrid_mcp_server.config import Config
+    from cubrid_mcp_server.database import Database
+
+    config = Config.from_env()
+    db = Database(config)
+    try:
+        db.execute_write(f"DROP TABLE IF EXISTS {FIXTURE_TABLE}")
+        db.execute_write(f"CREATE TABLE {FIXTURE_TABLE} (id INT PRIMARY KEY, label VARCHAR(20))")
+        db.execute_write(f"INSERT INTO {FIXTURE_TABLE} VALUES (?, ?)", (1, "first"))
+        # The name the tools list: owner-qualified from CUBRID 11.2 on.
+        qualified = db.owner_qualified_names()
+        yield f"{config.user.lower()}.{FIXTURE_TABLE}" if qualified else FIXTURE_TABLE
+    finally:
+        try:
+            db.execute_write(f"DROP TABLE IF EXISTS {FIXTURE_TABLE}")
+        finally:
+            db.close()
+
+
 @skipif_no_cubrid
 class TestCubridIntegration:
     def setup_method(self) -> None:
@@ -64,34 +92,31 @@ class TestCubridIntegration:
         tables = server.all_table_names()
         assert isinstance(tables, list)
 
-    def test_filter_table_names_tool(self) -> None:
+    def test_filter_table_names_tool(self, fixture_table: str) -> None:
         from cubrid_mcp_server import server
 
         tables = server.all_table_names()
-        if not tables:
-            pytest.skip("no user tables in database")
-        needle = tables[0][:2]
+        assert fixture_table in tables
+        needle = fixture_table[:2]
         filtered = server.filter_table_names(needle)
-        assert tables[0] in filtered
+        assert fixture_table in filtered
 
-    def test_schema_definitions_tool(self) -> None:
+    def test_schema_definitions_tool(self, fixture_table: str) -> None:
         from cubrid_mcp_server import server
 
         tables = server.all_table_names()
-        if not tables:
-            pytest.skip("no user tables in database")
-        cols = server.schema_definitions(tables[0])
+        assert fixture_table in tables
+        cols = server.schema_definitions(fixture_table)
         assert isinstance(cols, list)
         assert all("name" in c and "type" in c for c in cols)
 
-    def test_describe_table_tool(self) -> None:
+    def test_describe_table_tool(self, fixture_table: str) -> None:
         from cubrid_mcp_server import server
 
         tables = server.all_table_names()
-        if not tables:
-            pytest.skip("no user tables in database")
-        desc = server.describe_table(tables[0])
-        assert desc["table"] == tables[0]
+        assert fixture_table in tables
+        desc = server.describe_table(fixture_table)
+        assert desc["table"] == fixture_table
         assert "columns" in desc and "indexes" in desc
 
     def test_describe_table_composite_pk_declared_order(self) -> None:
@@ -131,23 +156,21 @@ class TestCubridIntegration:
         assert result["row_count"] == 1
         assert result["truncated"] is False
 
-    def test_list_indexes_tool(self) -> None:
+    def test_list_indexes_tool(self, fixture_table: str) -> None:
         from cubrid_mcp_server import server
 
         tables = server.all_table_names()
-        if not tables:
-            pytest.skip("no user tables")
-        result = server.list_indexes(tables[0])
+        assert fixture_table in tables
+        result = server.list_indexes(fixture_table)
         assert isinstance(result, list)
 
-    def test_table_row_counts_tool(self) -> None:
+    def test_table_row_counts_tool(self, fixture_table: str) -> None:
         from cubrid_mcp_server import server
 
         tables = server.all_table_names()
-        if not tables:
-            pytest.skip("no user tables")
-        counts = server.table_row_counts([tables[0]])
-        assert counts["tables"][0]["table"] == tables[0]
+        assert fixture_table in tables
+        counts = server.table_row_counts([fixture_table])
+        assert counts["tables"][0]["table"] == fixture_table
         assert counts["truncated"] is False
 
     def test_table_row_counts_default_caps_beyond_limit(self) -> None:
@@ -603,6 +626,23 @@ class TestCubridIntegration:
         with pytest.raises(UnsafeSQLError):
             server.execute_query("EXPLAIN SELECT 1")
         assert "plan" in server.explain_query("SELECT 1")
+
+    def test_default_read_only_execute_query_rejects_write(self, fixture_table: str) -> None:
+        """A write through the default read-only execute_query is rejected, data unchanged (#403)."""
+        from cubrid_mcp_server import server
+        from cubrid_mcp_server.safety import UnsafeSQLError
+
+        assert self.config.readonly is True
+        for sql in (
+            f"INSERT INTO {fixture_table} VALUES (2, 'second')",
+            f"UPDATE {fixture_table} SET label = 'changed'",
+            f"DELETE FROM {fixture_table}",
+            f"DROP TABLE {fixture_table}",
+        ):
+            with pytest.raises(UnsafeSQLError):
+                server.execute_query(sql)
+        rows = server.execute_query(f"SELECT id, label FROM {fixture_table} ORDER BY id")["rows"]
+        assert rows == [[1, "first"]]
 
     def test_safety_blocks_write(self) -> None:
         from cubrid_mcp_server.safety import UnsafeSQLError, ensure_read_only
