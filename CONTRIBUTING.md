@@ -108,7 +108,7 @@ For manual work (trying the server from an MCP client, exploring the catalog,
 running `make integration-local` repeatedly), the root `docker-compose.yml`
 defines one service, `cubrid`: `cubrid/cubrid:<CUBRID_VERSION>` (11.4 by default)
 with `demodb`, its broker published only on `127.0.0.1:<CUBRID_TEST_PORT>`
-(33000 by default) and its data in a named volume. The health check runs
+(33000 by default) and its data in named volumes (both the 11.4 and the pre-11.4 database paths). The health check runs
 `csql -u dba demodb -c 'SELECT 1;'` inside the container.
 
 ```bash

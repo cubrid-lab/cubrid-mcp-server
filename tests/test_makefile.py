@@ -176,11 +176,11 @@ def test_compose_service_matches_the_makefile_and_the_integration_runner() -> No
     probe = service["healthcheck"]["test"]
     assert probe[0] == "CMD-SHELL"
     assert f"csql -u dba {database} " in probe[1] and "SELECT 1" in probe[1]
-    # The data lives in a named volume, which `docker-down` keeps.
-    (volume,) = service["volumes"]
-    name, _, target = volume.partition(":")
-    assert target == "/home/cubrid/CUBRID/databases"
-    assert name in compose["volumes"]
+    # The data lives in named volumes, which `docker-down` keeps: images up to 11.3
+    # use /var/lib/cubrid, the 11.4 image /home/cubrid/CUBRID/databases.
+    mounts = {target: name for name, target in (v.split(":", 1) for v in service["volumes"])}
+    assert set(mounts) == {"/var/lib/cubrid", "/home/cubrid/CUBRID/databases"}
+    assert set(mounts.values()) <= set(compose["volumes"])
 
 
 def _load_run_integration() -> Any:

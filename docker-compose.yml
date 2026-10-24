@@ -19,7 +19,10 @@ services:
       - "127.0.0.1:${CUBRID_TEST_PORT:-33000}:33000"
     shm_size: 512m
     volumes:
-      - cubrid-data:/home/cubrid/CUBRID/databases
+      # Images up to 11.3 keep databases in /var/lib/cubrid, the 11.4 image in
+      # /home/cubrid/CUBRID/databases; mount both so CUBRID_VERSION=11.2 also persists.
+      - cubrid-data:/var/lib/cubrid
+      - cubrid-databases:/home/cubrid/CUBRID/databases
     healthcheck:
       test: ["CMD-SHELL", "csql -u dba demodb -c 'SELECT 1;'"]
       interval: 5s
@@ -29,3 +32,4 @@ services:
 
 volumes:
   cubrid-data:
+  cubrid-databases:
