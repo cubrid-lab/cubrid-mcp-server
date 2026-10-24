@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### CI
+
+- **The temporary `last-release-sha` override is removed after 0.5.4 (#388)** — `v0.5.4` is published, and the release run verified it against the cookbook, so the next candidate starts from that tag. The override for the abandoned 0.5.3 (`8633db6`) is no longer needed, and leaving it in place would make a later recovery start from a stale base (RELEASING.md, "A merged X.Y.Z is abandoned"). Refs #388.
+
 ## [0.5.4] - 2026-10-24
 
 ### Upgrade notes
