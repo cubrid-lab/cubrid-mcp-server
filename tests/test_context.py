@@ -157,3 +157,41 @@ def test_injected_audit_is_reused_for_default_slot() -> None:
     ctx = single_context(config=_TEST_CONFIG, database=object(), audit=injected)  # type: ignore[arg-type]
     assert ctx.audit is injected
     assert ctx.audit_for() is injected
+
+
+def test_close_logs_suppressed_failures_without_secrets(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    secret = "s3cret-dsn-password"
+
+    class _FailingDatabase:
+        def __init__(self, message: str, error: type[Exception]) -> None:
+            self.message = message
+            self.error = error
+
+        def close(self) -> None:
+            raise self.error(self.message)
+
+    registry = ConnectionRegistry(configs={"default": _TEST_CONFIG, "reporting": _REPORTING_CONFIG})
+    first = _FailingDatabase(f"first cubrid://u:{secret}@h/d", RuntimeError)
+    ctx = AppContext(
+        registry=registry,
+        databases={
+            "default": first,  # type: ignore[dict-item]
+            "reporting": _FailingDatabase(f"second cubrid://u:{secret}@h/d", OSError),  # type: ignore[dict-item]
+        },
+    )
+    with caplog.at_level("WARNING", logger="cubrid_mcp_server.context"):
+        with pytest.raises(RuntimeError) as excinfo:
+            ctx.close()
+    # The first error is raised unchanged.
+    assert str(excinfo.value) == f"first cubrid://u:{secret}@h/d"
+    records = [r for r in caplog.records if r.name == "cubrid_mcp_server.context"]
+    assert len(records) == 1
+    assert records[0].levelname == "WARNING"
+    assert records[0].exc_info is None
+    message = records[0].getMessage()
+    assert "reporting" in message
+    assert "OSError" in message
+    assert secret not in message
+    assert "second" not in message

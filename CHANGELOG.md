@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Suppressed connection close failures are logged (#431)** — `AppContext.close()` re-raises only the first close failure and silently dropped any later one, hiding secondary shutdown problems. Each suppressed failure is now logged at WARNING through the module logger with the connection name and the exception type only (driver error text can echo connection details, so it is deliberately left out). The first error is still raised unchanged. Refs #431.
+
 ### Security
 
 - **`environment.json` masks credentials embedded in the recorded command (#426)** — `scripts/report_results.py` stored the `--command` string, which `make integration` builds from its overridable `--pytest` value, verbatim, so a password assignment, an authenticated database URL or a token option in it would have reached the `test-results/integration/environment.json` CI artifact. It now masks the password of URL userinfo (`scheme://user:***@host`, percent-encoded passwords included) and the value of a `password`, `passwd`, `pwd`, `token`, `secret`, `api_key` or `apikey` assignment or option, case-insensitively and as a key suffix (`PASSWORD=***`, `CUBRID_PASSWORD=***`, `--password=***`, `--password ***`), and keeps every other byte of the command. The schema, statuses, exit codes and the arguments pytest receives are unchanged. The masking is a best-effort safety net with documented limits (for example `-p secret` is not recognized); `CONTRIBUTING.md` and the module docstring now say to supply secrets through environment variables or the CI secret store, not the command line. Refs #426.

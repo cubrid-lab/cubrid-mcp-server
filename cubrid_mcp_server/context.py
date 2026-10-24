@@ -16,6 +16,7 @@ as it did before.
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Mapping
 from dataclasses import dataclass
 
@@ -25,6 +26,8 @@ from cubrid_mcp_server.config import (
     ConnectionRegistry,
 )
 from cubrid_mcp_server.database import Database
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -104,14 +107,23 @@ class AppContext:
         """Close every database connection, best-effort.
 
         Every database is closed even if an earlier one raises; the first error
-        (if any) is re-raised once all databases have been given a chance to close.
+        (if any) is re-raised once all databases have been given a chance to close,
+        and each later failure is logged at WARNING (name and type only).
         """
         first_error: Exception | None = None
-        for database in self.databases.values():
+        for name, database in self.databases.items():
             try:
                 database.close()
             except Exception as exc:  # noqa: BLE001 - close all before re-raising
                 if first_error is None:
                     first_error = exc
+                else:
+                    # Log only the connection name and exception type: driver
+                    # error text can echo connection details, so it is omitted.
+                    logger.warning(
+                        "additional close failure suppressed for connection %r: %s",
+                        name,
+                        type(exc).__name__,
+                    )
         if first_error is not None:
             raise first_error
