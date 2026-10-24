@@ -228,6 +228,15 @@ def test_redact_command_masks_url_passwords_and_credential_assignments(
     assert report.redact_command(redacted) == redacted  # idempotent
 
 
+def test_redact_command_scans_a_long_dotted_word_once() -> None:
+    # A scheme match may only start at a word start, so "a.a.a..." is not rescanned
+    # from every "." (that made a 100k-character command take seconds).
+    noise = "a." * 50_000
+    command = f"{noise} x://u:example-secret@h"
+
+    assert report.redact_command(command) == f"{noise} x://u:***@h"
+
+
 def test_environment_json_redacts_credentials_in_the_command(tmp_path: Path) -> None:
     command = (
         "python3 -m pytest --db-url=cubrid://dba:example-secret@localhost:33000/testdb"

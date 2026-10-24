@@ -29,7 +29,8 @@ assignment or option, case-insensitively and also as a key suffix (``PASSWORD=**
 ``CUBRID_PASSWORD=***``, ``--password=***``, ``--password ***``, ``--api-key ***``).
 Everything else is kept byte for byte. The masking is a regular-expression safety net,
 not a shell parser: a bare token or a short option (``-p secret``), a URL user name or
-a user-only ``scheme://token@host``, and a quoted value that contains whitespace after
+a user-only ``scheme://token@host``, a URL password with an unencoded ``/``, ``?`` or
+``#`` (``scheme://user:p/ss@host``), and a quoted value that contains whitespace after
 an unquoted key (``"--password=a b"``) are not recognized, and a dashed credential flag
 that takes no value masks the next word (``--no-token tests`` -> ``--no-token ***``).
 Supply secrets through environment variables or the CI secret store, never on the
@@ -160,7 +161,7 @@ MASK = "***"
 # last "@" before whitespace, a quote, "/", "?" or "#" (RFC 3986 requires those, and any
 # "@" inside it, to be percent-encoded, so an encoded "%40" stays part of the password).
 _URL_PASSWORD = re.compile(
-    r"(?P<head>\b[A-Za-z][A-Za-z0-9+.-]*://[^\s'\"/?#@:]*:)[^\s'\"/?#]+(?=@)"
+    r"(?P<head>(?<![A-Za-z0-9+.-])[A-Za-z][A-Za-z0-9+.-]*://[^\s'\"/?#@:]*:)[^\s'\"/?#]+(?=@)"
 )
 # A key that is, or ends with, a credential word: at the start of the command or after
 # whitespace, a quote, ";", "&" or "?", with or without leading dashes.
@@ -181,6 +182,8 @@ def _mask_value(match: re.Match[str]) -> str:
 def redact_command(command: str) -> str:
     """Mask URL passwords and credential assignments; leave everything else unchanged."""
     command = _ASSIGNMENT.sub(_mask_value, command)
+    if "://" not in command:
+        return command
     return _URL_PASSWORD.sub(lambda m: m["head"] + MASK, command)
 
 
