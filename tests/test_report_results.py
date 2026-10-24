@@ -31,7 +31,8 @@ CASES = {
 
 def junit(tmp_path: Path, *kinds: str) -> Path:
     path = tmp_path / "junit.xml"
-    cases = "".join(CASES[k] for k in kinds)
+    # A distinct name per record: repeated names are one test with several records.
+    cases = "".join(CASES[k].replace("name='", f"name='{i}", 1) for i, k in enumerate(kinds))
     path.write_text(f"<testsuites><testsuite name='pytest'>{cases}</testsuite></testsuites>")
     return path
 
@@ -77,6 +78,23 @@ def test_pass_counts_and_console_line_match_summary(
 def test_failure_or_error_is_fail_even_with_exit_zero(tmp_path: Path, kind: str) -> None:
     junit(tmp_path, "pass", kind)
     assert summarize(tmp_path, 0)["status"] == "FAIL"
+
+
+def test_a_test_with_a_failing_teardown_is_counted_once(tmp_path: Path) -> None:
+    # pytest writes two <testcase> records when a test fails and its teardown errors.
+    path = tmp_path / "junit.xml"
+    path.write_text(
+        "<testsuites><testsuite name='pytest' tests='2'>"
+        "<testcase classname='m' name='t'><failure message='call'/></testcase>"
+        "<testcase classname='m' name='t'><error message='teardown'/></testcase>"
+        "<testcase classname='m' name='ok'/>"
+        "</testsuite></testsuites>"
+    )
+    summary = summarize(tmp_path, 1)
+    assert summary["counts"]["selected"] == 2
+    assert summary["counts"]["errors"] == 1 and summary["counts"]["failed"] == 0
+    assert summary["counts"]["passed"] == 1
+    assert summary["status"] == "FAIL"
 
 
 def test_nonzero_exit_without_failed_tests_is_fail(tmp_path: Path) -> None:

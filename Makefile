@@ -56,7 +56,7 @@ check: lint format-check typecheck ## Run lint, format-check and typecheck (no t
 ##@ Tests
 
 test: ## Run offline unit tests with coverage; fails below fail_under (writes coverage.xml and test-results/test/)
-	@rm -rf $(RESULTS)/test && mkdir -p $(RESULTS)/test
+	@rm -rf "./$(RESULTS)/test" && mkdir -p "./$(RESULTS)/test"
 	$(PYTEST) -m "not integration" --cov=$(SRC) --cov-report=term-missing --cov-report=xml:$(RESULTS)/test/coverage.xml --junitxml=$(RESULTS)/test/junit.xml $(PYTEST_ARGS); \
 		status=$$?; \
 		cp -f $(RESULTS)/test/coverage.xml coverage.xml 2>/dev/null; \

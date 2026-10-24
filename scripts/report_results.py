@@ -46,23 +46,37 @@ SCHEMA_VERSION = 1
 COUNTS = ("selected", "passed", "failed", "errors", "skipped", "xfailed", "xpassed")
 
 
+def _outcome(case: ET.Element) -> str:
+    if case.find("error") is not None:
+        return "errors"
+    if case.find("failure") is not None:
+        return "failed"
+    if (skipped := case.find("skipped")) is not None:
+        return "xfailed" if skipped.get("type") == "pytest.xfail" else "skipped"
+    return "passed"
+
+
+# When a test fails and its teardown also errors, pytest writes two <testcase>
+# records for it; count each test once, with its worst outcome.
+_SEVERITY = {"passed": 0, "xfailed": 1, "skipped": 2, "failed": 3, "errors": 4}
+
+
 def parse_junit(path: Path) -> dict[str, int] | None:
-    """Count the test cases of a JUnit file; None if it is missing or unreadable."""
+    """Count the tests of a JUnit file; None if it is missing or unreadable."""
     try:
         root = ET.parse(path).getroot()
     except (OSError, ET.ParseError):
         return None
-    counts = dict.fromkeys(COUNTS, 0)
+    outcomes: dict[tuple[str, str], str] = {}
     for case in root.iter("testcase"):
-        counts["selected"] += 1
-        if case.find("error") is not None:
-            counts["errors"] += 1
-        elif case.find("failure") is not None:
-            counts["failed"] += 1
-        elif (skipped := case.find("skipped")) is not None:
-            counts["xfailed" if skipped.get("type") == "pytest.xfail" else "skipped"] += 1
-        else:
-            counts["passed"] += 1
+        key = (case.get("classname", ""), case.get("name", ""))
+        outcome = _outcome(case)
+        if key not in outcomes or _SEVERITY[outcome] > _SEVERITY[outcomes[key]]:
+            outcomes[key] = outcome
+    counts = dict.fromkeys(COUNTS, 0)
+    counts["selected"] = len(outcomes)
+    for outcome in outcomes.values():
+        counts[outcome] += 1
     return counts
 
 

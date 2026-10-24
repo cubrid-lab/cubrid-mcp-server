@@ -84,7 +84,7 @@ def test_test_collects_coverage_and_enforces_fail_under() -> None:
 def _test_recipe() -> list[str]:
     """The `make test` pytest command and the shell steps that follow it."""
     lines = dry_run("test")
-    assert lines[0] == "rm -rf test-results/test && mkdir -p test-results/test"
+    assert lines[0] == 'rm -rf "./test-results/test" && mkdir -p "./test-results/test"'
     joined = " ".join(line.removesuffix("\\").strip() for line in lines[1:])
     pytest_command, *steps = (part.strip() for part in joined.split(";"))
     return [pytest_command, *steps]
