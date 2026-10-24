@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.4](https://github.com/cubrid-lab/cubrid-mcp-server/compare/v0.5.3...v0.5.4) (2026-10-24)
+
+
+### CI
+
+* **release:** verify against the current cookbook and restart after the abandoned 0.5.3 ([#424](https://github.com/cubrid-lab/cubrid-mcp-server/issues/424)) ([1d1e5a1](https://github.com/cubrid-lab/cubrid-mcp-server/commit/1d1e5a18f1496a9b4a5c6f5794bd488edbf020cd)), closes [#388](https://github.com/cubrid-lab/cubrid-mcp-server/issues/388)
+
 ## [0.5.3](https://github.com/cubrid-lab/cubrid-mcp-server/compare/v0.5.2...v0.5.3) (2026-10-24)
 
 
