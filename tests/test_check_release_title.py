@@ -66,3 +66,29 @@ def test_cli_title_starting_with_a_dash_gets_the_policy_message(
     # The workflow passes --title="$title", so a leading "-" is a value, not an option.
     assert main(["--tag", "v1.2.3", "--title=-v1.2.3", "--draft", "false"]) == 1
     assert "titled '-v1.2.3'; the title must be exactly 'v1.2.3'" in capsys.readouterr().err
+
+
+def test_a_trailing_newline_tag_is_rejected_even_with_an_identical_title() -> None:
+    # ``fullmatch`` does not accept the newline that ``$`` alone would allow.
+    assert release_title_error("v1.2.3\n", "v1.2.3\n") is not None
+
+
+def test_cli_reports_a_non_stable_tag_as_a_policy_error(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    assert main(["--tag", "1.2.3", "--title", "1.2.3", "--draft", "false"]) == 1
+    assert "::error::tag '1.2.3' is not vMAJOR.MINOR.PATCH" in capsys.readouterr().err
+
+
+def test_cli_usage_errors_exit_2(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    with pytest.raises(SystemExit) as exited:
+        main(["--tag", "v1.2.3", "--title", "v1.2.3", "--draft", "yes"])
+    assert exited.value.code == 2
+    assert "invalid choice: 'yes'" in capsys.readouterr().err
+
+    with pytest.raises(SystemExit) as exited:
+        main(["--tag", "v1.2.3", "--draft", "false"])
+    assert exited.value.code == 2
+    assert "--title" in capsys.readouterr().err
