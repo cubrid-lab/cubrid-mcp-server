@@ -1502,3 +1502,13 @@ def test_explain_query_audits_the_truncated_flag(
     (record,) = [json.loads(line) for line in buf.getvalue().splitlines()]
     assert record["tool"] == "explain_query"
     assert record["truncated"] is truncated
+
+
+def test_audit_raises_runtime_error_when_no_audit_logger(monkeypatch: pytest.MonkeyPatch) -> None:
+    class _NoAuditContext:
+        def audit_for(self, connection: str | None = None) -> None:
+            return None
+
+    monkeypatch.setattr(server, "_get_context", lambda: _NoAuditContext())
+    with pytest.raises(RuntimeError, match=r"audit_for\(\) returned no audit logger"):
+        server._audit()

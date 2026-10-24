@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Audit logger invariants raise `RuntimeError` instead of asserting (#429)** — `AppContext.audit_for()` and `server._audit()` guarded the audit logger that `AppContext.__post_init__` always sets with `assert`, which `python -O` strips. Both now raise `RuntimeError` naming the missing field; behavior is unchanged while the invariant holds, so no tool output changes. Refs #429.
+
 - **Suppressed connection close failures are logged (#431)** — `AppContext.close()` re-raises only the first close failure and silently dropped any later one, hiding secondary shutdown problems. Each suppressed failure is now logged at WARNING through the module logger with the connection name and the exception type only (driver error text can echo connection details, so it is deliberately left out). The first error is still raised unchanged. Refs #431.
 
 ### Security
