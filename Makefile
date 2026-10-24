@@ -10,13 +10,15 @@ MYPY ?= $(PYTHON) -m mypy
 SRC = cubrid_mcp_server
 # Extra pytest arguments for `make test`, e.g. PYTEST_ARGS="-k config -x".
 PYTEST_ARGS ?=
-# `make integration`: the cubrid/cubrid image tag and the host port for its broker.
-CUBRID_VERSION ?= 11.4
-INTEGRATION_PORT ?= 33000
-# `make docker-up`: the persistent local CUBRID of docker-compose.yml (manual work only;
-# `make integration` never uses it). CUBRID_VERSION above selects its image tag too.
+# The CUBRID of docker-compose.yml: `make docker-up` runs it as the persistent default
+# Compose project (manual work), `make integration` as a run-owned project that it always
+# removes (scripts/run_integration.py). CUBRID_VERSION is the cubrid/cubrid image tag and
+# CUBRID_TEST_PORT the broker's host port for both. INTEGRATION_PORT is the older name for
+# the `make integration` port, kept for compatibility: when set, it wins for that target.
 COMPOSE ?= docker compose --file docker-compose.yml
+CUBRID_VERSION ?= 11.4
 CUBRID_TEST_PORT ?= 33000
+INTEGRATION_PORT ?= $(CUBRID_TEST_PORT)
 
 ##@ General
 
@@ -55,7 +57,7 @@ test: ## Run offline unit tests with coverage; fails below fail_under (writes co
 
 verify: check test ## Run check and test (offline; no Docker, no database)
 
-integration: ## Start a run-owned Docker CUBRID, run integration tests, always remove it (CUBRID_VERSION, INTEGRATION_PORT)
+integration: ## Start a run-owned Compose CUBRID, run integration tests, always remove it (CUBRID_VERSION, CUBRID_TEST_PORT)
 	$(PYTHON) scripts/run_integration.py --cubrid-version "$(CUBRID_VERSION)" --port "$(INTEGRATION_PORT)" --pytest "$(PYTEST)"
 
 integration-local: ## Run integration tests against an already-running CUBRID (CUBRID_HOST, CUBRID_PORT, ...)
@@ -65,7 +67,7 @@ agent-eval-check: ## Validate the agent-evals tasks and re-grade their fixtures 
 	$(PYTHON) scripts/agent_eval.py validate
 	$(PYTHON) scripts/agent_eval.py check
 
-##@ Docker (persistent local CUBRID for manual work; not used by make integration)
+##@ Docker (persistent local CUBRID for manual work; make integration uses its own project)
 
 docker-up: ## Start the Compose CUBRID (demodb on 127.0.0.1:CUBRID_TEST_PORT) and wait until healthy
 	CUBRID_VERSION="$(CUBRID_VERSION)" CUBRID_TEST_PORT="$(CUBRID_TEST_PORT)" $(COMPOSE) up --detach --wait cubrid

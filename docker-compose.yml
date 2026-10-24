@@ -1,15 +1,18 @@
+# The one CUBRID service definition for local work and the live test lane (#402).
+#
 # Persistent local CUBRID for manual development: `make docker-up`, `make docker-down`
 # (keeps the data volume) and `make docker-clean` (deletes it). See CONTRIBUTING.md.
+# Point `make integration-local` at it with CUBRID_HOST=127.0.0.1,
+# CUBRID_PORT=$CUBRID_TEST_PORT, CUBRID_USER=dba, CUBRID_PASSWORD="" and CUBRID_DATABASE=demodb.
 #
-# `make integration` does NOT use this file: it starts and always removes its own
-# run-owned container (scripts/run_integration.py). Point `make integration-local` at
-# this service with CUBRID_HOST=127.0.0.1, CUBRID_PORT=$CUBRID_TEST_PORT,
-# CUBRID_USER=dba, CUBRID_PASSWORD="" and CUBRID_DATABASE=demodb.
+# `make integration` (scripts/run_integration.py) starts this same service as a
+# run-owned project, `--project-name cubrid-mcp-it-<id>`, and always removes it with
+# `down --volumes`; it never touches the default project that `make docker-up` uses.
 services:
   cubrid:
     image: cubrid/cubrid:${CUBRID_VERSION:-11.4}
     environment:
-      # The same database name as the run-owned `make integration` container.
+      # The database the integration suite connects to.
       CUBRID_DB: demodb
       # A fixed server host name, so a recreated container can open the database
       # that an earlier one created on the volume.

@@ -104,8 +104,14 @@ def test_only_format_mutates_sources() -> None:
 @needs_make
 @pytest.mark.parametrize(
     ("overrides", "version", "port"),
-    [([], "11.4", "33000"), (["CUBRID_VERSION=11.2", "INTEGRATION_PORT=33524"], "11.2", "33524")],
-    ids=["defaults", "overrides"],
+    [
+        ([], "11.4", "33000"),
+        (["CUBRID_VERSION=11.2", "CUBRID_TEST_PORT=33524"], "11.2", "33524"),
+        # INTEGRATION_PORT is the older name, kept for compatibility; it wins when set.
+        (["INTEGRATION_PORT=33525"], "11.4", "33525"),
+        (["CUBRID_TEST_PORT=33524", "INTEGRATION_PORT=33525"], "11.4", "33525"),
+    ],
+    ids=["defaults", "overrides", "compat-name", "compat-name-wins"],
 )
 def test_integration_owns_a_docker_database(overrides: list[str], version: str, port: str) -> None:
     (line,) = dry_run("integration", *overrides)
@@ -151,12 +157,18 @@ def test_docker_down_keeps_the_data_volume_and_docker_clean_deletes_it() -> None
 
 
 @needs_make
-def test_integration_keeps_its_run_owned_container_not_the_compose_service() -> None:
-    # The persistent Compose environment is for manual work only (#378); the live
-    # lane still starts and always removes its own uniquely named container (#379).
-    (line,) = dry_run("integration")
-    assert "compose" not in line
-    assert "compose" not in (ROOT / "scripts" / "run_integration.py").read_text().lower()
+def test_integration_runs_the_docker_up_service_as_a_run_owned_project() -> None:
+    # One service definition for both lanes (#402): the runner starts the same file and
+    # service as `make docker-up`, but under a unique project name of its own, so it
+    # never touches the default project of the persistent lab (#378, #379).
+    (up,) = dry_run("docker-up")
+    runner = _load_run_integration()
+    assert shlex.split(up)[2 : 2 + len(COMPOSE)] == COMPOSE
+    assert ["--file", runner.COMPOSE_FILE] == COMPOSE[2:]
+    assert shlex.split(up)[-1] == runner.SERVICE
+    assert runner.PROJECT_PREFIX == "cubrid-mcp-it-"
+    (integration,) = dry_run("integration")
+    assert "compose" not in integration  # the runner owns the project lifecycle
 
 
 def test_compose_service_matches_the_makefile_and_the_integration_runner() -> None:

@@ -58,7 +58,7 @@ make format        # ruff format . + ruff check --fix . (the only target that ed
 ```bash
 make test               # offline unit tests with coverage; fails below fail_under (95)
 make verify             # make check + make test; no Docker, no database
-make integration        # integration tests on a Docker CUBRID it starts and removes
+make integration        # integration tests on a Compose CUBRID it starts and removes
 make integration-local  # integration tests against a CUBRID you already run
 make docker-up          # a persistent local CUBRID for manual work (Docker Compose)
 ```
@@ -72,23 +72,35 @@ arguments go in `PYTEST_ARGS`, for example `make test PYTEST_ARGS="-k config -x"
 
 ### Running the Integration Suite
 
-`make integration` needs only Docker. It starts its own uniquely named
-`cubrid/cubrid:<CUBRID_VERSION>` container (11.4 by default) with `demodb`,
-publishes the broker on host port `INTEGRATION_PORT` (33000 by default), waits
-for `demodb` to answer, runs `pytest -m integration -v` against it and then
-always removes that container and its anonymous volumes, on success, failure or
-Ctrl-C (SIGINT/SIGTERM). On a failure it prints the container log first. The
-exit status is the first failing step's; a cleanup failure fails an otherwise
-successful run. CI's live jobs run the same target with the matrix version:
+`make integration` needs only Docker (with the Compose plugin). It starts the
+`cubrid` service of the root `docker-compose.yml`, the same definition
+`make docker-up` uses (`cubrid/cubrid:<CUBRID_VERSION>`, 11.4 by default, with
+`demodb`), as a Compose project of its own named `cubrid-mcp-it-<random id>`,
+publishes the broker on `127.0.0.1:<CUBRID_TEST_PORT>` (33000 by default) and
+waits until the service's health check passes (`up --detach --wait`). It then runs
+`pytest -m integration -v` against it and always takes that project down with
+`down --volumes`, removing its container, network and volumes, on success,
+failure, a readiness failure or Ctrl-C (SIGINT/SIGTERM). On a failure it prints
+the service log first. The exit status is the first failing step's (128 + the
+signal number after a signal); a cleanup failure fails an otherwise successful
+run. CI's live jobs run the same target with the matrix version:
 
 ```bash
 make integration                                            # CUBRID 11.4 on port 33000
-make integration CUBRID_VERSION=11.2 INTEGRATION_PORT=33524  # another version or a free port
+make integration CUBRID_VERSION=11.2 CUBRID_TEST_PORT=33524  # another version or a free port
 ```
 
-The test endpoint is pinned to `127.0.0.1:$INTEGRATION_PORT/demodb` as `dba`, so
-exported `CUBRID_*` variables cannot redirect the run. No other container, image
-or named volume is touched.
+`CUBRID_TEST_PORT` is the one port variable of `make integration` and
+`make docker-up`. `INTEGRATION_PORT`, its older name for `make integration`, still
+works and wins when set (`make integration INTEGRATION_PORT=33524`).
+
+The test endpoint is pinned to `127.0.0.1:<port>/demodb` as `dba`, so exported
+`CUBRID_*` variables cannot redirect the run, and the project name is passed
+explicitly, so `COMPOSE_PROJECT_NAME` cannot either. Because every run has its own
+project, two runs on different ports do not interfere, and a running
+`make docker-up` lab (the default or your `COMPOSE_PROJECT_NAME` project) is never
+stopped or emptied; only the host port has to differ. No other container, image or
+volume is touched.
 
 To run the suite against a CUBRID you manage yourself (with `demodb`), point the
 tests at it and use `make integration-local`:
@@ -132,10 +144,10 @@ export CUBRID_HOST=127.0.0.1 CUBRID_PORT=33000 CUBRID_USER=dba CUBRID_PASSWORD="
 make integration-local
 ```
 
-`make integration` and CI do not use this service: they keep starting and
-always removing their own run-owned container, so they never touch your
-Compose data, and a running Compose service only matters to them if both use
-the same host port.
+`make integration` and CI start this same service, but as a separate,
+run-owned Compose project that they always remove, so they never touch your
+Compose data; a running Compose service only matters to them if both use the same
+host port (pick another `CUBRID_TEST_PORT` for one of them).
 
 ## What CI Enforces
 
@@ -228,8 +240,8 @@ The lanes check:
   floors, not the coverage gate, so it is a weaker lane than `make test`, not a
   replacement for it.
 - **`integration`** — `make integration CUBRID_VERSION=<matrix version>`: a
-  run-owned CUBRID container, `pytest -m integration`, the container log on a
-  failure and guaranteed container removal. `integration-full.yml` runs the same
+  run-owned Compose project of the `docker-compose.yml` service, `pytest -m
+  integration`, the service log on a failure and guaranteed `down --volumes`. `integration-full.yml` runs the same
   target for each matrix cell.
 - **`python scripts/lint_changelog.py`** — checks `CHANGELOG.md` structure and
   version ordering. In `[Unreleased]` and in releases after 0.4.0 it also

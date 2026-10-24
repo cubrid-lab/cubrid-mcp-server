@@ -266,14 +266,14 @@ make check
 # 95% 커버리지 하한을 적용한 단위 테스트 (데이터베이스 불필요)
 make test
 
-# make가 시작하고 항상 제거하는 Docker CUBRID에서 통합 테스트
-make integration    # 기본값 CUBRID_VERSION=11.4 INTEGRATION_PORT=33000
+# make가 시작하고 항상 제거하는 실행 전용 Compose CUBRID에서 통합 테스트
+make integration    # 기본값 CUBRID_VERSION=11.4 CUBRID_TEST_PORT=33000
 
 # 이미 실행 중인 CUBRID에서 통합 테스트
 export CUBRID_HOST=localhost CUBRID_USER=dba CUBRID_PASSWORD="" CUBRID_DATABASE=demodb
 make integration-local
 
-# 수동 작업용 영속 로컬 CUBRID (docker-compose.yml); make integration은 사용하지 않습니다
+# 수동 작업용 영속 로컬 CUBRID (docker-compose.yml); make integration은 이 프로젝트를 건드리지 않습니다
 make docker-up      # 127.0.0.1:33000의 demodb (CUBRID_VERSION, CUBRID_TEST_PORT)
 make docker-down    # 데이터 볼륨은 유지합니다. make docker-clean은 볼륨을 삭제합니다
 ```
