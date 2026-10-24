@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Audit logger invariants raise `RuntimeError` instead of asserting (#429)** — `AppContext.audit_for()` and `server._audit()` guarded the audit logger that `AppContext.__post_init__` always sets with `assert`, which `python -O` strips. Both now raise `RuntimeError` naming the missing field; behavior is unchanged while the invariant holds, so no tool output changes. Refs #429.
+
 ### Security
 
 - **`environment.json` masks credentials embedded in the recorded command (#426)** — `scripts/report_results.py` stored the `--command` string, which `make integration` builds from its overridable `--pytest` value, verbatim, so a password assignment, an authenticated database URL or a token option in it would have reached the `test-results/integration/environment.json` CI artifact. It now masks the password of URL userinfo (`scheme://user:***@host`, percent-encoded passwords included) and the value of a `password`, `passwd`, `pwd`, `token`, `secret`, `api_key` or `apikey` assignment or option, case-insensitively and as a key suffix (`PASSWORD=***`, `CUBRID_PASSWORD=***`, `--password=***`, `--password ***`), and keeps every other byte of the command. The schema, statuses, exit codes and the arguments pytest receives are unchanged. The masking is a best-effort safety net with documented limits (for example `-p secret` is not recognized); `CONTRIBUTING.md` and the module docstring now say to supply secrets through environment variables or the CI secret store, not the command line. Refs #426.

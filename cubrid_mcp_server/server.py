@@ -77,7 +77,8 @@ def _cfg(connection: str | None = None) -> Config:
 
 def _audit(connection: str | None = None) -> AuditLogger:
     audit = _get_context().audit_for(connection)
-    assert audit is not None  # AppContext.__post_init__ always populates this
+    if audit is None:
+        raise RuntimeError("AppContext.audit_for() returned no audit logger")
     return audit
 
 

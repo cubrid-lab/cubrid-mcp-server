@@ -157,3 +157,10 @@ def test_injected_audit_is_reused_for_default_slot() -> None:
     ctx = single_context(config=_TEST_CONFIG, database=object(), audit=injected)  # type: ignore[arg-type]
     assert ctx.audit is injected
     assert ctx.audit_for() is injected
+
+
+def test_audit_for_raises_runtime_error_when_audits_is_unset() -> None:
+    ctx = single_context(config=_TEST_CONFIG, database=object())  # type: ignore[arg-type]
+    object.__setattr__(ctx, "audits", None)
+    with pytest.raises(RuntimeError, match=r"AppContext\.audits is not initialized"):
+        ctx.audit_for()

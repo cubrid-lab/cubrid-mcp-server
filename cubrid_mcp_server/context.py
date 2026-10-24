@@ -83,7 +83,8 @@ class AppContext:
             if connection and connection.strip()
             else self.registry.default_name
         )
-        assert self.audits is not None  # __post_init__ always populates this
+        if self.audits is None:
+            raise RuntimeError("AppContext.audits is not initialized")
         return self.audits[name]
 
     def database_for(self, connection: str | None = None) -> Database:
