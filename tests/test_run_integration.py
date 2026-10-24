@@ -223,3 +223,54 @@ def test_signal_stops_the_running_step_and_still_cleans_up(
         assert not [c for c in calls(fake) if c[0] == "pytest"]
     assert "logs" not in compose_commands(fake)
     assert_taken_down(fake)
+
+
+def reporting_args(fake: dict[str, Any], results: Path) -> list[str]:
+    return [*fake["args"], "--results-dir", str(results)]
+
+
+def test_results_dir_gets_junit_environment_and_summary(
+    fake: dict[str, Any],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capfd: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setenv("CUBRID_PASSWORD", "s3cr3t-pass")
+    results = tmp_path / "results"
+    results.mkdir()
+    (results / "summary.json").write_text("stale")
+    assert run_integration.main(reporting_args(fake, results)) == 0
+    (pytest_call,) = [c for c in calls(fake) if c[0] == "pytest"]
+    assert pytest_call[1:-1] == [
+        "-m",
+        "integration",
+        "-v",
+        "--junitxml",
+        str(results / "junit.xml"),
+    ]
+    environment = (results / "environment.json").read_text()
+    assert "s3cr3t-pass" not in environment
+    assert json.loads(environment)["cubrid_version"] == "11.2"
+    # The fake pytest writes no JUnit file, so nothing proves the lane ran.
+    summary = json.loads((results / "summary.json").read_text())
+    assert summary["status"] == "INCOMPLETE"
+    assert not (results / "logs").exists()
+    assert capfd.readouterr().out.strip().splitlines()[-1].startswith("integration: INCOMPLETE")
+
+
+def test_results_dir_failure_writes_the_service_log_and_fails(
+    fake: dict[str, Any],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capfd: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setenv("FAKE_PYTEST_STATUS", "3")
+    results = tmp_path / "results"
+    assert run_integration.main(reporting_args(fake, results)) == 3
+    assert (results / "logs" / "cubrid.log").read_text() == "fake cubrid log\n"
+    summary = json.loads((results / "summary.json").read_text())
+    assert summary["status"] == "FAIL" and summary["exit_code"] == 3
+    out = capfd.readouterr().out
+    assert "fake cubrid log" in out
+    assert out.strip().splitlines()[-1].startswith("integration: FAIL")
+    assert_taken_down(fake)

@@ -40,7 +40,7 @@ def test_unit_lane_deselects_only_integration_tests() -> None:
     runs = [s.get("run", "") for s in ci["jobs"]["lint-and-test"]["steps"]]
     # The unit lane runs `make test` (#379); its recipe deselects integration tests.
     assert "make test" in [run.strip() for run in runs]
-    recipe = re.search(r"^test:.*\n\t(.*)$", (ROOT / "Makefile").read_text(), re.M)
+    recipe = re.search(r"^test:.*\n((?:\t.*\n)+)", (ROOT / "Makefile").read_text(), re.M)
     assert recipe is not None
     assert '-m "not integration"' in recipe.group(1)
 

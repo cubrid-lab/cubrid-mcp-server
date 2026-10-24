@@ -19,6 +19,9 @@ COMPOSE ?= docker compose --file docker-compose.yml
 CUBRID_VERSION ?= 11.4
 CUBRID_TEST_PORT ?= 33000
 INTEGRATION_PORT ?= $(CUBRID_TEST_PORT)
+# Where `make test` and `make integration` write JUnit XML, coverage.xml, summary.json and
+# environment.json (gitignored; `make clean` removes it).
+RESULTS ?= test-results
 
 ##@ General
 
@@ -52,13 +55,18 @@ check: lint format-check typecheck ## Run lint, format-check and typecheck (no t
 
 ##@ Tests
 
-test: ## Run offline unit tests with coverage; fails below fail_under (writes coverage.xml)
-	$(PYTEST) -m "not integration" --cov=$(SRC) --cov-report=term-missing --cov-report=xml $(PYTEST_ARGS)
+test: ## Run offline unit tests with coverage; fails below fail_under (writes coverage.xml and test-results/test/)
+	@rm -rf $(RESULTS)/test && mkdir -p $(RESULTS)/test
+	$(PYTEST) -m "not integration" --cov=$(SRC) --cov-report=term-missing --cov-report=xml:$(RESULTS)/test/coverage.xml --junitxml=$(RESULTS)/test/junit.xml $(PYTEST_ARGS); \
+		status=$$?; \
+		cp -f $(RESULTS)/test/coverage.xml coverage.xml 2>/dev/null; \
+		$(PYTHON) scripts/report_results.py summarize --lane test --results-dir $(RESULTS)/test --coverage $(RESULTS)/test/coverage.xml --exit-code $$status; \
+		exit $$status
 
 verify: check test ## Run check and test (offline; no Docker, no database)
 
 integration: ## Start a run-owned Compose CUBRID, run integration tests, always remove it (CUBRID_VERSION, CUBRID_TEST_PORT)
-	$(PYTHON) scripts/run_integration.py --cubrid-version "$(CUBRID_VERSION)" --port "$(INTEGRATION_PORT)" --pytest "$(PYTEST)"
+	$(PYTHON) scripts/run_integration.py --cubrid-version "$(CUBRID_VERSION)" --port "$(INTEGRATION_PORT)" --pytest "$(PYTEST)" --results-dir "$(RESULTS)/integration"
 
 integration-local: ## Run integration tests against an already-running CUBRID (CUBRID_HOST, CUBRID_PORT, ...)
 	$(PYTEST) -m "integration" -q
@@ -81,7 +89,7 @@ docker-clean: ## Remove the Compose container, network and data volume (deletes 
 ##@ Maintenance
 
 clean: ## Remove generated build, cache and coverage artifacts
-	rm -rf build/ dist/ *.egg-info .pytest_cache .mypy_cache .ruff_cache .coverage coverage.xml htmlcov
+	rm -rf build/ dist/ *.egg-info .pytest_cache .mypy_cache .ruff_cache .coverage coverage.xml htmlcov test-results
 
 ##@ Release
 

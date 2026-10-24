@@ -23,6 +23,7 @@ ENV/
 .coverage.*
 coverage.xml
 htmlcov/
+test-results/
 .tox/
 .mypy_cache/
 .ruff_cache/

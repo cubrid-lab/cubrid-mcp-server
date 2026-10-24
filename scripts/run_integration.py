@@ -12,7 +12,10 @@ uses (#402), as a Compose project of its own:
    ``csql -u dba demodb`` health check passes, and fails if it turns unhealthy;
 2. run ``<pytest> -m integration -v`` against ``127.0.0.1:<port>/demodb`` as ``dba``;
 3. on a failure, print the service log;
-4. ``down --volumes`` that project, whatever happened before.
+4. ``down --volumes`` that project, whatever happened before;
+5. with ``--results-dir``, write ``junit.xml``, ``summary.json``, ``environment.json``
+   and, on a failure, ``logs/cubrid.log`` there (``scripts/report_results.py``, #405)
+   and end with a one-line summary that matches ``summary.json``.
 
 The project name is unique per run, so only this run's container, network and
 volumes are removed; the default project of ``make docker-up``, other runs and other
@@ -26,7 +29,7 @@ stop the running step, still clean up, and exit 128 + the signal number.
 Usage (see the Makefile)::
 
     python3 scripts/run_integration.py --cubrid-version 11.4 --port 33000 \
-        --pytest "python3 -m pytest"
+        --pytest "python3 -m pytest" --results-dir test-results/integration
 """
 
 from __future__ import annotations
@@ -34,6 +37,7 @@ from __future__ import annotations
 import argparse
 import os
 import shlex
+import shutil
 import signal
 import subprocess
 import sys
@@ -41,12 +45,15 @@ import uuid
 from collections.abc import Sequence
 from pathlib import Path
 from types import FrameType
+from typing import IO
 
 ROOT = Path(__file__).resolve().parents[1]
 COMPOSE_FILE = "docker-compose.yml"
 SERVICE = "cubrid"
 DATABASE = "demodb"
 PROJECT_PREFIX = "cubrid-mcp-it-"
+REPORTER = ROOT / "scripts" / "report_results.py"
+LANE = "integration"
 
 
 class Interrupted(Exception):
@@ -65,10 +72,12 @@ def _interrupt(signum: int, frame: FrameType | None) -> None:
         raise Interrupted(signum)
 
 
-def _run(command: Sequence[str], env: dict[str, str] | None = None) -> int:
+def _run(
+    command: Sequence[str], env: dict[str, str] | None = None, stdout: IO[str] | None = None
+) -> int:
     """Run one step; on an interrupt, stop it before the interrupt propagates."""
     try:
-        process = subprocess.Popen(command, cwd=ROOT, env=env)
+        process = subprocess.Popen(command, cwd=ROOT, env=env, stdout=stdout, text=True)
     except FileNotFoundError:
         print(f"ERROR: {command[0]} not found", file=sys.stderr, flush=True)
         return 127
@@ -113,7 +122,10 @@ def _lane(args: argparse.Namespace, project: str) -> int:
         "CUBRID_PASSWORD": "",
         "CUBRID_DATABASE": DATABASE,
     }
-    return _run([*shlex.split(args.pytest), "-m", "integration", "-v"], test_env)
+    command = [*shlex.split(args.pytest), "-m", "integration", "-v"]
+    if args.results_dir is not None:
+        command += ["--junitxml", str(args.results_dir / "junit.xml")]
+    return _run(command, test_env)
 
 
 def _cleanup(args: argparse.Namespace, project: str) -> int:
@@ -145,7 +157,32 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--cubrid-version", required=True, help="cubrid/cubrid image tag")
     parser.add_argument("--port", required=True, type=int, help="host port for the broker")
     parser.add_argument("--pytest", required=True, help='pytest command, e.g. "python3 -m pytest"')
+    parser.add_argument(
+        "--results-dir",
+        type=Path,
+        help="write junit.xml, summary.json, environment.json and failure logs here",
+    )
     args = parser.parse_args(argv)
+    if args.results_dir is not None:
+        args.results_dir = (ROOT / args.results_dir).resolve()
+        # Never summarize a previous run's files.
+        shutil.rmtree(args.results_dir, ignore_errors=True)
+        args.results_dir.mkdir(parents=True)
+        _run(
+            [
+                sys.executable,
+                str(REPORTER),
+                "environment",
+                "--lane",
+                LANE,
+                "--results-dir",
+                str(args.results_dir),
+                "--command",
+                f"{args.pytest} -m integration -v",
+                "--cubrid-version",
+                args.cubrid_version,
+            ]
+        )
 
     project = f"{PROJECT_PREFIX}{uuid.uuid4().hex[:12]}"
     print(
@@ -184,12 +221,36 @@ def _finish(args: argparse.Namespace, project: str, status: int) -> int:
         status = 128 + received
     elif status:
         print(f"--- docker compose logs {SERVICE} ({project}) ---", flush=True)
-        _run([*_compose(project), "logs", "--no-color", SERVICE], _compose_env(args))
+        logs = [*_compose(project), "logs", "--no-color", SERVICE]
+        if args.results_dir is None:
+            _run(logs, _compose_env(args))
+        else:
+            log_file = args.results_dir / "logs" / f"{SERVICE}.log"
+            log_file.parent.mkdir(parents=True, exist_ok=True)
+            with log_file.open("w") as handle:
+                _run(logs, _compose_env(args), handle)
+            sys.stdout.write(log_file.read_text())
+            sys.stdout.flush()
 
     cleanup = _cleanup(args, project)
     if cleanup:
         print(f"ERROR: Docker cleanup failed with status {cleanup}", file=sys.stderr, flush=True)
         status = status or cleanup
+    if args.results_dir is not None:
+        # Last, so the summary is the final console line and covers the cleanup status.
+        _run(
+            [
+                sys.executable,
+                str(REPORTER),
+                "summarize",
+                "--lane",
+                LANE,
+                "--results-dir",
+                str(args.results_dir),
+                "--exit-code",
+                str(status),
+            ]
+        )
     return status
 
 

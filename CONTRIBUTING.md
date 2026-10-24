@@ -68,7 +68,29 @@ so the `fail_under = 95` floor in `pyproject.toml` is enforced locally exactly a
 in CI. It writes `coverage.xml` (CI uploads that file to Codecov); extra pytest
 arguments go in `PYTEST_ARGS`, for example `make test PYTEST_ARGS="-k config -x"`.
 `make clean` removes only generated, gitignored artifacts (build output, caches,
-`.coverage`, `coverage.xml`, `htmlcov/`).
+`.coverage`, `coverage.xml`, `htmlcov/`, `test-results/`).
+
+### Test results
+
+`make test` and `make integration` also write their results under the gitignored
+`test-results/` directory, which each run replaces for its lane:
+
+| Path | Written by | Content |
+|------|------------|---------|
+| `test-results/test/junit.xml`, `coverage.xml`, `summary.json` | `make test` | pytest JUnit XML, the Cobertura coverage report (the root `coverage.xml` is a copy for Codecov) and the summary |
+| `test-results/integration/junit.xml`, `summary.json`, `environment.json` | `make integration` | JUnit XML, the summary, and the Python, package and CUBRID versions, platform and command (never credentials) |
+| `test-results/integration/logs/cubrid.log` | `make integration`, on a failure only | the service log |
+
+`scripts/report_results.py` writes `summary.json` (`schema_version`, `status`,
+`counts` and, for `make test`, `coverage`) and each command ends with a one-line
+summary of the same status and counts, for example
+`test: PASS selected=1665 passed=1665 ... coverage=99.31% -> test-results/test/summary.json`.
+The status is `PASS`, `FAIL` (a failed or errored test, or a non-zero exit status such
+as a missed coverage floor) or `INCOMPLETE` (no JUnit file, nothing collected, or no
+test passed because every selected test skipped); `INCOMPLETE` is never `PASS`. The
+exit status of both commands is unchanged. `xpassed` is always 0 because JUnit XML
+cannot distinguish an unexpected pass from a pass. CI does not publish these files
+yet (#405).
 
 ### Running the Integration Suite
 

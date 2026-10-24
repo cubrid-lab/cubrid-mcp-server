@@ -69,22 +69,49 @@ def test_check_runs_lint_format_check_and_typecheck() -> None:
 
 @needs_make
 def test_test_collects_coverage_and_enforces_fail_under() -> None:
-    (line,) = dry_run("test")
-    argv = shlex.split(line)
+    argv = shlex.split(_test_recipe()[0])
     assert argv[:3] == ["python3", "-m", "pytest"]
     assert argv[argv.index("-m", 3) + 1] == "not integration"
     assert "--cov=cubrid_mcp_server" in argv
-    assert "--cov-report=xml" in argv  # the file CI uploads to Codecov
+    # CI uploads the root coverage.xml to Codecov; the same report is kept in test-results/.
+    assert "--cov-report=xml:test-results/test/coverage.xml" in argv
     # Nothing may weaken the pyproject floor that pytest-cov enforces.
     assert not [a for a in argv if a.startswith("--cov-fail-under") or a == "--no-cov"]
     pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text())
     assert pyproject["tool"]["coverage"]["report"]["fail_under"] == 95
 
 
+def _test_recipe() -> list[str]:
+    """The `make test` pytest command and the shell steps that follow it."""
+    lines = dry_run("test")
+    assert lines[0] == "rm -rf test-results/test && mkdir -p test-results/test"
+    joined = " ".join(line.removesuffix("\\").strip() for line in lines[1:])
+    pytest_command, *steps = (part.strip() for part in joined.split(";"))
+    return [pytest_command, *steps]
+
+
+@needs_make
+def test_test_writes_test_results_and_keeps_the_exit_status() -> None:
+    pytest_command, *steps = _test_recipe()
+    assert "--junitxml=test-results/test/junit.xml" in shlex.split(pytest_command)
+    assert steps[0] == "status=$?"
+    assert steps[1].startswith("cp -f test-results/test/coverage.xml coverage.xml")
+    report = shlex.split(steps[2])
+    assert report[:3] == ["python3", "scripts/report_results.py", "summarize"]
+    assert report[report.index("--exit-code") + 1] == "$status"
+    assert report[report.index("--coverage") + 1] == "test-results/test/coverage.xml"
+    assert steps[-1] == "exit $status"
+
+
 @needs_make
 def test_test_accepts_extra_pytest_args() -> None:
-    (line,) = dry_run("test", "PYTEST_ARGS=-k config -x")
-    assert line.endswith("--cov-report=xml -k config -x")
+    pytest_command = dry_run("test", "PYTEST_ARGS=-k config -x")[1].split(";")[0]
+    assert pytest_command.endswith("--junitxml=test-results/test/junit.xml -k config -x")
+
+
+def test_test_results_are_gitignored_and_cleaned() -> None:
+    assert "test-results/" in (ROOT / ".gitignore").read_text().splitlines()
+    assert "test-results" in " ".join(dry_run("clean")).split()
 
 
 @needs_make
@@ -120,6 +147,7 @@ def test_integration_owns_a_docker_database(overrides: list[str], version: str, 
     assert argv[argv.index("--cubrid-version") + 1] == version
     assert argv[argv.index("--port") + 1] == port
     assert argv[argv.index("--pytest") + 1] == "python3 -m pytest"
+    assert argv[argv.index("--results-dir") + 1] == "test-results/integration"
 
 
 @needs_make
@@ -377,8 +405,13 @@ def test_every_tool_is_bound_to_the_selected_python() -> None:
     }
     for target, lines in expected.items():
         assert dry_run(target, f"PYTHON={selected}") == lines
-    (test,) = dry_run("test", f"PYTHON={selected}")
+    test, *rest = dry_run("test", f"PYTHON={selected}")[1:]
     assert test.startswith(f"{selected} -m pytest -m ")
+    assert (
+        [line for line in rest if "report_results" in line][0]
+        .strip()
+        .startswith(f"{selected} scripts/report_results.py")
+    )
     (integration,) = dry_run("integration", f"PYTHON={selected}")
     argv = shlex.split(integration)
     assert argv[:2] == [selected, "scripts/run_integration.py"]
@@ -394,7 +427,7 @@ def test_individual_tool_variables_can_be_overridden() -> None:
     assert dry_run("typecheck", "MYPY=mypy --no-incremental") == [
         "mypy --no-incremental cubrid_mcp_server"
     ]
-    (line,) = dry_run("test", "PYTEST=pytest")
+    line = dry_run("test", "PYTEST=pytest")[1]
     assert line.startswith("pytest -m ")
 
 
