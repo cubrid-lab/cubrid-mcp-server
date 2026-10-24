@@ -20,7 +20,20 @@ so ``xpassed`` is always 0 (a strict xpass is reported as a failure by pytest).
 
 ``environment.json`` records the Python, package and CUBRID versions, the platform and
 the command. It is built from those values only, never from the process environment,
-so it cannot carry ``CUBRID_PASSWORD`` or any other secret.
+so an exported ``CUBRID_PASSWORD`` or other secret variable never reaches it. The
+command is the caller's own string (``make integration`` passes its ``--pytest``
+value), so before it is written ``redact_command`` masks credentials embedded in it
+(#426): the password of URL userinfo (``scheme://user:***@host``) and the value of a
+``password``, ``passwd``, ``pwd``, ``token``, ``secret``, ``api_key`` or ``apikey``
+assignment or option, case-insensitively and also as a key suffix (``PASSWORD=***``,
+``CUBRID_PASSWORD=***``, ``--password=***``, ``--password ***``, ``--api-key ***``).
+Everything else is kept byte for byte. The masking is a regular-expression safety net,
+not a shell parser: a bare token or a short option (``-p secret``), a URL user name or
+a user-only ``scheme://token@host``, and a quoted value that contains whitespace after
+an unquoted key (``"--password=a b"``) are not recognized, and a dashed credential flag
+that takes no value masks the next word (``--no-token tests`` -> ``--no-token ***``).
+Supply secrets through environment variables or the CI secret store, never on the
+command line, which other processes and logs can also see.
 
 Usage::
 
@@ -142,11 +155,40 @@ def package_version() -> str:
     return match.group(1) if match else "unknown"
 
 
+MASK = "***"
+# scheme://user:password@ -> keep the scheme, the user and "@"; the password ends at the
+# last "@" before whitespace, a quote, "/", "?" or "#" (RFC 3986 requires those, and any
+# "@" inside it, to be percent-encoded, so an encoded "%40" stays part of the password).
+_URL_PASSWORD = re.compile(
+    r"(?P<head>\b[A-Za-z][A-Za-z0-9+.-]*://[^\s'\"/?#@:]*:)[^\s'\"/?#]+(?=@)"
+)
+# A key that is, or ends with, a credential word: at the start of the command or after
+# whitespace, a quote, ";", "&" or "?", with or without leading dashes.
+_KEY = r"(?<![^\s'\";&?])-{0,2}[A-Za-z0-9_.-]*?(?:password|passwd|pwd|token|secret|api[_-]?key)"
+# An unquoted value ends where the shell would end the word: whitespace, a quote, ";" or
+# "&" (so a URL query keeps its other parameters).
+_VALUE = r"""(?P<value>'[^']*'|"[^"]*"|[^\s'";&]+)"""
+# KEY=value, --key=value and, only for a dashed option, "--key value".
+_ASSIGNMENT = re.compile(rf"(?P<key>{_KEY}=|(?=-){_KEY}\s+(?=[^\s-]))" + _VALUE, re.IGNORECASE)
+
+
+def _mask_value(match: re.Match[str]) -> str:
+    value = match["value"]
+    quote = value[0] if value[0] in "'\"" else ""
+    return f"{match['key']}{quote}{MASK}{quote}"
+
+
+def redact_command(command: str) -> str:
+    """Mask URL passwords and credential assignments; leave everything else unchanged."""
+    command = _ASSIGNMENT.sub(_mask_value, command)
+    return _URL_PASSWORD.sub(lambda m: m["head"] + MASK, command)
+
+
 def build_environment(lane: str, command: str, cubrid_version: str | None) -> dict[str, Any]:
     return {
         "schema_version": SCHEMA_VERSION,
         "lane": lane,
-        "command": command,
+        "command": redact_command(command),
         "python": platform.python_version(),
         "package": {"name": "cubrid-mcp-server", "version": package_version()},
         "cubrid_version": cubrid_version,

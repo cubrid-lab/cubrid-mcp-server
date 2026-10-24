@@ -182,6 +182,74 @@ def test_environment_json_never_contains_credentials(
     assert {"python", "platform", "command", "lane", "schema_version"} <= set(data)
 
 
+@pytest.mark.parametrize(
+    "command",
+    [
+        "python3 -m pytest -m integration -v",
+        "python3 -m pytest --db-url=cubrid://localhost:33000/testdb -k password_test",
+        "python3 -m pytest -k 'not password' --no-token -v -k token",
+        "python3 -m pytest --db-url=cubrid://dba@localhost:33000/testdb",
+        "curl 'http://host:8080/path?a=b@c' PASSWORD= --password=",
+    ],
+)
+def test_redact_command_keeps_a_command_without_credentials_byte_identical(command: str) -> None:
+    assert report.redact_command(command) == command
+
+
+@pytest.mark.parametrize(
+    ("command", "expected"),
+    [
+        (
+            "python -m pytest --db-url=cubrid://dba:example-secret@localhost:33000/testdb",
+            "python -m pytest --db-url=cubrid://dba:***@localhost:33000/testdb",
+        ),
+        ("x cubrid://dba:p%40ss%2Fw0rd@h:33000/db -v", "x cubrid://dba:***@h:33000/db -v"),
+        ("x cubrid://dba:p@ss@localhost/db", "x cubrid://dba:***@localhost/db"),
+        ("pytest --password=example-secret -v", "pytest --password=*** -v"),
+        ("pytest --password example-secret -v", "pytest --password *** -v"),
+        ("PASSWORD=example-secret pytest", "PASSWORD=*** pytest"),
+        ("env CUBRID_PASSWORD=example-secret pytest", "env CUBRID_PASSWORD=*** pytest"),
+        ("pytest --DB-Passwd='example secret' -v", "pytest --DB-Passwd='***' -v"),
+        (
+            'API_KEY="example-secret" x --api-key k1 --apikey=k2 --token t3 SECRET=s4 pwd=p5',
+            'API_KEY="***" x --api-key *** --apikey=*** --token *** SECRET=*** pwd=***',
+        ),
+        (
+            "curl 'https://u:example-secret@h/x?token=t1&page=2'",
+            "curl 'https://u:***@h/x?token=***&page=2'",
+        ),
+    ],
+)
+def test_redact_command_masks_url_passwords_and_credential_assignments(
+    command: str, expected: str
+) -> None:
+    redacted = report.redact_command(command)
+    assert redacted == expected
+    assert report.redact_command(redacted) == redacted  # idempotent
+
+
+def test_environment_json_redacts_credentials_in_the_command(tmp_path: Path) -> None:
+    command = (
+        "python3 -m pytest --db-url=cubrid://dba:example-secret@localhost:33000/testdb"
+        " --password example-token -m integration -v"
+    )
+    code = report.main(
+        ["environment", "--lane", "integration", "--results-dir", str(tmp_path),
+         "--command", command, "--cubrid-version", "11.4"]
+    )  # fmt: skip
+    assert code == 0
+    text = (tmp_path / "environment.json").read_text()
+    assert "example-secret" not in text and "example-token" not in text
+    data = json.loads(text)
+    assert data["command"] == (
+        "python3 -m pytest --db-url=cubrid://dba:***@localhost:33000/testdb"
+        " --password *** -m integration -v"
+    )
+    assert set(data) == {
+        "schema_version", "lane", "command", "python", "package", "cubrid_version", "platform"
+    }  # fmt: skip
+
+
 def test_environment_without_cubrid_version_writes_null(tmp_path: Path) -> None:
     code = report.main(
         ["environment", "--lane", "t", "--results-dir", str(tmp_path), "--command", "test"]

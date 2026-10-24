@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- **`environment.json` masks credentials embedded in the recorded command (#426)** — `scripts/report_results.py` stored the `--command` string, which `make integration` builds from its overridable `--pytest` value, verbatim, so a password assignment, an authenticated database URL or a token option in it would have reached the `test-results/integration/environment.json` CI artifact. It now masks the password of URL userinfo (`scheme://user:***@host`, percent-encoded passwords included) and the value of a `password`, `passwd`, `pwd`, `token`, `secret`, `api_key` or `apikey` assignment or option, case-insensitively and as a key suffix (`PASSWORD=***`, `CUBRID_PASSWORD=***`, `--password=***`, `--password ***`), and keeps every other byte of the command. The schema, statuses, exit codes and the arguments pytest receives are unchanged. The masking is a best-effort safety net with documented limits (for example `-p secret` is not recognized); `CONTRIBUTING.md` and the module docstring now say to supply secrets through environment variables or the CI secret store, not the command line. Refs #426.
+
 ### CI
 
 - **The temporary `last-release-sha` override is removed after 0.5.4 (#388)** — `v0.5.4` is published, and the release run verified it against the cookbook, so the next candidate starts from that tag. The override for the abandoned 0.5.3 (`8633db6`) is no longer needed, and leaving it in place would make a later recovery start from a stale base (RELEASING.md, "A merged X.Y.Z is abandoned"). Refs #388.

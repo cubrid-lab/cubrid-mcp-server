@@ -299,6 +299,31 @@ def test_results_dir_gets_junit_environment_and_summary(
     assert capfd.readouterr().out.strip().splitlines()[-1].startswith("integration: INCOMPLETE")
 
 
+def test_results_dir_environment_redacts_credentials_in_the_pytest_command(
+    fake: dict[str, Any], tmp_path: Path
+) -> None:
+    secrets = (
+        " --db-url=cubrid://dba:example-secret@127.0.0.1:33524/demodb --password example-token"
+    )
+    args = [*fake["args"][:-1], fake["args"][-1] + secrets]
+    results = tmp_path / "results"
+    assert run_integration.main([*args, "--results-dir", str(results)]) == 0
+    # pytest itself still gets the arguments it was given.
+    (pytest_call,) = [c for c in calls(fake) if c[0] == "pytest"]
+    assert pytest_call[1:4] == [
+        "--db-url=cubrid://dba:example-secret@127.0.0.1:33524/demodb",
+        "--password",
+        "example-token",
+    ]
+    environment = (results / "environment.json").read_text()
+    assert "example-secret" not in environment and "example-token" not in environment
+    assert json.loads(environment)["command"] == (
+        f"{fake['args'][-1]} --db-url=cubrid://dba:***@127.0.0.1:33524/demodb --password ***"
+        " -m integration -v"
+    )
+    assert_taken_down(fake)
+
+
 def test_results_dir_failure_writes_the_service_log_and_fails(
     fake: dict[str, Any],
     tmp_path: Path,

@@ -78,7 +78,7 @@ arguments go in `PYTEST_ARGS`, for example `make test PYTEST_ARGS="-k config -x"
 | Path | Written by | Content |
 |------|------------|---------|
 | `test-results/test/junit.xml`, `coverage.xml`, `summary.json` | `make test` | pytest JUnit XML, the Cobertura coverage report (the root `coverage.xml` is a copy for Codecov) and the summary |
-| `test-results/integration/junit.xml`, `summary.json`, `environment.json` | `make integration` | JUnit XML, the summary, and the Python, package and CUBRID versions, platform and command (never credentials) |
+| `test-results/integration/junit.xml`, `summary.json`, `environment.json` | `make integration` | JUnit XML, the summary, and the Python, package and CUBRID versions, platform and command (credentials in it masked, see below) |
 | `test-results/integration/logs/cubrid.log` | `make integration`, on a failure only | the service log |
 
 `scripts/report_results.py` writes `summary.json` (`schema_version`, `status`,
@@ -90,6 +90,18 @@ as a missed coverage floor) or `INCOMPLETE` (no JUnit file, nothing collected, o
 test passed because every selected test skipped); `INCOMPLETE` is never `PASS`. The
 exit status of both commands is unchanged. `xpassed` is always 0 because JUnit XML
 cannot distinguish an unexpected pass from a pass.
+
+`environment.json` is never built from the process environment, so an exported
+`CUBRID_PASSWORD` cannot reach it, but its `command` is the `--pytest` value of
+`make integration` (`PYTEST=...`) or the `--command` of `report_results.py environment`.
+Before writing it, `report_results.py` masks credentials embedded in that string: a URL
+password (`cubrid://dba:***@host`) and the value of a `password`, `passwd`, `pwd`,
+`token`, `secret`, `api_key` or `apikey` assignment or option (`PASSWORD=***`,
+`CUBRID_PASSWORD=***`, `--password=***`, `--password ***`); everything else is kept as
+given. This is a best-effort safety net, not a parser (a short option such as
+`-p secret` is not recognized; the module docstring lists the limits), and the command
+line is still visible to other processes, so supply secrets through environment
+variables or the CI secret store, never on the command line.
 
 CI publishes the same results on every run of `make test` (the `lint-and-test` job of
 `ci.yml`) and `make integration` (`ci.yml` and `integration-full.yml`), pass or fail:
