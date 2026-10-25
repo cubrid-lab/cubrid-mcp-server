@@ -57,7 +57,7 @@ make format        # ruff format . + ruff check --fix . (the only target that ed
 
 ```bash
 make test               # offline unit tests with coverage; fails below fail_under (95)
-make verify             # make check, make test, then make integration (needs Docker)
+make verify             # make check, make test, then make integration (needs Docker); writes test-results/verify/
 make integration        # integration tests on a Compose CUBRID it starts and removes
 make integration-local  # integration tests against a CUBRID you already run
 make docker-up          # a persistent local CUBRID for manual work (Docker Compose)
@@ -73,13 +73,15 @@ arguments go in `PYTEST_ARGS`, for example `make test PYTEST_ARGS="-k config -x"
 ### Test results
 
 `make test` and `make integration` also write their results under the gitignored
-`test-results/` directory, which each run replaces for its lane:
+`test-results/` directory, which each run replaces for its lane, and `make verify`
+writes an aggregate of them (see [Verification summary](#verification-summary)):
 
 | Path | Written by | Content |
 |------|------------|---------|
 | `test-results/test/junit.xml`, `coverage.xml`, `summary.json` | `make test` | pytest JUnit XML, the Cobertura coverage report (the root `coverage.xml` is a copy for Codecov) and the summary |
 | `test-results/integration/junit.xml`, `summary.json`, `environment.json` | `make integration` | JUnit XML, the summary, and the Python, package and CUBRID versions, platform and command (credentials in it masked, see below) |
 | `test-results/integration/logs/cubrid.log` | `make integration`, on a failure only | the service log |
+| `test-results/verify/summary.json`, `junit/<lane>.xml`, `environment.json` | `make verify`, always | the aggregate summary and masked copies of the lanes' JUnit files and the live `environment.json` |
 
 `scripts/report_results.py` writes `summary.json` (`schema_version`, `status`,
 `counts` and, for `make test`, `coverage`) and each command ends with a one-line
@@ -113,6 +115,36 @@ uploaded as the `test-results-test-py<python>`,
 no permissions: the workflows keep `contents: read` and the artifacts are readable by
 anyone who can read the run.
 
+#### Verification summary
+
+`make verify` runs `scripts/run_verify.py`, which runs `make check`, `make test` and
+`make integration` one after another, stops at the first failing phase and then always
+writes `test-results/verify/` (after removing the previous `verify`, `test` and
+`integration` results), also after a failure or a signal:
+
+- `summary.json`: `schema_version`, `lane` (`verify`), the overall `status` and one
+  entry per phase (`check`, `test`, `integration`) with its `status`, `exit_code`, the
+  lane's own `summary` path and `summary_status`, and a list of `problems`. A phase is
+  `PASS` only when it exited 0 and its lane summary says `PASS`, and `NOT_RUN` (exit
+  code `null`) when it never started. The overall status is `FAIL` when a phase failed,
+  `INCOMPLETE` when a phase did not run, a live lane proved nothing (every test
+  skipped), a lane summary is missing, unreadable or has no string status, or a result
+  file could not be copied, and `PASS` only otherwise.
+- `junit/test.xml`, `junit/integration.xml`: copies of the JUnit files of the lanes
+  that ran this time.
+- `environment.json`: a copy of the live lane's `environment.json`.
+
+Every copy has the configured connection passwords (`CUBRID_PASSWORD` and the
+`CUBRID_<NAME>_PASSWORD` of each connection in `CUBRID_CONNECTIONS`, as the server reads
+them, also percent-encoded and XML-escaped) replaced with `***`. The run ends with one
+line that matches `summary.json`, for example
+`verify: FAIL check=PASS test=FAIL integration=NOT_RUN [integration did not run] -> test-results/verify/summary.json`.
+The exit status is the first failing phase's, 1 when every phase exited 0 but the
+summary is not `PASS`, or 128 + the signal number: the first SIGINT, SIGTERM or SIGHUP
+is forwarded to the running phase (the live lane still removes its Compose project),
+no further phase starts and the summary is still written. `make -n verify` writes
+nothing.
+
 ### Running the Integration Suite
 
 `make integration` needs only Docker (with the Compose plugin). It starts the
@@ -123,7 +155,7 @@ publishes the broker on `127.0.0.1:<CUBRID_TEST_PORT>` (33000 by default) and
 waits until the service's health check passes (`up --detach --wait`). It then runs
 `pytest -m integration -v` against it and always takes that project down with
 `down --volumes`, removing its container, network and volumes, on success,
-failure, a readiness failure or Ctrl-C (SIGINT/SIGTERM). On a failure it prints
+failure, a readiness failure, Ctrl-C or a signal (SIGINT/SIGTERM/SIGHUP). On a failure it prints
 the service log first. The exit status is the first failing step's (128 + the
 signal number after a signal); a cleanup failure fails an otherwise successful
 run. CI's live jobs run the same target with the matrix version:

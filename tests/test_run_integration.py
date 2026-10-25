@@ -3,7 +3,7 @@
 A fake ``docker`` on ``PATH`` records every ``docker compose`` call and the variables
 it would interpolate, so these tests need neither Docker nor CUBRID. They pin that the
 run-owned Compose project (#402) is always taken down with its volumes, on success,
-failure, a readiness failure and SIGINT/SIGTERM, and that exit statuses propagate.
+failure, a readiness failure and SIGINT/SIGTERM/SIGHUP, and that exit statuses propagate.
 """
 
 from __future__ import annotations
@@ -201,6 +201,7 @@ def test_main_preserves_ignored_signal_and_restores_handlers(
     handlers: dict[signal.Signals, object] = {
         signal.SIGINT: signal.default_int_handler,
         signal.SIGTERM: signal.SIG_IGN,
+        signal.SIGHUP: signal.SIG_DFL,
     }
     observed: dict[signal.Signals, object] = {}
 
@@ -231,6 +232,7 @@ def test_main_preserves_ignored_signal_and_restores_handlers(
     assert observed == {
         signal.SIGINT: run_integration._interrupt,
         signal.SIGTERM: signal.SIG_IGN,
+        signal.SIGHUP: run_integration._interrupt,
     }
     assert {sig: run_integration.signal.getsignal(sig) for sig in handlers} == before
 
@@ -241,12 +243,17 @@ def test_runner_uses_the_docker_up_service() -> None:
 
 
 @pytest.mark.parametrize("step", ["up", "pytest"], ids=["during-up", "during-tests"])
-@pytest.mark.parametrize("sig", [signal.SIGINT, signal.SIGTERM], ids=["SIGINT", "SIGTERM"])
+@pytest.mark.parametrize(
+    "sig", [signal.SIGINT, signal.SIGTERM, signal.SIGHUP], ids=["SIGINT", "SIGTERM", "SIGHUP"]
+)
 def test_signal_stops_the_running_step_and_still_cleans_up(
     fake: dict[str, Any], monkeypatch: pytest.MonkeyPatch, sig: signal.Signals, step: str
 ) -> None:
     monkeypatch.setenv("FAKE_UP_SLEEP" if step == "up" else "FAKE_PYTEST_SLEEP", "60")
-    proc = subprocess.Popen([sys.executable, str(SCRIPT), *fake["args"]])
+    # A background job starts with SIGINT ignored, which the runner keeps; reset it.
+    proc = subprocess.Popen(
+        [sys.executable, str(SCRIPT), *fake["args"]], preexec_fn=_default_sigint
+    )
 
     def started() -> bool:
         if step == "pytest":
@@ -264,6 +271,10 @@ def test_signal_stops_the_running_step_and_still_cleans_up(
         assert not [c for c in calls(fake) if c[0] == "pytest"]
     assert "logs" not in compose_commands(fake)
     assert_taken_down(fake)
+
+
+def _default_sigint() -> None:
+    signal.signal(signal.SIGINT, signal.SIG_DFL)
 
 
 def reporting_args(fake: dict[str, Any], results: Path) -> list[str]:

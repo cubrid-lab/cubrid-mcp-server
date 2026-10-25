@@ -15,6 +15,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   tests pass, also under `make -j`. `make test` stays offline; run `make check test` for the
   former offline-only `make verify`. Development tooling only; the MCP tools are unchanged.
 
+### Added
+
+- **`make verify` writes an aggregate summary (#449)** — `scripts/run_verify.py` now runs the
+  three phases and always writes `test-results/verify/summary.json` (overall `PASS`/`FAIL`/
+  `INCOMPLETE` and each phase's status, `NOT_RUN` when it never started, and exit code), copies of
+  the lanes' JUnit files under `junit/<lane>.xml` and the live `environment.json`, with the
+  configured connection passwords masked, also after a failure or a signal. A missing, unreadable
+  or non-string lane status, an all-skipped live lane or a file that cannot be copied is never
+  `PASS`. The first SIGINT, SIGTERM or SIGHUP is forwarded to the running phase and the run exits
+  128 + the signal number; `make integration` now `exec`s its runner, so a SIGTERM to make reaches
+  it, and the runner also cleans up on SIGHUP. New `scripts/report_results.py aggregate`
+  subcommand. Development tooling only; the MCP tools are unchanged.
+
 ### CI
 
 - **Every new issue starts in `status: needs triage` (#418)** — the issue forms add the

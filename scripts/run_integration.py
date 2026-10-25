@@ -23,8 +23,9 @@ containers, images and volumes are never touched. The test endpoint is pinned, s
 stray ``CUBRID_*`` export cannot point the run at another server.
 
 Exit status: the first failing step's status. A cleanup failure is reported and fails
-an otherwise successful run, but never hides an earlier failure. SIGINT and SIGTERM
-stop the running step, still clean up, and exit 128 + the signal number.
+an otherwise successful run, but never hides an earlier failure. SIGINT, SIGTERM and
+SIGHUP (a closed terminal, #449) stop the running step, still clean up, and exit
+128 + the signal number.
 
 Usage (see the Makefile)::
 
@@ -54,10 +55,11 @@ DATABASE = "demodb"
 PROJECT_PREFIX = "cubrid-mcp-it-"
 REPORTER = ROOT / "scripts" / "report_results.py"
 LANE = "integration"
+HANDLED_SIGNALS = (signal.SIGINT, signal.SIGTERM, signal.SIGHUP)
 
 
 class Interrupted(Exception):
-    """Raised from the SIGINT/SIGTERM handler to unwind into cleanup."""
+    """Raised from the SIGINT/SIGTERM/SIGHUP handler to unwind into cleanup."""
 
 
 # Only the first signal unwinds the run; later ones (including any during cleanup)
@@ -191,7 +193,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         flush=True,
     )
     _signals.update(armed=True, received=None)
-    previous = {sig: signal.getsignal(sig) for sig in (signal.SIGINT, signal.SIGTERM)}
+    previous = {sig: signal.getsignal(sig) for sig in HANDLED_SIGNALS}
     for sig, handler in previous.items():
         # Like a shell trap, keep a signal that was ignored on entry ignored.
         if handler is not signal.SIG_IGN:

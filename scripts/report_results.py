@@ -36,6 +36,19 @@ that takes no value masks the next word (``--no-token tests`` -> ``--no-token **
 Supply secrets through environment variables or the CI secret store, never on the
 command line, which other processes and logs can also see.
 
+``aggregate`` writes ``make verify``'s ``test-results/verify/summary.json`` (#449) from
+its phases, in order: ``--phase NAME=EXIT`` (or ``NAME=not-run``), optionally with
+``:SUMMARY`` naming the phase's own ``summary.json``. A phase is ``PASS`` only when it
+exited 0 and its summary (when it has one) has the status ``PASS``; ``NOT_RUN`` when it
+never started. ``verify`` is ``FAIL`` when a phase failed, ``INCOMPLETE`` when one did
+not run, proved nothing or has a missing, unreadable or non-string summary status, and
+``PASS`` otherwise. ``--copy-junit NAME=PATH`` copies a lane's JUnit file to
+``junit/NAME.xml`` and ``--environment PATH`` the live lane's ``environment.json``; the
+configured connection passwords (``CUBRID_PASSWORD`` and the ``CUBRID_<NAME>_PASSWORD``
+of every connection in ``CUBRID_CONNECTIONS``, as the server reads them, also
+percent-encoded and XML-escaped) are replaced with ``***`` in every copy, and a file
+that cannot be copied keeps the summary from ``PASS``. It exits 0 only for ``PASS``.
+
 Usage::
 
     python3 scripts/report_results.py summarize --lane test --results-dir test-results/test \
@@ -44,16 +57,22 @@ Usage::
         --title "Unit tests (Python 3.12)" >> "$GITHUB_STEP_SUMMARY"
     python3 scripts/report_results.py environment --lane integration \
         --results-dir test-results/integration --command "..." --cubrid-version 11.4
+    python3 scripts/report_results.py aggregate --output test-results/verify/summary.json \
+        --phase check=0 --phase test=1:test-results/test/summary.json \
+        --phase integration=not-run --copy-junit test=test-results/test/junit.xml
 """
 
 from __future__ import annotations
 
 import argparse
+import html
 import json
+import os
 import platform
 import re
+import urllib.parse
 import xml.etree.ElementTree as ET
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -132,6 +151,8 @@ def build_summary(lane: str, junit: Path, coverage: Path | None, exit_code: int)
 
 
 def console_line(summary: dict[str, Any]) -> str:
+    if "phases" in summary:
+        return aggregate_line(summary)
     counts = summary["counts"]
     parts = [f"{name}={counts[name]}" for name in COUNTS]
     if "coverage" in summary:
@@ -199,6 +220,156 @@ def build_environment(lane: str, command: str, cubrid_version: str | None) -> di
     }
 
 
+STATUSES = ("PASS", "FAIL", "INCOMPLETE")
+
+
+def _phase_status(path: Path) -> tuple[str | None, str]:
+    """The ``status`` of a lane's ``summary.json`` and a problem when it is unusable."""
+    try:
+        status = json.loads(path.read_text())["status"]
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        return None, f"cannot read {path}: {exc}"
+    if not isinstance(status, str) or status not in STATUSES:
+        return None, f"{path} has an unknown status {status!r}"
+    return status, ""
+
+
+def build_aggregate(
+    phases: Sequence[tuple[str, int | None, Path | None]], problems: Sequence[str] = ()
+) -> dict[str, Any]:
+    """``make verify``'s summary: one entry per phase, in the order given.
+
+    *problems* (a result file that could not be copied) keep it from ``PASS``.
+    """
+    entries: list[dict[str, Any]] = []
+    found = list(problems)
+    for name, exit_code, summary_path in phases:
+        lane_status: str | None = None
+        if exit_code is None:
+            status = "NOT_RUN"
+            found.append(f"{name} did not run")
+        else:
+            if summary_path is not None:
+                lane_status, problem = _phase_status(summary_path)
+                if problem:
+                    found.append(f"{name}: {problem}")
+            if exit_code != 0 or lane_status == "FAIL":
+                status = "FAIL"
+            elif summary_path is not None and lane_status != "PASS":
+                status = "INCOMPLETE"
+                if lane_status == "INCOMPLETE":
+                    found.append(f"{name} is INCOMPLETE")
+            else:
+                status = "PASS"
+        entries.append(
+            {
+                "name": name,
+                "status": status,
+                "exit_code": exit_code,
+                "summary": None if summary_path is None else str(summary_path),
+                "summary_status": lane_status,
+            }
+        )
+    statuses = {entry["status"] for entry in entries}
+    if not entries:
+        overall = "INCOMPLETE"
+        found.append("no phase was given")
+    elif "FAIL" in statuses:
+        overall = "FAIL"
+    elif statuses == {"PASS"} and not problems:
+        overall = "PASS"
+    else:
+        overall = "INCOMPLETE"
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "lane": "verify",
+        "status": overall,
+        "phases": entries,
+        "problems": found,
+    }
+
+
+def aggregate_line(summary: dict[str, Any]) -> str:
+    parts = [f"{phase['name']}={phase['status']}" for phase in summary["phases"]]
+    line = f"{summary['lane']}: {summary['status']} " + " ".join(parts)
+    if summary["problems"]:
+        line += " [" + "; ".join(str(p) for p in summary["problems"]) + "]"
+    return line
+
+
+def configured_secrets(environ: Mapping[str, str]) -> list[str]:
+    """Every configured connection password in each written form, longest first.
+
+    The password variables are the ones the server reads (``ConnectionRegistry.from_env``):
+    ``CUBRID_PASSWORD`` and ``CUBRID_<NAME>_PASSWORD`` for each name in
+    ``CUBRID_CONNECTIONS``.
+    """
+    names = ["CUBRID_PASSWORD"]
+    for part in environ.get("CUBRID_CONNECTIONS", "").split(","):
+        if part.strip():
+            names.append(f"CUBRID_{part.strip().upper()}_PASSWORD")
+    forms: set[str] = set()
+    for secret in filter(None, (environ.get(name, "") for name in names)):
+        for form in (secret, urllib.parse.unquote(secret), urllib.parse.quote(secret, safe="")):
+            forms.update((form, html.escape(form), html.escape(form, quote=False)))
+    return sorted(filter(None, forms), key=len, reverse=True)
+
+
+def scrub(data: bytes, secrets: Sequence[str]) -> bytes:
+    """Replace every form of the configured secrets in *data* with ``***``."""
+    for secret in secrets:
+        data = data.replace(secret.encode(), MASK.encode())
+    return data
+
+
+def _parse_phase(text: str) -> tuple[str, int | None, Path | None]:
+    name, sep, rest = text.partition("=")
+    if not name or not sep:
+        raise argparse.ArgumentTypeError(f"expected NAME=EXIT[:SUMMARY], got {text!r}")
+    code, _, path = rest.partition(":")
+    if code == "not-run":
+        return name, None, Path(path) if path else None
+    try:
+        return name, int(code), Path(path) if path else None
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"bad exit status in {text!r}") from None
+
+
+def _parse_pair(text: str) -> tuple[str, Path]:
+    name, sep, path = text.partition("=")
+    if not name or not sep or not path:
+        raise argparse.ArgumentTypeError(f"expected NAME=PATH, got {text!r}")
+    return name, Path(path)
+
+
+def aggregate(
+    output: Path,
+    phases: Sequence[tuple[str, int | None, Path | None]],
+    junits: Sequence[tuple[str, Path]],
+    environment: Path | None,
+) -> dict[str, Any]:
+    """Copy the lanes' files next to *output* (masked) and write the aggregate summary."""
+    directory = output.parent
+    directory.mkdir(parents=True, exist_ok=True)
+    secrets = configured_secrets(os.environ)
+    copies = [(junit, directory / "junit" / f"{name}.xml") for name, junit in junits]
+    if environment is not None:
+        copies.append((environment, directory / "environment.json"))
+    problems = []
+    for source, target in copies:
+        if not source.exists():
+            continue
+        try:
+            target.parent.mkdir(exist_ok=True)
+            target.write_bytes(scrub(source.read_bytes(), secrets))
+        except OSError as exc:
+            target.unlink(missing_ok=True)
+            problems.append(f"could not copy {source}: {exc}")
+    summary = build_aggregate(phases, problems)
+    _write_json(output, summary)
+    return summary
+
+
 def _write_json(path: Path, data: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(data, indent=2) + "\n")
@@ -209,6 +380,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     sub = parser.add_subparsers(dest="action", required=True)
     summarize = sub.add_parser("summarize", help="write summary.json and print one line")
     environment = sub.add_parser("environment", help="write environment.json")
+    agg = sub.add_parser("aggregate", help="write make verify's summary.json")
+    agg.add_argument("--output", required=True, type=Path, help="summary.json to write")
+    agg.add_argument("--phase", action="append", default=[], type=_parse_phase)
+    agg.add_argument("--copy-junit", action="append", default=[], type=_parse_pair)
+    agg.add_argument("--environment", type=Path, help="the live lane's environment.json")
     step = sub.add_parser("step-summary", help="print summary.json as Markdown")
     step.add_argument("--results-dir", required=True, type=Path)
     step.add_argument("--title", help="heading, e.g. the matrix entry")
@@ -222,6 +398,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     environment.add_argument("--cubrid-version")
     args = parser.parse_args(argv)
 
+    if args.action == "aggregate":
+        summary = aggregate(args.output, args.phase, args.copy_junit, args.environment)
+        print(f"{console_line(summary)} -> {args.output}", flush=True)
+        return 0 if summary["status"] == "PASS" else 1
     results: Path = args.results_dir
     if args.action == "step-summary":
         print(step_summary(results, args.title), end="")

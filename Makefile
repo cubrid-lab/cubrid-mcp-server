@@ -20,7 +20,7 @@ CUBRID_VERSION ?= 11.4
 CUBRID_TEST_PORT ?= 33000
 INTEGRATION_PORT ?= $(CUBRID_TEST_PORT)
 # Where `make test` and `make integration` write JUnit XML, coverage.xml, summary.json and
-# environment.json (gitignored; `make clean` removes it).
+# environment.json, and `make verify` its aggregate (gitignored; `make clean` removes it).
 RESULTS ?= test-results
 
 ##@ General
@@ -65,16 +65,25 @@ test: ## Run offline unit tests with coverage; fails below fail_under (writes co
 
 # Full verification (#404): the static gate, the offline tests, then the run-owned live
 # lane, which needs Docker and fails when CUBRID never becomes ready or every live test
-# skips. Each phase is its own sub-make on its own recipe line, not a prerequisite, so even
-# `make -j` starts a phase only after the previous one succeeded, and the SIGTERM that make
-# forwards to a recipe reaches the running sub-make (and through it the integration runner).
-verify: ## Full verification: check, the offline tests, then the live integration lane (needs Docker)
-	@$(MAKE) --no-print-directory check
-	@$(MAKE) --no-print-directory test
-	@$(MAKE) --no-print-directory integration
+# skips. scripts/run_verify.py runs the phases one after another (never as prerequisites,
+# so even `make -j` starts each one only after the previous one succeeded), forwards the
+# first SIGINT/SIGTERM/SIGHUP to the running phase and then always writes
+# $(RESULTS)/verify/summary.json with the lanes' JUnit files and the live environment.json
+# (#449). `exec` makes it the recipe's only process, so make's signals reach it.
+# VERIFY_MAKE is $(MAKE) under another name: a recipe line that names $(MAKE) would run
+# even under `make -n`, which must write nothing.
+VERIFY_MAKE = $(MAKE)
+verify: ## Full verification: check, the offline tests, then the live integration lane (needs Docker); writes test-results/verify/
+	@case "$(RESULTS)" in ""|.|./|..|../|/) \
+		echo "ERROR: refusing to use results directory '$(RESULTS)'" >&2; exit 2;; esac
+	rm -rf -- "$(RESULTS)/verify" "$(RESULTS)/test" "$(RESULTS)/integration"
+	@exec $(PYTHON) scripts/run_verify.py --make "$(VERIFY_MAKE)" \
+		--results-dir "$(RESULTS)/verify" \
+		--test-results "$(RESULTS)/test" \
+		--integration-results "$(RESULTS)/integration"
 
 integration: ## Start a run-owned Compose CUBRID, run integration tests, always remove it (CUBRID_VERSION, CUBRID_TEST_PORT)
-	$(PYTHON) scripts/run_integration.py --cubrid-version "$(CUBRID_VERSION)" --port "$(INTEGRATION_PORT)" --pytest "$(PYTEST)" --results-dir "$(RESULTS)/integration"
+	@exec $(PYTHON) scripts/run_integration.py --cubrid-version "$(CUBRID_VERSION)" --port "$(INTEGRATION_PORT)" --pytest "$(PYTEST)" --results-dir "$(RESULTS)/integration"
 
 integration-local: ## Run integration tests against an already-running CUBRID (CUBRID_HOST, CUBRID_PORT, ...)
 	$(PYTEST) -m "integration" -q

@@ -8,12 +8,15 @@ jobs call its targets instead of re-implementing them. Recipes are read with
 from __future__ import annotations
 
 import importlib.util
+import json
 import os
 import re
 import shlex
 import shutil
+import signal
 import subprocess
 import sys
+import time
 import tomllib
 from pathlib import Path
 from typing import Any
@@ -126,16 +129,28 @@ def test_test_results_are_gitignored_and_cleaned() -> None:
 
 
 @needs_make
-def test_verify_is_check_then_test_then_the_live_lane() -> None:
-    # Sub-makes on separate recipe lines, not prerequisites (#404).
-    assert re.search(r"^verify:\s*##", (ROOT / "Makefile").read_text(), re.M)
-    lines = dry_run("verify")
-    # `make -n` prints each sub-make line, then the sub-make's own recipe.
-    submakes = [line.split()[1:] for line in lines if " --no-print-directory " in line]
-    assert submakes == [["--no-print-directory", p] for p in ("check", "test", "integration")]
-    recipes = [line for line in lines if " --no-print-directory " not in line]
-    assert recipes == dry_run("check") + dry_run("test") + dry_run("integration")
-    assert "scripts/run_integration.py" in lines[-1]
+def test_verify_execs_the_runner_and_a_dry_run_writes_nothing(tmp_path: Path) -> None:
+    # Not prerequisites, so `make -j` cannot start a later phase early (#404).
+    assert re.search(r"^verify:\s*##\s", (ROOT / "Makefile").read_text(), re.M)
+    lines = dry_run("verify", f"RESULTS={tmp_path}/results")
+    runner = [line for line in lines if line.startswith("exec python3 scripts/run_verify.py ")]
+    assert runner == [f'exec python3 scripts/run_verify.py --make "{MAKE}" \\']
+    assert not [line for line in lines if "run_integration" in line or "-m pytest" in line]
+    assert not list(tmp_path.iterdir())
+
+
+@needs_make
+@pytest.mark.parametrize("results", ["", ".", "/"])
+def test_verify_refuses_a_dangerous_results_directory(results: str) -> None:
+    assert MAKE is not None
+    env = {k: v for k, v in os.environ.items() if k not in OUTER_MAKE}
+    result = subprocess.run(
+        [MAKE, "--no-print-directory", "-C", str(ROOT), "verify", f"RESULTS={results}",
+         "PYTHON=false"],
+        env=env, capture_output=True, text=True, check=False,
+    )  # fmt: skip
+    assert result.returncode == 2
+    assert "refusing to use results directory" in result.stderr
 
 
 @needs_make
@@ -154,30 +169,112 @@ def test_test_stays_offline() -> None:
     assert not [line for line in dry_run("test") if "docker" in line or "run_integration" in line]
 
 
+def _verify_stub(tmp_path: Path, *, fail: str = "", block: str = "") -> tuple[Path, Path]:
+    """A PYTHON that logs every call and runs the real verify runner and reporter.
+
+    The offline pytest run fails when *fail* is ``"test"``; the live runner blocks until
+    SIGTERM when *block* is ``"integration"`` and logs that it was terminated. Every
+    other call succeeds without doing anything.
+    """
+    log = tmp_path / "python.log"
+    stub = tmp_path / "python"
+    script = (
+        f'#!/bin/sh\nprintf "%s\\n" "$*" >> "{log}"\n'
+        'case " $* " in *" scripts/run_verify.py "*|*" scripts/report_results.py "*)'
+        f' exec "{sys.executable}" "$@" ;; esac\n'
+    )
+    if fail == "test":
+        script += 'case " $* " in *" -m pytest "*"not integration"*) exit 1 ;; esac\n'
+    if block == "integration":
+        script += (
+            'case " $* " in *" scripts/run_integration.py "*)\n'
+            "  sleep 30 & pid=$!\n"
+            f"  trap 'kill $pid; echo TERMINATED >> \"{log}\"; exit 143' TERM\n"
+            f'  echo BLOCKING >> "{log}"\n'
+            "  wait $pid; exit 0 ;;\nesac\n"
+        )
+    stub.write_text(script + "exit 0\n")
+    stub.chmod(0o755)
+    return stub, log
+
+
+def _make_verify(tmp_path: Path, stub: Path, *jobs: str) -> subprocess.CompletedProcess[str]:
+    assert MAKE is not None
+    env = {k: v for k, v in os.environ.items() if k not in OUTER_MAKE}
+    return subprocess.run(
+        [MAKE, "--no-print-directory", "-C", str(ROOT), *jobs, "verify",
+         f"PYTHON={stub}", f"RESULTS={tmp_path}/results"],
+        env=env, capture_output=True, text=True, check=False,
+    )  # fmt: skip
+
+
+def _verify_summary(tmp_path: Path) -> tuple[str, dict[str, str]]:
+    summary = json.loads((tmp_path / "results" / "verify" / "summary.json").read_text())
+    return summary["status"], {phase["name"]: phase["status"] for phase in summary["phases"]}
+
+
+@needs_make
+def test_verify_runs_check_then_test_then_the_live_lane(tmp_path: Path) -> None:
+    stub, log = _verify_stub(tmp_path)
+    result = _make_verify(tmp_path, stub)
+    calls = log.read_text().splitlines()
+    static = max(i for i, call in enumerate(calls) if " ruff " in call or " mypy " in call)
+    offline = next(i for i, call in enumerate(calls) if "not integration" in call)
+    live = next(i for i, call in enumerate(calls) if "scripts/run_integration.py" in call)
+    assert static < offline < live
+    # The stub writes no lane summaries, so the run proves nothing and is never PASS.
+    assert result.returncode != 0
+    assert "verify: INCOMPLETE check=PASS test=INCOMPLETE integration=INCOMPLETE " in result.stdout
+    status, phases = _verify_summary(tmp_path)
+    assert status == "INCOMPLETE"
+    assert phases == {"check": "PASS", "test": "INCOMPLETE", "integration": "INCOMPLETE"}
+
+
 @needs_make
 @pytest.mark.parametrize("jobs", [[], ["-j3"]], ids=["serial", "parallel"])
 def test_verify_never_starts_the_live_lane_after_failing_offline_tests(
     tmp_path: Path, jobs: list[str]
 ) -> None:
-    assert MAKE is not None
-    log = tmp_path / "python.log"
-    stub = tmp_path / "python"
-    # Logs every call; the offline pytest run fails, everything else succeeds.
-    stub.write_text(
-        f'#!/bin/sh\nprintf "%s\\n" "$*" >> "{log}"\n'
-        'case " $* " in *" -m pytest "*"not integration"*) exit 1 ;; esac\nexit 0\n'
-    )
-    stub.chmod(0o755)
-    env = {k: v for k, v in os.environ.items() if k not in OUTER_MAKE}
-    result = subprocess.run(
-        [MAKE, "--no-print-directory", "-C", str(ROOT), *jobs, "verify",
-         f"PYTHON={stub}", f"RESULTS={tmp_path}/results"],
-        env=env, capture_output=True, text=True, check=False,
-    )  # fmt: skip
+    stub, log = _verify_stub(tmp_path, fail="test")
+    result = _make_verify(tmp_path, stub, *jobs)
     assert result.returncode != 0
     calls = log.read_text().splitlines()
     assert any("-m pytest" in call for call in calls)
     assert not any("scripts/run_integration.py" in call for call in calls)
+    # The summary records the failed offline phase and the live lane that never ran.
+    assert _verify_summary(tmp_path) == (
+        "FAIL",
+        {"check": "PASS", "test": "FAIL", "integration": "NOT_RUN"},
+    )
+    assert "verify: FAIL check=PASS test=FAIL integration=NOT_RUN " in result.stdout
+
+
+@needs_make
+def test_verify_forwards_sigterm_to_the_live_lane_and_still_writes_the_summary(
+    tmp_path: Path,
+) -> None:
+    # `timeout make verify` and `kill <make pid>` signal only make, which forwards SIGTERM
+    # to the runner; the runner must stop the live lane (which then cleans up), not orphan it.
+    assert MAKE is not None
+    stub, log = _verify_stub(tmp_path, block="integration")
+    env = {k: v for k, v in os.environ.items() if k not in OUTER_MAKE}
+    process = subprocess.Popen(
+        [MAKE, "--no-print-directory", "-C", str(ROOT), "verify",
+         f"PYTHON={stub}", f"RESULTS={tmp_path}/results"],
+        env=env, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True,
+    )  # fmt: skip
+    deadline = time.monotonic() + 30
+    while "BLOCKING" not in (log.read_text() if log.exists() else ""):
+        assert process.poll() is None and time.monotonic() < deadline, "live lane never started"
+        time.sleep(0.05)
+    process.send_signal(signal.SIGTERM)
+    _, stderr = process.communicate(timeout=30)
+    assert process.returncode != 0
+    assert "TERMINATED" in log.read_text(), stderr
+    assert "Received SIGTERM; stopping make verify" in stderr
+    status, phases = _verify_summary(tmp_path)
+    assert status == "FAIL"
+    assert phases == {"check": "PASS", "test": "INCOMPLETE", "integration": "FAIL"}
 
 
 @needs_make
@@ -202,7 +299,9 @@ def test_only_format_mutates_sources() -> None:
 def test_integration_owns_a_docker_database(overrides: list[str], version: str, port: str) -> None:
     (line,) = dry_run("integration", *overrides)
     argv = shlex.split(line)
-    assert argv[:2] == ["python3", "scripts/run_integration.py"]
+    # `exec` makes the runner the recipe's only process, so a SIGTERM that make sends its
+    # recipe reaches the runner, which then removes its Compose project (#449).
+    assert argv[:3] == ["exec", "python3", "scripts/run_integration.py"]
     assert argv[argv.index("--cubrid-version") + 1] == version
     assert argv[argv.index("--port") + 1] == port
     assert argv[argv.index("--pytest") + 1] == "python3 -m pytest"
@@ -473,7 +572,7 @@ def test_every_tool_is_bound_to_the_selected_python() -> None:
     )
     (integration,) = dry_run("integration", f"PYTHON={selected}")
     argv = shlex.split(integration)
-    assert argv[:2] == [selected, "scripts/run_integration.py"]
+    assert argv[:3] == ["exec", selected, "scripts/run_integration.py"]
     assert argv[argv.index("--pytest") + 1] == f"{selected} -m pytest"
     # Nothing in the Makefile calls a bare tool that PATH could resolve elsewhere.
     bare = re.compile(r"^\t@?(pip3?|ruff|mypy|pytest)\b", re.M)
