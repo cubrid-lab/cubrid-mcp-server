@@ -273,6 +273,48 @@ def test_registry_missing_named_vars_fail_with_name() -> None:
         ConnectionRegistry.from_env(env)
 
 
+@pytest.mark.parametrize(
+    ("suffix", "value"),
+    [
+        ("PORT", "x"),
+        ("PORT", "70000"),
+        ("MCP_MAX_ROWS", "0"),
+        ("MCP_MAX_CHARS", "lots"),
+        ("MCP_MAX_SQL_LENGTH", "-5"),
+        ("MCP_QUERY_TIMEOUT", "inf"),
+    ],
+)
+def test_registry_invalid_named_values_name_the_prefixed_variable(suffix: str, value: str) -> None:
+    env = BASE_ENV | {
+        "CUBRID_CONNECTIONS": "reporting",
+        "CUBRID_REPORTING_HOST": "reporting-db",
+        "CUBRID_REPORTING_USER": "ru",
+        "CUBRID_REPORTING_PASSWORD": "rp",
+        "CUBRID_REPORTING_DATABASE": "reports",
+        f"CUBRID_REPORTING_{suffix}": value,
+    }
+    with pytest.raises(ConfigError) as excinfo:
+        ConnectionRegistry.from_env(env)
+    message = str(excinfo.value)
+    assert f"CUBRID_REPORTING_{suffix}" in message
+    # The error must not fall back to the bare default variable name.
+    assert f"CUBRID_{suffix}" not in message
+
+
+def test_registry_blank_named_host_is_reported_as_missing() -> None:
+    env = BASE_ENV | {
+        "CUBRID_CONNECTIONS": "reporting",
+        "CUBRID_REPORTING_HOST": "  ",
+        "CUBRID_REPORTING_USER": "ru",
+        "CUBRID_REPORTING_PASSWORD": "rp",
+        "CUBRID_REPORTING_DATABASE": "reports",
+    }
+    with pytest.raises(
+        ConfigError, match="missing required environment variable: CUBRID_REPORTING_HOST"
+    ):
+        ConnectionRegistry.from_env(env)
+
+
 def test_registry_reserved_default_name() -> None:
     with pytest.raises(ConfigError, match="reserved"):
         ConnectionRegistry.from_env(BASE_ENV | {"CUBRID_CONNECTIONS": "default"})
