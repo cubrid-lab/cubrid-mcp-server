@@ -7,9 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.6] - 2026-10-25
+
 ### Changed
 
 - **Invalid boolean settings name their variable (#435)** — `CUBRID_MCP_READONLY`, `CUBRID_MCP_WRITE` and `CUBRID_MCP_AUDIT_LOG` (and the `CUBRID_<NAME>_` forms for named connections) reported only `expected a boolean-like value, got 'x'`, so with several connections the operator had to guess which variable was wrong. The error now reads `<VARIABLE> must be a boolean (1/true/yes/on or 0/false/no/off), got 'x'`, matching the integer settings. Accepted aliases are unchanged, and `_parse_bool(value)` without a key keeps its old message. Refs #435.
+
+### Fixed
+
+* **config:** name the variable when a boolean setting is invalid ([#443](https://github.com/cubrid-lab/cubrid-mcp-server/issues/443)) ([8fc77db](https://github.com/cubrid-lab/cubrid-mcp-server/commit/8fc77db9e5379706dae95b1e85894be677f92df7)), refs [#435](https://github.com/cubrid-lab/cubrid-mcp-server/issues/435)
+
+### Documentation
+
+* **agents:** align independent MCP safety review and local title rules ([7592c53](https://github.com/cubrid-lab/cubrid-mcp-server/commit/7592c534b089882077f2b5da8345659aeb041d5c))
+* **agents:** clarify MCP safety review and local PR policy ([#442](https://github.com/cubrid-lab/cubrid-mcp-server/issues/442)) ([7592c53](https://github.com/cubrid-lab/cubrid-mcp-server/commit/7592c534b089882077f2b5da8345659aeb041d5c))
 
 ## [0.5.5] - 2026-10-25
 
