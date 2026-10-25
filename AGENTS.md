@@ -243,6 +243,31 @@ docs tasks need only the applicable fields.
 - For safety, workflow permissions and release changes, document the
   invariant/security assessment and obtain independent maintainer review.
 
+## Issue triage lifecycle
+
+Every newly opened issue in this repository starts with `status: needs triage`.
+The issue forms include it, and `issues: opened` automation adds it for
+external submissions. Tools using `GITHUB_TOKEN` must supply it at creation,
+as these issue events may not trigger an additional workflow.
+
+1. **Validate:** verify evidence, read-only/write/security impact, duplicates,
+   overlap with open PRs, issue type, owning repository, scope, acceptance
+   criteria and real dependencies. Close invalid or duplicated work with a
+   reason rather than assigning speculative severity.
+2. **Compare:** inspect **all open issues here**, including paginated results,
+   and compare impact, existing priorities, blocked prerequisites and work in
+   progress. Record why any older issue needs reprioritization.
+3. **Classify:** confirm one `priority: critical/high/medium/low` and one
+   existing `size: XS/S/M/L/XL`. Split oversized work when it cannot be
+   independently verified; keep contributor ownership and unrelated labels.
+4. **Complete:** re-read the saved issue and its actual labels, scope and
+   duplication decision. Remove `status: needs triage` only after checking
+   type, priority, size and relative queue position. If still uncertain, leave
+   the label. Do not auto-score severity or auto-remove it from a workflow.
+
+Existing MCP safety, required CI, independent protected-path review and
+release controls are unchanged. Issue triage is not a new PR gate.
+
 ## Issue Labeling (cubrid-lab org standard)
 
 Maintainers and triagers own the canonical priority/size policy. When creating or
@@ -251,8 +276,8 @@ for maintainers), assign exactly one `priority: <value>` label and exactly one
 `size: <value>` label, alongside a type label (`bug`/`enhancement`/`documentation`/`chore`/`ci`/…) and an
 `area:` label when applicable. These must be GitHub labels, not just text in the
 issue title or body. Outside reporters only describe urgency and effort and do not
-need label-write permission; maintainer-created issues are labeled at creation and
-permissionless reports during initial maintainer triage.
+need label-write permission; all new issues first get `status: needs triage`
+and receive final priority/size labels during maintainer review.
 
 Issue titles use the same `type(scope): description` format as pull request
 titles (see [CONTRIBUTING.md](CONTRIBUTING.md#pull-request-and-commit-titles)).
@@ -282,10 +307,9 @@ helps contributors pick appropriately scoped work.
 Rules:
 
 1. **Size reflects effort, not importance** — a one-line fix for a critical bug is still `size: XS`.
-2. **Assign both `priority:` and `size:` when filing the issue.** If scope or impact
-   is uncertain, use a provisional estimate, explain the uncertainty in the body,
-   and add `status: needs triage` (or the repo's equivalent). Refine the estimates
-   during triage rather than omitting either required label.
+2. **Finalize exactly one `priority:` and one `size:` after triage.**
+   Keep `status: needs triage` while the evidence, scope or classification
+   remains undecided, even if a provisional label already exists.
 3. **`good first issue` should be `size: XS` or `size: S`.** If a good-first-issue grows
    past `size: S`, re-scope it or drop the `good first issue` label.
 4. **`size: XL` is a signal to split**, not a green light to start a sprawling change.
