@@ -424,9 +424,12 @@ behavior, correctness, security, tests and maintainability, disposition
 findings and make the final merge decision.
 
 Changes to `safety.py`, `database.py`, `audit.py`, `server.py`,
-write-capable workflows or releases must receive explicit security and
-invariant review confirmed by a maintainer, independent of coding tool.
-Existing tests, live CUBRID requirements and release safeguards remain.
+write-capable workflows or releases require a documented security/invariant
+assessment and the independent maintainer review specified in `AGENTS.md`
+for security-sensitive or publishing paths. This is a **human safety decision**,
+not a required Oracle/Copilot/agent-review stage or a change to GitHub branch
+protection settings. Existing tests, live CUBRID checks and release safeguards
+remain authoritative.
 
 ### Agent-review evidence gate
 
@@ -475,10 +478,11 @@ Existing security invariants, tests, docs requirements and PR review/merge polic
 
 ## Pull request and commit titles
 
-This rule covers issue titles, pull request titles and commit subjects in every
-cubrid-lab repository. Pull requests are squash-merged and the pull request
-title becomes the commit title on `main`, so the pull request title is the one
-that must be right. The `PR title` check enforces it.
+This repository uses the canonical CUBRID Lab title format for its issues,
+pull requests and commit subjects. Its PRs are squash-merged and the pull
+request title becomes the commit title on `main`, so the PR title must be
+accurate. This repository's `PR title` check enforces that format; do not
+assume other repositories share identical check names or release mechanics.
 
 ```text
 type: description
