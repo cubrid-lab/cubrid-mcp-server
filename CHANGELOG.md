@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Invalid boolean settings name their variable (#435)** — `CUBRID_MCP_READONLY`, `CUBRID_MCP_WRITE` and `CUBRID_MCP_AUDIT_LOG` (and the `CUBRID_<NAME>_` forms for named connections) reported only `expected a boolean-like value, got 'x'`, so with several connections the operator had to guess which variable was wrong. The error now reads `<VARIABLE> must be a boolean (1/true/yes/on or 0/false/no/off), got 'x'`, matching the integer settings. Accepted aliases are unchanged, and `_parse_bool(value)` without a key keeps its old message. Refs #435.
+
 ## [0.5.5] - 2026-10-25
 
 ### Fixed

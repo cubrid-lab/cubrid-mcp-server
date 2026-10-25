@@ -111,6 +111,27 @@ def test_parse_bool_invalid_aliases(value: str) -> None:
         _parse_bool(value)
 
 
+@pytest.mark.parametrize("name", ["MCP_READONLY", "MCP_WRITE", "MCP_AUDIT_LOG"])
+def test_from_env_invalid_bool_names_variable(name: str) -> None:
+    with pytest.raises(ConfigError, match=rf"CUBRID_{name} must be a boolean.*'maybe'"):
+        Config.from_env(BASE_ENV | {f"CUBRID_{name}": "maybe"})
+
+
+@pytest.mark.parametrize("name", ["MCP_READONLY", "MCP_WRITE", "MCP_AUDIT_LOG"])
+def test_registry_invalid_bool_names_prefixed_variable(name: str) -> None:
+    env = BASE_ENV | {"CUBRID_CONNECTIONS": "reporting"}
+    env |= {"CUBRID_REPORTING_HOST": "db2", "CUBRID_REPORTING_USER": "u"}
+    env |= {"CUBRID_REPORTING_PASSWORD": "p", "CUBRID_REPORTING_DATABASE": "d"}
+    env[f"CUBRID_REPORTING_{name}"] = "maybe"
+    with pytest.raises(ConfigError, match=rf"CUBRID_REPORTING_{name} must be a boolean"):
+        ConnectionRegistry.from_env(env)
+
+
+def test_parse_bool_without_key_keeps_old_message() -> None:
+    with pytest.raises(ConfigError, match="expected a boolean-like value"):
+        _parse_bool("maybe")
+
+
 def test_from_env_max_rows_override() -> None:
     cfg = Config.from_env(BASE_ENV | {"CUBRID_MCP_MAX_ROWS": "250"})
     assert cfg.max_rows == 250

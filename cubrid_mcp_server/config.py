@@ -74,7 +74,7 @@ def _parse_config(source: Mapping[str, str], prefix: str) -> Config:
     if not 1 <= port <= 65535:
         raise ConfigError(f"{prefix}PORT must be between 1 and 65535, got {port}")
 
-    readonly = _parse_bool(source.get(f"{mcp_prefix}READONLY", "1"))
+    readonly = _parse_bool(source.get(f"{mcp_prefix}READONLY", "1"), f"{mcp_prefix}READONLY")
 
     max_chars = _parse_positive_int(source, f"{mcp_prefix}MAX_CHARS", "4000")
     max_rows = _parse_positive_int(source, f"{mcp_prefix}MAX_ROWS", "1000")
@@ -90,8 +90,8 @@ def _parse_config(source: Mapping[str, str], prefix: str) -> Config:
     if not isfinite(query_timeout) or query_timeout <= 0:
         raise ConfigError(f"{mcp_prefix}QUERY_TIMEOUT must be positive")
 
-    write_enabled = _parse_bool(source.get(f"{mcp_prefix}WRITE", "0"))
-    audit_log = _parse_bool(source.get(f"{mcp_prefix}AUDIT_LOG", "0"))
+    write_enabled = _parse_bool(source.get(f"{mcp_prefix}WRITE", "0"), f"{mcp_prefix}WRITE")
+    audit_log = _parse_bool(source.get(f"{mcp_prefix}AUDIT_LOG", "0"), f"{mcp_prefix}AUDIT_LOG")
 
     return Config(
         host=host,
@@ -174,10 +174,14 @@ class ConnectionRegistry:
         return cls(configs=configs)
 
 
-def _parse_bool(value: str) -> bool:
+def _parse_bool(value: str, key: str | None = None) -> bool:
     normalized = value.strip().lower()
     if normalized in {"1", "true", "yes", "on"}:
         return True
     if normalized in {"0", "false", "no", "off"}:
         return False
+    if key is not None:
+        raise ConfigError(
+            f"{key} must be a boolean (1/true/yes/on or 0/false/no/off), got {value!r}"
+        )
     raise ConfigError(f"expected a boolean-like value, got {value!r}")
