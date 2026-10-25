@@ -30,8 +30,13 @@ COMPOSE = ["docker", "compose", "--file", "docker-compose.yml"]
 
 
 # An outer make (`make verify CUBRID_TEST_PORT=...` runs these tests) passes its
-# command-line variables down in MAKEFLAGS; the recipes read here must not inherit them.
-OUTER_MAKE = {"MAKEFLAGS", "MFLAGS", "MAKEOVERRIDES", "MAKELEVEL"}
+# command-line variables down in MAKEFLAGS and also exports them to its recipes; the
+# recipes read here must inherit neither, so the defaults stay the Makefile's own.
+OUTER_MAKE = {
+    "MAKEFLAGS", "MFLAGS", "MAKEOVERRIDES", "MAKELEVEL",
+    "PYTHON", "PYTEST", "RUFF", "MYPY", "PYTEST_ARGS", "RESULTS", "COMPOSE",
+    "CUBRID_VERSION", "CUBRID_TEST_PORT", "INTEGRATION_PORT",
+}  # fmt: skip
 
 
 def dry_run(*args: str) -> list[str]:
@@ -138,6 +143,8 @@ def test_dry_runs_ignore_an_outer_makes_overrides(monkeypatch: pytest.MonkeyPatc
     # What `make verify CUBRID_TEST_PORT=33599` hands the tests it runs.
     monkeypatch.setenv("MAKEFLAGS", " -- CUBRID_TEST_PORT=33599 CUBRID_VERSION=10.2")
     monkeypatch.setenv("MAKELEVEL", "1")
+    monkeypatch.setenv("CUBRID_TEST_PORT", "33599")
+    monkeypatch.setenv("CUBRID_VERSION", "10.2")
     line = dry_run("integration")[-1]
     assert '--cubrid-version "11.4" --port "33000"' in line
 
