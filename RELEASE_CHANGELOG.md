@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.5.5](https://github.com/cubrid-lab/cubrid-mcp-server/compare/v0.5.4...v0.5.5) (2026-10-25)
+
+
+### Fixed
+
+* **context:** log suppressed connection close failures ([#439](https://github.com/cubrid-lab/cubrid-mcp-server/issues/439)) ([9924e2c](https://github.com/cubrid-lab/cubrid-mcp-server/commit/9924e2c94454eb0abda19776e23135d12acca381))
+* **context:** raise RuntimeError for unset audit loggers instead of asserting ([#438](https://github.com/cubrid-lab/cubrid-mcp-server/issues/438)) ([b6d8bb0](https://github.com/cubrid-lab/cubrid-mcp-server/commit/b6d8bb0e79022dc7a0df7282c87fae8784fdcf69))
+* **reporting:** redact credentials embedded in environment command metadata ([#433](https://github.com/cubrid-lab/cubrid-mcp-server/issues/433)) ([702aac6](https://github.com/cubrid-lab/cubrid-mcp-server/commit/702aac6f4b4c43a5b2abdaa36a4adfe645c0830a))
+
+
+### Documentation
+
+* **server:** document the table-resolution and schema helper functions ([#440](https://github.com/cubrid-lab/cubrid-mcp-server/issues/440)) ([c645e6c](https://github.com/cubrid-lab/cubrid-mcp-server/commit/c645e6c6b272a8dadfa1f1113c07b9f7571422c5)), closes [#432](https://github.com/cubrid-lab/cubrid-mcp-server/issues/432)
+
 ## [0.5.4](https://github.com/cubrid-lab/cubrid-mcp-server/compare/v0.5.3...v0.5.4) (2026-10-24)
 
 

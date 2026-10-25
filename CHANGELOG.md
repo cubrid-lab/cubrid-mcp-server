@@ -7,11 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.5] - 2026-10-25
+
 ### Fixed
 
 - **Audit logger invariants raise `RuntimeError` instead of asserting (#429)** — `AppContext.audit_for()` and `server._audit()` guarded the audit logger that `AppContext.__post_init__` always sets with `assert`, which `python -O` strips. Both now raise `RuntimeError` naming the missing field; behavior is unchanged while the invariant holds, so no tool output changes. Refs #429.
 
 - **Suppressed connection close failures are logged (#431)** — `AppContext.close()` re-raises only the first close failure and silently dropped any later one, hiding secondary shutdown problems. Each suppressed failure is now logged at WARNING through the module logger with the connection name and the exception type only (driver error text can echo connection details, so it is deliberately left out). The first error is still raised unchanged. Refs #431.
+
+* **context:** log suppressed connection close failures ([#439](https://github.com/cubrid-lab/cubrid-mcp-server/issues/439)) ([9924e2c](https://github.com/cubrid-lab/cubrid-mcp-server/commit/9924e2c94454eb0abda19776e23135d12acca381))
+* **context:** raise RuntimeError for unset audit loggers instead of asserting ([#438](https://github.com/cubrid-lab/cubrid-mcp-server/issues/438)) ([b6d8bb0](https://github.com/cubrid-lab/cubrid-mcp-server/commit/b6d8bb0e79022dc7a0df7282c87fae8784fdcf69))
+* **reporting:** redact credentials embedded in environment command metadata ([#433](https://github.com/cubrid-lab/cubrid-mcp-server/issues/433)) ([702aac6](https://github.com/cubrid-lab/cubrid-mcp-server/commit/702aac6f4b4c43a5b2abdaa36a4adfe645c0830a))
 
 ### Security
 
@@ -20,6 +26,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Documentation
 
 - **The table-resolution and schema helpers in `server.py` are documented (#432)** — `_schema_definitions` and `_list_indexes` were the last of the private helpers behind the schema tools without a docstring; each now states what it returns and how the table is selected by owner and name. Docstrings only: no behavior, signature or tool output changes. Refs #432.
+
+* **server:** document the table-resolution and schema helper functions ([#440](https://github.com/cubrid-lab/cubrid-mcp-server/issues/440)) ([c645e6c](https://github.com/cubrid-lab/cubrid-mcp-server/commit/c645e6c6b272a8dadfa1f1113c07b9f7571422c5)), refs [#432](https://github.com/cubrid-lab/cubrid-mcp-server/issues/432)
 
 ### CI
 
