@@ -25,7 +25,8 @@ jobs:
   #         live CUBRID 11.4 lane for runtime/test changes, lowest-direct for
   #         dependency metadata, Python/CUBRID endpoints for compatibility changes)
   #   full  push to main, dispatch, or a CI-policy change: Python 3.11/3.12/3.14,
-  #         CUBRID 11.2 + 11.4 and lowest-direct
+  #         CUBRID 11.2 + 11.4 and lowest-direct; a push to main runs CUBRID 11.4
+  #         only (#417)
   # The full Python x CUBRID matrix runs in integration-full.yml (weekly + release).
   classify:
     name: Classify changes

@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### CI
+
+- **Fewer routine CUBRID version runs, full release coverage kept (#417)** — a push to
+  `main` now runs live integration on CUBRID 11.4 only (it also ran 11.2); its Python
+  3.11/3.12/3.14 unit lanes and `lowest-direct` are unchanged. `integration-full.yml`
+  drops its Monday–Saturday two-corner schedule and keeps the weekly Sunday 4 × 4
+  matrix; manual dispatch and the release `workflow_call` from `publish-pypi.yml` still
+  run all 16 cells and gate publication as before. PR selection is unchanged. Each
+  matrix cell now records the image digest and engine version it ran, and a new
+  advisory weekly job (`scripts/latest_server.py`) checks whether `cubrid/cubrid:latest`
+  is the same image as `11.4`, runs a focused canary only on a newer engine build, and
+  reports a failed lookup as unverified. No supported CUBRID version changes.
+
 ### Tests
 
 - **Live proof that the default configuration refuses writes (#451)** — the new

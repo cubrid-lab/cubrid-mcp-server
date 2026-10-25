@@ -1,21 +1,22 @@
 name: Integration Full Matrix
 
-# Python × CUBRID compatibility matrix (#223).
+# Python × CUBRID compatibility matrix (#223, #417).
 #
 #   release   publish-pypi.yml calls it through workflow_call with the release commit
 #             SHA: always the full 4 × 4 matrix, fail-closed. PR and main CI only
 #             run reduced lanes, so this is the authoritative full-compatibility
 #             check gating a release.
-#   weekly    Sunday 03:00 UTC: the full 4 × 4 matrix.
-#   corners   Monday-Saturday 03:00 UTC: oldest Python × oldest CUBRID and newest
-#             Python × newest CUBRID, to catch compatibility drift between the
-#             weekly runs without a daily 16-job Cartesian run.
-#   dispatch  manual: `scope` = full (default) or corners.
+#   weekly    Sunday 03:00 UTC: the full 4 × 4 matrix, plus the advisory
+#             newest-stable CUBRID image check (latest-server). The Monday-Saturday
+#             corners cron was removed (#417): its 15 runs (2026-10-08 to 10-24)
+#             all passed, and its two cells are in every weekly and release run.
+#   dispatch  manual: `scope` = full (default) or corners, plus latest-server.
+#
+# Every matrix cell records the image digest and engine version it ran.
 
 on:
   schedule:
     - cron: "0 3 * * 0" # weekly full matrix
-    - cron: "0 3 * * 1-6" # corners
   workflow_dispatch:
     inputs:
       scope:
@@ -56,19 +57,15 @@ jobs:
         env:
           RELEASE_SHA: ${{ inputs.sha }}
           EVENT: ${{ github.event_name }}
-          CRON: ${{ github.event.schedule }}
           DISPATCH_SCOPE: ${{ github.event.inputs.scope }}
         run: |
           set -euo pipefail
-          # Anything that is not explicitly a corners run gets the full matrix;
-          # a release call (inputs.sha set) is always full.
+          # Only a manual corners dispatch narrows; every schedule and a release
+          # call (inputs.sha set) get the full matrix.
           scope=full
-          if [ -z "$RELEASE_SHA" ]; then
-            if [ "$EVENT" = "schedule" ] && [ "$CRON" = "0 3 * * 1-6" ]; then
-              scope=corners
-            elif [ "$EVENT" = "workflow_dispatch" ] && [ "$DISPATCH_SCOPE" = "corners" ]; then
-              scope=corners
-            fi
+          if [ -z "$RELEASE_SHA" ] && [ "$EVENT" = "workflow_dispatch" ] \
+            && [ "$DISPATCH_SCOPE" = "corners" ]; then
+            scope=corners
           fi
           if [ "$scope" = "full" ]; then
             matrix='{"python-version":["3.11","3.12","3.13","3.14"],"cubrid":["10.2","11.0","11.2","11.4"]}'
@@ -122,6 +119,12 @@ jobs:
         if: always()
         run: python3 scripts/report_results.py step-summary --results-dir test-results/integration --title "Integration tests (Python ${{ matrix.python-version }}, CUBRID ${{ matrix.cubrid }})" >> "$GITHUB_STEP_SUMMARY"
 
+      # The exact image this cell ran (#417): its digest and cubrid_rel engine
+      # version in the step summary. Evidence only; it never fails the cell.
+      - name: Record CUBRID image
+        if: always()
+        run: python3 scripts/latest_server.py record --tag "${{ matrix.cubrid }}" --summary "$GITHUB_STEP_SUMMARY"
+
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
@@ -158,3 +161,74 @@ jobs:
             exit 1
           fi
           echo "Compatibility matrix ($SCOPE) passed."
+
+  latest-server:
+    # Weekly newest-stable CUBRID drift check (#417), advisory: never run by a
+    # release call (inputs.sha is set there and github.event_name is the
+    # caller's event), never a need of full-matrix-result, and continue-on-error,
+    # so a failure shows on the run without failing it. scripts/latest_server.py
+    # pulls `latest` and `11.4` once and compares digests and cubrid_rel. The same
+    # digest starts no database; only a newer engine build behind `latest` gets a
+    # canary of the live suite, on its immutable digest under a local tag. Nothing
+    # here changes the supported versions or the release matrix.
+    name: Newest CUBRID image (advisory)
+    if: ${{ !inputs.sha && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Resolve latest and 11.4 images
+        id: resolve
+        run: |
+          set -euo pipefail
+          python3 scripts/latest_server.py resolve --date "$(date -u +%Y-%m-%dT%H:%MZ)" \
+            --output "$GITHUB_OUTPUT" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Set up Python 3.12
+        if: steps.resolve.outputs.canary == 'true'
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Set up uv
+        if: steps.resolve.outputs.canary == 'true'
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          python-version: "3.12"
+          version: "0.12.17"
+          enable-cache: auto
+          cache-dependency-glob: pyproject.toml
+          cache-suffix: ${{ github.job }}
+
+      - name: Install project and dev tools
+        if: steps.resolve.outputs.canary == 'true'
+        run: |
+          uv pip install --system -e . --group dev
+          uv pip freeze --system
+
+      - name: Run the advisory canary
+        id: canary
+        if: steps.resolve.outputs.canary == 'true'
+        env:
+          CANARY_IMAGE: ${{ steps.resolve.outputs.image }}
+        run: |
+          set -euo pipefail
+          # make integration takes a cubrid/cubrid tag; a local tag pins the
+          # resolved digest, so Compose starts exactly that image without a pull.
+          docker tag "$CANARY_IMAGE" cubrid/cubrid:newest-canary
+          make integration CUBRID_VERSION=newest-canary
+
+      - name: Report newest CUBRID image result
+        if: always()
+        env:
+          STATUS: ${{ steps.resolve.outputs.status }}
+          CANARY_IMAGE: ${{ steps.resolve.outputs.image }}
+          CANARY_OUTCOME: ${{ steps.canary.outcome }}
+        run: |
+          python3 scripts/latest_server.py report --status "$STATUS" \
+            --image "$CANARY_IMAGE" --outcome "$CANARY_OUTCOME" --summary "$GITHUB_STEP_SUMMARY"

@@ -240,7 +240,8 @@ lanes run:
 | Connection / catalog SQL (`database.py`, `context.py`, `tests/conftest.py`, `tests/test_integration.py`) | Python 3.12 | — | CUBRID 11.2 + 11.4 |
 | Other workflows (`.github/workflows/*` except `ci.yml`, see the impact table below) | Python 3.12 | — | — |
 | Dependency metadata (`pyproject.toml`) | Python 3.11, 3.12, 3.14 | yes | CUBRID 11.2 + 11.4 |
-| CI policy (`ci.yml`, `scripts/ci_scope.py`, `tests/test_ci_scope.py`), push to `main`, manual dispatch | Python 3.11, 3.12, 3.14 | yes | CUBRID 11.2 + 11.4 |
+| CI policy (`ci.yml`, `scripts/ci_scope.py`, `tests/test_ci_scope.py`) | Python 3.11, 3.12, 3.14 | yes | CUBRID 11.2 + 11.4 |
+| Push to `main` (#417) | Python 3.11, 3.12, 3.14 | yes | CUBRID 11.4 |
 | Any other path (fail-closed) | Python 3.12 | — | CUBRID 11.4 |
 
 Workflow edits are routed by which lane can actually detect a problem in the
@@ -258,7 +259,7 @@ the `integration` marker.
 | `dependabot-auto-merge.yml` | `test_workflow_timeouts.py` (and the other all-workflow scans) | Unit (3.12) |
 | `docs-sync.yml` | Runs itself on the PR; the all-workflow scans | Unit (3.12) |
 | `docs.yml` | `test_ci_policy.py`; builds docs on PRs touching docs paths | Unit (3.12) |
-| `integration-full.yml` | `test_ci_scope.py`, `test_release_workflows.py`, `test_workflow_installs.py`, `test_workflow_timeouts.py`, plus a **manual `workflow_dispatch` on the PR head, linked from the PR** (not automated; the release gate depends on it) | Unit (3.12) |
+| `integration-full.yml` | `test_ci_scope.py`, `test_latest_server.py`, `test_release_workflows.py`, `test_workflow_installs.py`, `test_workflow_timeouts.py`, plus a **manual `workflow_dispatch` on the PR head, linked from the PR** (not automated; the release gate depends on it) | Unit (3.12) |
 | `pr-title.yml` | Runs itself on the PR; `test_pr_title.py` | Unit (3.12) |
 | `release-please.yml` | `test_release_workflows.py`, `test_release_please_config.py`, `test_workflow_timeouts.py` | Unit (3.12) |
 | `publish-pypi.yml` | `test_release_workflows.py`, `test_pypi_duplicate_guard.py`, `test_prepare_release.py`, `test_workflow_timeouts.py` | Unit (3.12) |
@@ -340,12 +341,50 @@ requires it to fail on any non-success planning or matrix result.
 
 The full Python {3.11–3.14} × CUBRID {10.2, 11.0, 11.2, 11.4} matrix lives in
 `.github/workflows/integration-full.yml`. It runs weekly (Sunday 03:00 UTC), on
-manual dispatch (`scope` = `full` or `corners`), and always in full as the
-release gate (`publish-pypi.yml` calls it at the release commit; a release run that
-is not full or not fully green blocks publication). Monday–Saturday it runs only
-the corners — Python 3.11 × CUBRID 10.2 and Python 3.14 × CUBRID 11.4 — to
-catch compatibility drift between weekly runs. The advisory upstream canaries
+manual dispatch (`scope` = `full` (default) or `corners`, Python 3.11 × CUBRID 10.2
+and Python 3.14 × CUBRID 11.4), and always in full as the release gate
+(`publish-pypi.yml` calls it at the release commit; a release run that is not full
+or not fully green blocks publication). The advisory upstream canaries
 (`upstream-canary.yml`, pycubrid@main and latest FastMCP) run weekly on Monday.
+
+Which CUBRID versions run on which event (#417):
+
+| Event | Live CUBRID |
+|---|---|
+| Ordinary PR | 11.4 for runtime/test changes; 11.2 + 11.4 for the connection/catalog, dependency and CI-policy paths above; none for docs-only |
+| Push to `main` | 11.4 only, with the Python 3.11/3.12/3.14 unit lanes and `lowest-direct` |
+| Weekly schedule (Sunday) | The full 4 × 4 matrix, plus the advisory newest-image check below |
+| Manual `integration-full.yml` dispatch | The full 4 × 4 matrix (or the two corners when asked), plus the newest-image check |
+| Release (`workflow_call` from `publish-pypi.yml`) | The full 4 × 4 matrix, fail-closed; never the advisory check |
+
+So a push to `main` is representative 11.4 evidence; every-version evidence comes
+from the PR lanes its paths selected, the weekly run and the release gate. Until
+#417 a push also ran 11.2, and a Monday–Saturday schedule ran the two corner cells;
+those 15 corner runs (2026-10-08 to 2026-10-24) all passed and their cells are in
+every weekly and release run, so the daily schedule was removed rather than kept.
+Measured on GitHub Actions before the change (median of the last 10 successful
+`main` pushes; billed minutes round each job up): the `integration (11.2)` job of a
+push took 55 s (1 billed minute) and there were 49 pushes to `main` from
+2026-10-18 to 2026-10-25; the six weekday corner runs of 2026-10-19 to 2026-10-24
+started 12 live cells, 9.5 job-minutes and 24 billed minutes in all.
+
+Each matrix cell records the image it ran (`Record CUBRID image`: the
+`cubrid/cubrid@sha256:…` digest and its `cubrid_rel` engine version) in its step
+summary. The advisory `Newest CUBRID image (advisory)` job (`latest-server`,
+[`scripts/latest_server.py`](scripts/latest_server.py), weekly and on manual
+dispatch only, `continue-on-error`, never a need of the matrix result) pulls
+`cubrid/cubrid:latest` and `cubrid/cubrid:11.4` once and compares their digests and
+engine builds:
+
+- same digest: no extra database starts; the summary names that digest, and the
+  11.4 cells tested the newest-stable image only if their recorded digest matches;
+- a different digest that is not a newer engine build: nothing more runs;
+- a newer engine build (for example a future 11.5): a focused advisory canary runs
+  `make integration` on that immutable digest. A failure is shown on the run but
+  blocks nothing, and the image is never added to the supported versions or the
+  release matrix automatically;
+- a failed or malformed pull or lookup: reported as UNVERIFIED with a warning,
+  never as passed.
 
 ## Main branch protection
 

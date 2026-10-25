@@ -22,7 +22,7 @@ UV_VERSION = "0.12.17"
 # The release gate (integration-full.yml is called by publish-pypi.yml) keeps setup-uv's
 # event guard (`auto`); routine CI always caches.
 WORKFLOWS = {"ci.yml": True, "integration-full.yml": "auto"}
-EXPECTED_JOBS = {"ci.yml": 4, "integration-full.yml": 1}
+EXPECTED_JOBS = {"ci.yml": 4, "integration-full.yml": 2}
 PIP_INSTALL = re.compile(r"\bpip3?\s+install\b")
 
 

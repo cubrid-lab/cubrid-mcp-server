@@ -8,7 +8,9 @@ PRs start no CUBRID container, and the release still runs the full matrix.
 from __future__ import annotations
 
 import importlib.util
+import json
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -36,6 +38,10 @@ def load(name: str) -> dict[str, Any]:
 
 CI = load("ci.yml")
 FULL = load("integration-full.yml")
+# The supported Python x CUBRID cells a release and the weekly run must test (#417).
+FULL_CELLS = {
+    (py, db) for py in ("3.11", "3.12", "3.13", "3.14") for db in ("10.2", "11.0", "11.2", "11.4")
+}
 
 
 def pr(*paths: str) -> dict[str, object]:
@@ -200,8 +206,72 @@ def test_non_pr_and_unknown_events_run_the_full_tier(event: str) -> None:
     assert scope["tier"] == "full"
     assert scope["unit"] is True
     assert scope["lowest"] is True
+    assert scope["live"] is True
     assert scope["python"] == ["3.11", "3.12", "3.14"]
-    assert scope["cubrid"] == ["11.2", "11.4"]
+    # #417: only a push to main narrows live CUBRID to the representative 11.4;
+    # dispatch and unknown events keep both endpoints (fail closed).
+    assert scope["cubrid"] == (["11.4"] if event == "push" else ["11.2", "11.4"])
+
+
+def _classify_step(event: str, tmp_path: Path) -> dict[str, str]:
+    """Run ci.yml's real classify step script for a non-PR event."""
+    step = CI["jobs"]["classify"]["steps"][1]
+    assert step["env"] == {"EVENT": "${{ github.event_name }}"}
+    output = tmp_path / "output"
+    env = {
+        **os.environ,
+        # The step's python3 is the test interpreter, as setup-python would provide.
+        "PATH": f"{Path(sys.executable).parent}{os.pathsep}{os.environ['PATH']}",
+        "EVENT": event,
+        "RUNNER_TEMP": str(tmp_path),
+        "GITHUB_OUTPUT": str(output),
+        "GITHUB_STEP_SUMMARY": str(tmp_path / "summary"),
+    }
+    subprocess.run(["bash", "-c", step["run"]], cwd=ROOT, env=env, check=True)
+    return dict(line.split("=", 1) for line in output.read_text().splitlines())
+
+
+# What ci.yml starts per event (#417): unit Python lanes, lowest-direct, live CUBRID.
+EVENT_LANES = {
+    # Ordinary push to main: the Python endpoints and lowest-direct stay; live
+    # CUBRID is the representative 11.4 only.
+    "push": (["3.11", "3.12", "3.14"], "true", ["11.4"]),
+    # Not ci.yml triggers today; they and any unknown event fail closed to both.
+    "workflow_dispatch": (["3.11", "3.12", "3.14"], "true", ["11.2", "11.4"]),
+    "schedule": (["3.11", "3.12", "3.14"], "true", ["11.2", "11.4"]),
+    "merge_group": (["3.11", "3.12", "3.14"], "true", ["11.2", "11.4"]),
+}
+
+
+@pytest.mark.parametrize("event", sorted(EVENT_LANES))
+def test_ci_yml_selects_the_documented_lanes_per_event(event: str, tmp_path: Path) -> None:
+    out = _classify_step(event, tmp_path)
+    jobs = CI["jobs"]
+    # The matrices consume the classify outputs verbatim.
+    assert jobs["lint-and-test"]["strategy"]["matrix"]["python-version"] == (
+        "${{ fromJSON(needs.classify.outputs.python) }}"
+    )
+    assert jobs["integration"]["strategy"]["matrix"]["cubrid"] == (
+        "${{ fromJSON(needs.classify.outputs.cubrid) }}"
+    )
+    python, lowest, cubrid = EVENT_LANES[event]
+    assert out["unit"] == "true" and out["live"] == "true"
+    assert json.loads(out["python"]) == python
+    assert out["lowest"] == lowest
+    assert json.loads(out["cubrid"]) == cubrid
+
+
+def test_version_sensitive_prs_still_select_both_cubrid_endpoints() -> None:
+    # #417 changes only the push event; PR classification is untouched.
+    for paths in (
+        *([path] for path in ci_scope.LIVE_ENDPOINTS),
+        ["pyproject.toml"],
+        [".github/workflows/ci.yml"],
+        ["scripts/ci_scope.py"],
+    ):
+        assert pr(*paths)["cubrid"] == ["11.2", "11.4"], paths
+    assert pr("cubrid_mcp_server/server.py")["cubrid"] == ["11.4"]
+    assert pr("docs/TOOLS.md")["live"] is False
 
 
 def test_fail_closed_on_unknown_paths_and_empty_diff() -> None:
@@ -356,18 +426,20 @@ def test_gate_fails_closed(results: dict[str, str]) -> None:
 # --- integration-full.yml contracts ----------------------------------------------
 
 
-def test_full_matrix_is_not_scheduled_daily() -> None:
+def test_only_the_weekly_full_matrix_is_scheduled() -> None:
+    # #417: the Monday-Saturday corners cron is gone; one weekly full run remains.
     crons = [entry["cron"] for entry in FULL["on"]["schedule"]]
-    assert crons == ["0 3 * * 0", "0 3 * * 1-6"]
+    assert crons == ["0 3 * * 0"]
     (plan_step,) = FULL["jobs"]["plan"]["steps"]
-    run = plan_step["run"]
-    # Only the Monday-Saturday cron selects corners; every other trigger is full.
-    assert '[ "$CRON" = "0 3 * * 1-6" ]' in run
+    # The plan no longer looks at the cron string, so no schedule can narrow it.
+    assert "CRON" not in plan_step["env"]
+    assert "CRON" not in plan_step["run"]
 
 
 def _plan(**env: str) -> dict[str, str]:
     (plan_step,) = FULL["jobs"]["plan"]["steps"]
-    values = {"RELEASE_SHA": "", "EVENT": "", "CRON": "", "DISPATCH_SCOPE": ""}
+    values = {"RELEASE_SHA": "", "EVENT": "", "DISPATCH_SCOPE": ""}
+    assert set(values) == set(plan_step["env"])
     values.update(env)
     out = subprocess.run(
         ["bash", "-c", plan_step["run"]],
@@ -386,7 +458,11 @@ def _plan(**env: str) -> dict[str, str]:
         # A release must stay full even if a scope/cron would select corners.
         {"RELEASE_SHA": "a" * 40, "EVENT": "schedule", "CRON": "0 3 * * 1-6"},
         {"RELEASE_SHA": "a" * 40, "EVENT": "workflow_dispatch", "DISPATCH_SCOPE": "corners"},
+        # A release call from the recovery dispatch of publish-pypi.yml.
+        {"RELEASE_SHA": "a" * 40, "EVENT": "workflow_dispatch"},
         {"EVENT": "schedule", "CRON": "0 3 * * 0"},
+        # #417: the removed weekday cron string no longer selects corners.
+        {"EVENT": "schedule", "CRON": "0 3 * * 1-6"},
         {"EVENT": "workflow_dispatch"},
         {"EVENT": "workflow_dispatch", "DISPATCH_SCOPE": "full"},
     ],
@@ -397,12 +473,14 @@ def test_release_weekly_and_default_dispatch_run_the_full_matrix(env: dict[str, 
     assert out["matrix"] == (
         '{"python-version":["3.11","3.12","3.13","3.14"],"cubrid":["10.2","11.0","11.2","11.4"]}'
     )
+    matrix = json.loads(out["matrix"])
+    cells = {(py, db) for py in matrix["python-version"] for db in matrix["cubrid"]}
+    assert cells == FULL_CELLS
 
 
 @pytest.mark.parametrize(
     "env",
     [
-        {"EVENT": "schedule", "CRON": "0 3 * * 1-6"},
         {"EVENT": "workflow_dispatch", "DISPATCH_SCOPE": "corners"},
     ],
 )
@@ -448,3 +526,60 @@ def test_cli_works_without_docstrings() -> None:
         check=True,
     )
     assert result.stdout.splitlines()[0] == "tier=full"
+
+
+def _if(expression: str, event: str, sha: str = "") -> bool:
+    """Evaluate a GitHub ``if`` expression of only ``!``, ``&&``, ``||`` and ``==``."""
+    body = expression.strip().removeprefix("${{").removesuffix("}}")
+    python = body.replace("&&", " and ").replace("||", " or ")
+    python = re.sub(r"!(?!=)", " not ", python)
+    python = python.replace("github.event_name", "event").replace("inputs.sha", "sha")
+    assert not re.findall(r"[a-z]+\.[a-z_.]+", python), python
+    return bool(eval(python, {"__builtins__": {}}, {"event": event, "sha": sha}))  # noqa: S307
+
+
+def test_matrix_cells_record_the_image_they_ran() -> None:
+    steps = FULL["jobs"]["integration-full"]["steps"]
+    names = [step.get("name", "") for step in steps]
+    record = steps[names.index("Record CUBRID image")]
+    assert names.index("Record CUBRID image") > names.index("Pytest (integration)")
+    assert record["if"] == "always()"
+    assert record["run"] == (
+        'python3 scripts/latest_server.py record --tag "${{ matrix.cubrid }}"'
+        ' --summary "$GITHUB_STEP_SUMMARY"'
+    )
+
+
+@pytest.mark.parametrize(
+    ("event", "sha", "runs"),
+    [
+        ("schedule", "", True),
+        ("workflow_dispatch", "", True),
+        # Under workflow_call github.event_name is the caller's event; publish-pypi.yml
+        # always passes the release SHA, so no release run starts the advisory job.
+        ("push", "a" * 40, False),
+        ("workflow_dispatch", "a" * 40, False),
+        ("schedule", "a" * 40, False),
+        ("pull_request", "", False),
+    ],
+)
+def test_newest_image_check_runs_weekly_and_manually_but_never_in_a_release(
+    event: str, sha: str, runs: bool
+) -> None:
+    job = FULL["jobs"]["latest-server"]
+    assert _if(job["if"], event, sha) is runs
+
+
+def test_newest_image_check_cannot_gate_the_matrix_or_a_release() -> None:
+    jobs = FULL["jobs"]
+    job = jobs["latest-server"]
+    assert job["continue-on-error"] is True
+    assert "needs" not in job
+    assert "latest-server" not in jobs["full-matrix-result"]["needs"]
+    assert "latest-server" not in jobs["integration-full"].get("needs", [])
+    canary = next(step for step in job["steps"] if step.get("id") == "canary")
+    assert canary["if"] == "steps.resolve.outputs.canary == 'true'"
+    # The canary runs the resolved immutable digest, never a moving tag.
+    assert canary["env"] == {"CANARY_IMAGE": "${{ steps.resolve.outputs.image }}"}
+    assert 'docker tag "$CANARY_IMAGE" cubrid/cubrid:newest-canary' in canary["run"]
+    assert "make integration CUBRID_VERSION=newest-canary" in canary["run"]
