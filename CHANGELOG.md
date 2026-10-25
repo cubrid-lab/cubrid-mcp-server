@@ -20,6 +20,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   behavior is unchanged. README (EN/KO), `TOOLS.md`, `MULTI_CONNECTION.md` and
   `TROUBLESHOOTING.md` (EN/KO) and the `.mcpb/server.json` manifest list them.
 
+### Documentation
+
+- **README and docs site show the 2026-10-25 brand icon (#456)** — the icon URL pinned in the README, its translations and `mkdocs.yml` (logo and favicon) now points at the approved CUBRID Lab brand revision `8aa81b7`. Documentation only; behavior is unchanged.
+
 ### CI
 
 - **Fewer routine CUBRID version runs, full release coverage kept (#417)** — a push to
