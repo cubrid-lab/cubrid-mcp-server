@@ -63,7 +63,15 @@ test: ## Run offline unit tests with coverage; fails below fail_under (writes co
 		$(PYTHON) scripts/report_results.py summarize --lane test --results-dir $(RESULTS)/test --coverage $(RESULTS)/test/coverage.xml --exit-code $$status; \
 		exit $$status
 
-verify: check test ## Run check and test (offline; no Docker, no database)
+# Full verification (#404): the static gate, the offline tests, then the run-owned live
+# lane, which needs Docker and fails when CUBRID never becomes ready or every live test
+# skips. Each phase is its own sub-make on its own recipe line, not a prerequisite, so even
+# `make -j` starts a phase only after the previous one succeeded, and the SIGTERM that make
+# forwards to a recipe reaches the running sub-make (and through it the integration runner).
+verify: ## Full verification: check, the offline tests, then the live integration lane (needs Docker)
+	@$(MAKE) --no-print-directory check
+	@$(MAKE) --no-print-directory test
+	@$(MAKE) --no-print-directory integration
 
 integration: ## Start a run-owned Compose CUBRID, run integration tests, always remove it (CUBRID_VERSION, CUBRID_TEST_PORT)
 	$(PYTHON) scripts/run_integration.py --cubrid-version "$(CUBRID_VERSION)" --port "$(INTEGRATION_PORT)" --pytest "$(PYTEST)" --results-dir "$(RESULTS)/integration"

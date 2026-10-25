@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Upgrade notes
+
+- **`make verify` now runs the live integration lane (#404)** — it runs `make check`, the offline
+  `make test` and then the run-owned `make integration` lane, so it needs Docker and fails when
+  CUBRID never becomes ready or every live test skips. The live lane starts only after the offline
+  tests pass, also under `make -j`. `make test` stays offline; run `make check test` for the
+  former offline-only `make verify`. Development tooling only; the MCP tools are unchanged.
+
 ### CI
 
 - **Every new issue starts in `status: needs triage` (#418)** — the issue forms add the

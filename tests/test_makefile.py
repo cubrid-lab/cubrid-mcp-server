@@ -115,10 +115,47 @@ def test_test_results_are_gitignored_and_cleaned() -> None:
 
 
 @needs_make
-def test_verify_is_check_plus_test_without_docker() -> None:
+def test_verify_is_check_then_test_then_the_live_lane() -> None:
+    # Sub-makes on separate recipe lines, not prerequisites (#404).
+    assert re.search(r"^verify:\s*##", (ROOT / "Makefile").read_text(), re.M)
     lines = dry_run("verify")
-    assert lines == dry_run("check") + dry_run("test")
-    assert not [line for line in lines if "docker" in line or "run_integration" in line]
+    # `make -n` prints each sub-make line, then the sub-make's own recipe.
+    submakes = [line.split()[1:] for line in lines if " --no-print-directory " in line]
+    assert submakes == [["--no-print-directory", p] for p in ("check", "test", "integration")]
+    recipes = [line for line in lines if " --no-print-directory " not in line]
+    assert recipes == dry_run("check") + dry_run("test") + dry_run("integration")
+    assert "scripts/run_integration.py" in lines[-1]
+
+
+@needs_make
+def test_test_stays_offline() -> None:
+    assert not [line for line in dry_run("test") if "docker" in line or "run_integration" in line]
+
+
+@needs_make
+@pytest.mark.parametrize("jobs", [[], ["-j3"]], ids=["serial", "parallel"])
+def test_verify_never_starts_the_live_lane_after_failing_offline_tests(
+    tmp_path: Path, jobs: list[str]
+) -> None:
+    assert MAKE is not None
+    log = tmp_path / "python.log"
+    stub = tmp_path / "python"
+    # Logs every call; the offline pytest run fails, everything else succeeds.
+    stub.write_text(
+        f'#!/bin/sh\nprintf "%s\\n" "$*" >> "{log}"\n'
+        'case " $* " in *" -m pytest "*"not integration"*) exit 1 ;; esac\nexit 0\n'
+    )
+    stub.chmod(0o755)
+    env = {k: v for k, v in os.environ.items() if k not in {"MAKEFLAGS", "MFLAGS", "MAKELEVEL"}}
+    result = subprocess.run(
+        [MAKE, "--no-print-directory", "-C", str(ROOT), *jobs, "verify",
+         f"PYTHON={stub}", f"RESULTS={tmp_path}/results"],
+        env=env, capture_output=True, text=True, check=False,
+    )  # fmt: skip
+    assert result.returncode != 0
+    calls = log.read_text().splitlines()
+    assert any("-m pytest" in call for call in calls)
+    assert not any("scripts/run_integration.py" in call for call in calls)
 
 
 @needs_make

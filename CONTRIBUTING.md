@@ -57,7 +57,7 @@ make format        # ruff format . + ruff check --fix . (the only target that ed
 
 ```bash
 make test               # offline unit tests with coverage; fails below fail_under (95)
-make verify             # make check + make test; no Docker, no database
+make verify             # make check, make test, then make integration (needs Docker)
 make integration        # integration tests on a Compose CUBRID it starts and removes
 make integration-local  # integration tests against a CUBRID you already run
 make docker-up          # a persistent local CUBRID for manual work (Docker Compose)

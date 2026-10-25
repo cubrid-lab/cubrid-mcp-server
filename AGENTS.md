@@ -45,7 +45,7 @@ jobs call these targets); `make help` lists them by group.
 - `make check` — `lint` (`ruff check .`) + `format-check` (`ruff format --check .`) + `typecheck` (mypy)
 - `make format` — the only target that rewrites files
 - `make test` — offline unit tests with coverage, enforcing `fail_under` (95); no database
-- `make verify` — `check` + `test`; no Docker
+- `make verify` — `check`, `test`, then the live `integration` lane (needs Docker; fails closed)
 - `make integration` — integration tests on a run-owned Compose project of the `docker-compose.yml`
   service, always removed with `down --volumes` (`CUBRID_VERSION`, default 11.4; `CUBRID_TEST_PORT`,
   default 33000; the older `INTEGRATION_PORT` still works and wins when set)
