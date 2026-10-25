@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.6.0](https://github.com/cubrid-lab/cubrid-mcp-server/compare/v0.5.6...v0.6.0) (2026-10-25)
+
+
+### Added
+
+* **make:** run the live integration lane in make verify ([#447](https://github.com/cubrid-lab/cubrid-mcp-server/issues/447)) ([e694f56](https://github.com/cubrid-lab/cubrid-mcp-server/commit/e694f569cbbe62034a275a846b90bd8ed7e827f1))
+* **make:** write an aggregate verification summary under test-results/verify ([#450](https://github.com/cubrid-lab/cubrid-mcp-server/issues/450)) ([3260e38](https://github.com/cubrid-lab/cubrid-mcp-server/commit/3260e3810ec8ed1a285f3f84731ac96271ca9892)), closes [#449](https://github.com/cubrid-lab/cubrid-mcp-server/issues/449)
+
 ## [0.5.6](https://github.com/cubrid-lab/cubrid-mcp-server/compare/v0.5.5...v0.5.6) (2026-10-25)
 
 
