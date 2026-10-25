@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-10-25
+
 ### Upgrade notes
 
 - **`make verify` now runs the live integration lane (#404)** — it runs `make check`, the offline
@@ -27,6 +29,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   128 + the signal number; `make integration` now `exec`s its runner, so a SIGTERM to make reaches
   it, and the runner also cleans up on SIGHUP. New `scripts/report_results.py aggregate`
   subcommand. Development tooling only; the MCP tools are unchanged.
+
+* **make:** run the live integration lane in make verify ([#447](https://github.com/cubrid-lab/cubrid-mcp-server/issues/447)) ([e694f56](https://github.com/cubrid-lab/cubrid-mcp-server/commit/e694f569cbbe62034a275a846b90bd8ed7e827f1))
+* **make:** write an aggregate verification summary under test-results/verify ([#450](https://github.com/cubrid-lab/cubrid-mcp-server/issues/450)) ([3260e38](https://github.com/cubrid-lab/cubrid-mcp-server/commit/3260e3810ec8ed1a285f3f84731ac96271ca9892)), refs [#449](https://github.com/cubrid-lab/cubrid-mcp-server/issues/449)
 
 ### CI
 
