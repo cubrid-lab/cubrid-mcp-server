@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.5.6](https://github.com/cubrid-lab/cubrid-mcp-server/compare/v0.5.5...v0.5.6) (2026-10-25)
+
+
+### Fixed
+
+* **config:** name the variable when a boolean setting is invalid ([#443](https://github.com/cubrid-lab/cubrid-mcp-server/issues/443)) ([8fc77db](https://github.com/cubrid-lab/cubrid-mcp-server/commit/8fc77db9e5379706dae95b1e85894be677f92df7)), closes [#435](https://github.com/cubrid-lab/cubrid-mcp-server/issues/435)
+
+
+### Documentation
+
+* **agents:** align independent MCP safety review and local title rules ([7592c53](https://github.com/cubrid-lab/cubrid-mcp-server/commit/7592c534b089882077f2b5da8345659aeb041d5c))
+* **agents:** clarify MCP safety review and local PR policy ([#442](https://github.com/cubrid-lab/cubrid-mcp-server/issues/442)) ([7592c53](https://github.com/cubrid-lab/cubrid-mcp-server/commit/7592c534b089882077f2b5da8345659aeb041d5c))
+
 ## [0.5.5](https://github.com/cubrid-lab/cubrid-mcp-server/compare/v0.5.4...v0.5.5) (2026-10-25)
 
 
