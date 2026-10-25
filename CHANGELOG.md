@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### CI
+
+- **Every new issue starts in `status: needs triage` (#418)** — the issue forms add the
+  label and the new `issue-triage.yml` workflow adds it to every opened issue. Priority and
+  size are still set by a maintainer, who removes the label after triage.
+
 ## [0.5.6] - 2026-10-25
 
 ### Changed
