@@ -174,10 +174,15 @@ class TestCubridIntegration:
         assert counts["truncated"] is False
 
     def test_table_row_counts_default_caps_beyond_limit(self) -> None:
-        """With no table_names on a >50-table database, count the first 50 (#239)."""
+        """With no table_names on a >limit-table database, count the first limit (#239).
+
+        The limit is ``CUBRID_MCP_MAX_ROW_COUNT_TABLES`` (default 50), so the test also
+        holds when the live lane runs with a non-default value (#430).
+        """
         from cubrid_mcp_server import server
 
-        created = [f"mcp_it_rc_{i:02d}" for i in range(server._cfg().max_row_count_tables + 1)]
+        limit = server._cfg().max_row_count_tables
+        created = [f"mcp_it_rc_{i:03d}" for i in range(limit + 1)]
         try:
             for table in created:
                 self.db.execute_write(f"DROP TABLE IF EXISTS {table}")
@@ -186,7 +191,7 @@ class TestCubridIntegration:
             result = server.table_row_counts()
             assert result["truncated"] is True
             assert result["total_tables"] == len(every)
-            assert [r["table"] for r in result["tables"]] == sorted(every)[:50]
+            assert [r["table"] for r in result["tables"]] == sorted(every)[:limit]
             assert all(r.get("error") is None for r in result["tables"])
             with pytest.raises(ValueError, match="too many tables requested"):
                 server.table_row_counts(created)
