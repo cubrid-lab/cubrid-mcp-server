@@ -29,6 +29,11 @@ needs_make = pytest.mark.skipif(MAKE is None, reason="make is not installed")
 COMPOSE = ["docker", "compose", "--file", "docker-compose.yml"]
 
 
+# An outer make (`make verify CUBRID_TEST_PORT=...` runs these tests) passes its
+# command-line variables down in MAKEFLAGS; the recipes read here must not inherit them.
+OUTER_MAKE = {"MAKEFLAGS", "MFLAGS", "MAKEOVERRIDES", "MAKELEVEL"}
+
+
 def dry_run(*args: str) -> list[str]:
     assert MAKE is not None
     out = subprocess.run(
@@ -36,6 +41,7 @@ def dry_run(*args: str) -> list[str]:
         capture_output=True,
         text=True,
         check=True,
+        env={k: v for k, v in os.environ.items() if k not in OUTER_MAKE},
     ).stdout
     return [line for line in out.splitlines() if line.strip()]
 
@@ -128,6 +134,15 @@ def test_verify_is_check_then_test_then_the_live_lane() -> None:
 
 
 @needs_make
+def test_dry_runs_ignore_an_outer_makes_overrides(monkeypatch: pytest.MonkeyPatch) -> None:
+    # What `make verify CUBRID_TEST_PORT=33599` hands the tests it runs.
+    monkeypatch.setenv("MAKEFLAGS", " -- CUBRID_TEST_PORT=33599 CUBRID_VERSION=10.2")
+    monkeypatch.setenv("MAKELEVEL", "1")
+    line = dry_run("integration")[-1]
+    assert '--cubrid-version "11.4" --port "33000"' in line
+
+
+@needs_make
 def test_test_stays_offline() -> None:
     assert not [line for line in dry_run("test") if "docker" in line or "run_integration" in line]
 
@@ -146,7 +161,7 @@ def test_verify_never_starts_the_live_lane_after_failing_offline_tests(
         'case " $* " in *" -m pytest "*"not integration"*) exit 1 ;; esac\nexit 0\n'
     )
     stub.chmod(0o755)
-    env = {k: v for k, v in os.environ.items() if k not in {"MAKEFLAGS", "MFLAGS", "MAKELEVEL"}}
+    env = {k: v for k, v in os.environ.items() if k not in OUTER_MAKE}
     result = subprocess.run(
         [MAKE, "--no-print-directory", "-C", str(ROOT), *jobs, "verify",
          f"PYTHON={stub}", f"RESULTS={tmp_path}/results"],
