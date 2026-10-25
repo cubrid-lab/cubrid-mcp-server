@@ -100,6 +100,27 @@
           "default": "30"
         },
         {
+          "name": "CUBRID_MCP_CONNECT_TIMEOUT",
+          "description": "Timeout in seconds for opening a connection to the CUBRID broker",
+          "isRequired": false,
+          "isSecret": false,
+          "default": "10"
+        },
+        {
+          "name": "CUBRID_MCP_MAX_ROW_COUNT_TABLES",
+          "description": "Maximum tables table_row_counts counts in one call",
+          "isRequired": false,
+          "isSecret": false,
+          "default": "50"
+        },
+        {
+          "name": "CUBRID_MCP_MAX_INLINE_BINARY_BYTES",
+          "description": "Largest binary value, in bytes, returned inline as base64; larger values are summarized",
+          "isRequired": false,
+          "isSecret": false,
+          "default": "256"
+        },
+        {
           "name": "CUBRID_CONNECTIONS",
           "description": "Comma-separated names of additional connections, configured with CUBRID_<NAME>_* variables",
           "isRequired": false,

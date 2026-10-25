@@ -177,7 +177,7 @@ class TestCubridIntegration:
         """With no table_names on a >50-table database, count the first 50 (#239)."""
         from cubrid_mcp_server import server
 
-        created = [f"mcp_it_rc_{i:02d}" for i in range(server._MAX_ROW_COUNT_TABLES + 1)]
+        created = [f"mcp_it_rc_{i:02d}" for i in range(server._cfg().max_row_count_tables + 1)]
         try:
             for table in created:
                 self.db.execute_write(f"DROP TABLE IF EXISTS {table}")
@@ -193,6 +193,36 @@ class TestCubridIntegration:
         finally:
             for table in created:
                 self.db.execute_write(f"DROP TABLE IF EXISTS {table}")
+
+    def test_configured_connect_timeout_and_output_limits(self, fixture_table: str) -> None:
+        """The #430 settings parsed from the environment reach a live session."""
+        from cubrid_mcp_server import server
+        from cubrid_mcp_server.config import Config
+        from cubrid_mcp_server.database import Database
+
+        from tests.helpers import single_context
+
+        config = Config.from_env(
+            dict(os.environ)
+            | {
+                "CUBRID_MCP_CONNECT_TIMEOUT": "5",
+                "CUBRID_MCP_MAX_ROW_COUNT_TABLES": "1",
+                "CUBRID_MCP_MAX_INLINE_BINARY_BYTES": "2",
+            }
+        )
+        db = Database(config)
+        server._context = single_context(config=config, database=db)
+        try:
+            assert server.health_check()["ok"] is True
+            result = server.table_row_counts()
+            assert len(result["tables"]) == 1
+            assert result["truncated"] is (result["total_tables"] > 1)
+            with pytest.raises(ValueError, match="limit is 1 per call"):
+                server.table_row_counts([fixture_table, fixture_table])
+            rows = server.execute_query("SELECT X'0102', X'010203'")["rows"]
+            assert rows == [["AQI=", "<binary 3 bytes>"]]
+        finally:
+            db.close()
 
     def test_explain_query_tool(self) -> None:
         from cubrid_mcp_server import server

@@ -60,7 +60,7 @@ Each connection is independently configured and enforced:
 | Read-only | `CUBRID_<NAME>_MCP_READONLY` | Whitelist enforcement for this connection only |
 | Write mode | `CUBRID_<NAME>_MCP_WRITE` | Opt-in `execute_write` for this connection only |
 | Audit log | `CUBRID_<NAME>_MCP_AUDIT_LOG` | Audit stream for this connection only |
-| Output limits | `CUBRID_<NAME>_MCP_MAX_ROWS` / `_MAX_CHARS` / `_MAX_SQL_LENGTH` / `_QUERY_TIMEOUT` | Tuning for this connection only |
+| Output limits | `CUBRID_<NAME>_MCP_MAX_ROWS` / `_MAX_CHARS` / `_MAX_SQL_LENGTH` / `_QUERY_TIMEOUT` / `_CONNECT_TIMEOUT` / `_MAX_ROW_COUNT_TABLES` / `_MAX_INLINE_BINARY_BYTES` | Tuning for this connection only |
 
 Each connection also has its own lock, connection lifecycle, and stale-connection recovery, so a hung query on one database does not block the others.
 

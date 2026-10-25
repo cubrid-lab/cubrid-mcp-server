@@ -31,6 +31,9 @@ class Config:
     max_rows: int
     max_sql_length: int = 65536
     query_timeout: float = 30.0
+    connect_timeout: float = 10.0
+    max_row_count_tables: int = 50
+    max_inline_binary_bytes: int = 256
     audit_log: bool = False
     write_enabled: bool = False
 
@@ -80,15 +83,12 @@ def _parse_config(source: Mapping[str, str], prefix: str) -> Config:
     max_rows = _parse_positive_int(source, f"{mcp_prefix}MAX_ROWS", "1000")
     max_sql_length = _parse_positive_int(source, f"{mcp_prefix}MAX_SQL_LENGTH", "65536")
 
-    query_timeout_raw = source.get(f"{mcp_prefix}QUERY_TIMEOUT", "30")
-    try:
-        query_timeout = float(query_timeout_raw)
-    except ValueError as exc:
-        raise ConfigError(
-            f"{mcp_prefix}QUERY_TIMEOUT must be a number, got {query_timeout_raw!r}"
-        ) from exc
-    if not isfinite(query_timeout) or query_timeout <= 0:
-        raise ConfigError(f"{mcp_prefix}QUERY_TIMEOUT must be positive")
+    query_timeout = _parse_positive_float(source, f"{mcp_prefix}QUERY_TIMEOUT", "30")
+    connect_timeout = _parse_positive_float(source, f"{mcp_prefix}CONNECT_TIMEOUT", "10")
+    max_row_count_tables = _parse_positive_int(source, f"{mcp_prefix}MAX_ROW_COUNT_TABLES", "50")
+    max_inline_binary_bytes = _parse_non_negative_int(
+        source, f"{mcp_prefix}MAX_INLINE_BINARY_BYTES", "256"
+    )
 
     write_enabled = _parse_bool(source.get(f"{mcp_prefix}WRITE", "0"), f"{mcp_prefix}WRITE")
     audit_log = _parse_bool(source.get(f"{mcp_prefix}AUDIT_LOG", "0"), f"{mcp_prefix}AUDIT_LOG")
@@ -104,6 +104,9 @@ def _parse_config(source: Mapping[str, str], prefix: str) -> Config:
         max_rows=max_rows,
         max_sql_length=max_sql_length,
         query_timeout=query_timeout,
+        connect_timeout=connect_timeout,
+        max_row_count_tables=max_row_count_tables,
+        max_inline_binary_bytes=max_inline_binary_bytes,
         write_enabled=write_enabled,
         audit_log=audit_log,
     )
@@ -116,6 +119,28 @@ def _parse_positive_int(source: Mapping[str, str], key: str, default: str) -> in
     except ValueError as exc:
         raise ConfigError(f"{key} must be an integer, got {raw!r}") from exc
     if value <= 0:
+        raise ConfigError(f"{key} must be positive")
+    return value
+
+
+def _parse_non_negative_int(source: Mapping[str, str], key: str, default: str) -> int:
+    raw = source.get(key, default)
+    try:
+        value = int(raw)
+    except ValueError as exc:
+        raise ConfigError(f"{key} must be an integer, got {raw!r}") from exc
+    if value < 0:
+        raise ConfigError(f"{key} must not be negative")
+    return value
+
+
+def _parse_positive_float(source: Mapping[str, str], key: str, default: str) -> float:
+    raw = source.get(key, default)
+    try:
+        value = float(raw)
+    except ValueError as exc:
+        raise ConfigError(f"{key} must be a number, got {raw!r}") from exc
+    if not isfinite(value) or value <= 0:
         raise ConfigError(f"{key} must be positive")
     return value
 

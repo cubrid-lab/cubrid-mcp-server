@@ -174,6 +174,77 @@ def test_from_env_non_positive_or_non_finite_query_timeout(value: str) -> None:
         Config.from_env(BASE_ENV | {"CUBRID_MCP_QUERY_TIMEOUT": value})
 
 
+def test_from_env_connect_timeout_default_and_override() -> None:
+    assert Config.from_env(BASE_ENV).connect_timeout == 10.0
+    cfg = Config.from_env(BASE_ENV | {"CUBRID_MCP_CONNECT_TIMEOUT": "2.5"})
+    assert cfg.connect_timeout == 2.5
+
+
+def test_from_env_non_numeric_connect_timeout() -> None:
+    with pytest.raises(ConfigError, match="CUBRID_MCP_CONNECT_TIMEOUT must be a number"):
+        Config.from_env(BASE_ENV | {"CUBRID_MCP_CONNECT_TIMEOUT": "soon"})
+
+
+@pytest.mark.parametrize("value", ["nan", "inf", "-1", "0"])
+def test_from_env_non_positive_or_non_finite_connect_timeout(value: str) -> None:
+    with pytest.raises(ConfigError, match="CUBRID_MCP_CONNECT_TIMEOUT must be positive"):
+        Config.from_env(BASE_ENV | {"CUBRID_MCP_CONNECT_TIMEOUT": value})
+
+
+def test_from_env_max_row_count_tables_default_and_override() -> None:
+    assert Config.from_env(BASE_ENV).max_row_count_tables == 50
+    cfg = Config.from_env(BASE_ENV | {"CUBRID_MCP_MAX_ROW_COUNT_TABLES": "200"})
+    assert cfg.max_row_count_tables == 200
+
+
+@pytest.mark.parametrize(
+    ("value", "message"),
+    [("lots", "must be an integer"), ("0", "must be positive"), ("-3", "must be positive")],
+)
+def test_from_env_invalid_max_row_count_tables(value: str, message: str) -> None:
+    with pytest.raises(ConfigError, match=f"CUBRID_MCP_MAX_ROW_COUNT_TABLES {message}"):
+        Config.from_env(BASE_ENV | {"CUBRID_MCP_MAX_ROW_COUNT_TABLES": value})
+
+
+@pytest.mark.parametrize(("value", "expected"), [("1024", 1024), ("0", 0)])
+def test_from_env_max_inline_binary_bytes_default_and_override(value: str, expected: int) -> None:
+    assert Config.from_env(BASE_ENV).max_inline_binary_bytes == 256
+    cfg = Config.from_env(BASE_ENV | {"CUBRID_MCP_MAX_INLINE_BINARY_BYTES": value})
+    assert cfg.max_inline_binary_bytes == expected
+
+
+@pytest.mark.parametrize(
+    ("value", "message"),
+    [("big", "must be an integer"), ("-1", "must not be negative")],
+)
+def test_from_env_invalid_max_inline_binary_bytes(value: str, message: str) -> None:
+    with pytest.raises(ConfigError, match=f"CUBRID_MCP_MAX_INLINE_BINARY_BYTES {message}"):
+        Config.from_env(BASE_ENV | {"CUBRID_MCP_MAX_INLINE_BINARY_BYTES": value})
+
+
+def test_registry_named_connection_reads_its_own_new_limits() -> None:
+    env = BASE_ENV | {
+        "CUBRID_MCP_CONNECT_TIMEOUT": "3",
+        "CUBRID_MCP_MAX_ROW_COUNT_TABLES": "7",
+        "CUBRID_MCP_MAX_INLINE_BINARY_BYTES": "0",
+        "CUBRID_CONNECTIONS": "reporting",
+        "CUBRID_REPORTING_HOST": "reporting-db",
+        "CUBRID_REPORTING_USER": "ru",
+        "CUBRID_REPORTING_PASSWORD": "rp",
+        "CUBRID_REPORTING_DATABASE": "reports",
+        "CUBRID_REPORTING_MCP_CONNECT_TIMEOUT": "45",
+        "CUBRID_REPORTING_MCP_MAX_ROW_COUNT_TABLES": "100",
+    }
+    registry = ConnectionRegistry.from_env(env)
+    default = registry.config_for()
+    assert (default.connect_timeout, default.max_row_count_tables) == (3.0, 7)
+    assert default.max_inline_binary_bytes == 0
+    reporting = registry.config_for("reporting")
+    assert (reporting.connect_timeout, reporting.max_row_count_tables) == (45.0, 100)
+    # Not inherited from the bare CUBRID_MCP_* variable.
+    assert reporting.max_inline_binary_bytes == 256
+
+
 def test_empty_password_is_accepted() -> None:
     # CUBRID's default ``dba`` user has an empty password.
     cfg = Config.from_env(BASE_ENV | {"CUBRID_USER": "dba", "CUBRID_PASSWORD": ""})
@@ -282,6 +353,9 @@ def test_registry_missing_named_vars_fail_with_name() -> None:
         ("MCP_MAX_CHARS", "lots"),
         ("MCP_MAX_SQL_LENGTH", "-5"),
         ("MCP_QUERY_TIMEOUT", "inf"),
+        ("MCP_CONNECT_TIMEOUT", "0"),
+        ("MCP_MAX_ROW_COUNT_TABLES", "many"),
+        ("MCP_MAX_INLINE_BINARY_BYTES", "-1"),
     ],
 )
 def test_registry_invalid_named_values_name_the_prefixed_variable(suffix: str, value: str) -> None:

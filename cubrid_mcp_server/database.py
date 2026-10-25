@@ -199,7 +199,7 @@ class Database:
                 user=self._config.user,
                 password=self._config.password,
                 database=self._config.database,
-                connect_timeout=10,
+                connect_timeout=self._config.connect_timeout,
                 # Bound how long a single statement may block the shared
                 # connection. This is a socket read timeout (not a true
                 # server-side statement timeout): if the broker sends no bytes

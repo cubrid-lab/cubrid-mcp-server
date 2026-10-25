@@ -22,6 +22,7 @@
 - **데이터베이스가 없음.** 먼저 생성하세요(`cubrid createdb`) 또는 `CUBRID_DATABASE`를 기존 데이터베이스로 지정하세요.
 - **CUBRID 기동 중.** 새 CUBRID 컨테이너는 접속 수락까지 시간이 걸립니다 — 브로커가 TCP를 열고 엔진이 준비되는 사이에 틈이 있습니다. 쿼리 전에 준비를 기다리세요(docker-compose 헬스체크 등). `health_check`가 요청 시점에 연결을 확인해 줍니다.
 - **자격 증명.** `CUBRID_USER`/`CUBRID_PASSWORD`가 유효해야 합니다. 로컬 docker에서는 빈 비밀번호의 `dba`가 흔합니다.
+- **느리거나 먼 브로커.** 연결 시도는 `CUBRID_MCP_CONNECT_TIMEOUT`초(기본 10) 후 포기합니다. 느린 링크로 접속하는 브로커라면 늘리세요(연결별: `CUBRID_<NAME>_MCP_CONNECT_TIMEOUT`).
 
 ## 쿼리 권한 거부
 

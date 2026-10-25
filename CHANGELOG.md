@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Configurable connect timeout and server output limits (#430)** — three values that were
+  hardcoded can now be set per deployment: `CUBRID_MCP_CONNECT_TIMEOUT` (seconds for opening
+  a broker connection, positive finite number, default `10`),
+  `CUBRID_MCP_MAX_ROW_COUNT_TABLES` (tables `table_row_counts` counts in one call, positive
+  integer, default `50`) and `CUBRID_MCP_MAX_INLINE_BINARY_BYTES` (largest binary value
+  returned inline as base64, non-negative integer, default `256`; `0` summarizes every
+  non-empty binary value). Each also has a per-connection `CUBRID_<NAME>_MCP_*` form and an
+  invalid value fails at startup with an error naming the variable. Without them the
+  behavior is unchanged. README (EN/KO), `TOOLS.md`, `MULTI_CONNECTION.md` and
+  `TROUBLESHOOTING.md` (EN/KO) and the `.mcpb/server.json` manifest list them.
+
 ### CI
 
 - **Fewer routine CUBRID version runs, full release coverage kept (#417)** — a push to

@@ -20,6 +20,7 @@ Symptom → cause → fix for the most common problems.
 - **Database does not exist.** Create it first (`cubrid createdb`) or point `CUBRID_DATABASE` at an existing database.
 - **CUBRID still starting.** A fresh CUBRID container takes a while to accept connections — the broker accepts TCP slightly after the engine is up. Wait for readiness (e.g. the docker-compose healthcheck) before starting queries. `health_check` verifies connectivity on demand.
 - **Credentials.** `CUBRID_USER`/`CUBRID_PASSWORD` must be valid; `dba` with an empty password is common in local docker setups.
+- **Slow or distant broker.** Opening a connection gives up after `CUBRID_MCP_CONNECT_TIMEOUT` seconds (default 10). Raise it for a broker reached over a slow link (per connection: `CUBRID_<NAME>_MCP_CONNECT_TIMEOUT`).
 
 ## Permission denied on queries
 

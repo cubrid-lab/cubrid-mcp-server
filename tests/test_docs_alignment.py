@@ -96,6 +96,9 @@ async def test_manifest_matches_config() -> None:
         "CUBRID_MCP_MAX_CHARS": cfg.max_chars,
         "CUBRID_MCP_MAX_SQL_LENGTH": cfg.max_sql_length,
         "CUBRID_MCP_QUERY_TIMEOUT": cfg.query_timeout,
+        "CUBRID_MCP_CONNECT_TIMEOUT": cfg.connect_timeout,
+        "CUBRID_MCP_MAX_ROW_COUNT_TABLES": cfg.max_row_count_tables,
+        "CUBRID_MCP_MAX_INLINE_BINARY_BYTES": cfg.max_inline_binary_bytes,
     }
     for name, value in expected.items():
         assert name in env, f"{name} missing from manifest"

@@ -226,7 +226,7 @@ CUBRID `CLASS` 상속 관계 — 어느 테이블이 어느 테이블을 상속�
 - 문장 길이는 `CUBRID_MCP_MAX_SQL_LENGTH`로 제한 (기본 65536)
 - 문장별 소켓 읽기 타임아웃 `CUBRID_MCP_QUERY_TIMEOUT`초 (기본 30)
 
-다중 문장 입력과 빈 입력(주석만 있거나 `;`만 있는 입력)은 `CUBRID_MCP_READONLY=0`에서도 거부됩니다. 주석(`--`, `//`, `/* ... */`), 따옴표, `;`는 CUBRID 규칙으로 읽으므로 주석이 선행 키워드를 숨길 수 없습니다. 닫히지 않은 따옴표가 있거나 백슬래시 때문에 따옴표가 끝나는 위치가 달라질 수 있는 입력은 거부됩니다. 바이너리 값은 작으면 base64로 인코딩되고 크면 요약됩니다(`<binary N bytes>`).
+다중 문장 입력과 빈 입력(주석만 있거나 `;`만 있는 입력)은 `CUBRID_MCP_READONLY=0`에서도 거부됩니다. 주석(`--`, `//`, `/* ... */`), 따옴표, `;`는 CUBRID 규칙으로 읽으므로 주석이 선행 키워드를 숨길 수 없습니다. 닫히지 않은 따옴표가 있거나 백슬래시 때문에 따옴표가 끝나는 위치가 달라질 수 있는 입력은 거부됩니다. 바이너리 값은 `CUBRID_MCP_MAX_INLINE_BINARY_BYTES`바이트(기본 256) 이하이면 base64로 인코딩되고, 더 크면 요약됩니다(`<binary N bytes>`).
 
 `execute_query`는 `INCR`, `DECR`, 시리얼 증가 `NEXT_VALUE`, `NEXTVAL`, `SERIAL_NEXT_VALUE`, 클릭 카운터 `WITH INCREMENT FOR` / `WITH DECREMENT FOR`도 대소문자, 따옴표 여부, 문장 내 위치와 무관하게 거부합니다. 이들은 `SELECT` 안에서 데이터를 바꾸고, 롤백으로 되돌려지지 않으며, `SELECT` 권한만으로 막을 수 없습니다. `CURRENT_VALUE`, `CURRVAL`, `SERIAL_CURRENT_VALUE`는 계속 허용됩니다. `CUBRID_MCP_READONLY=0`이어도 `execute_query`는 이 형태를 거부합니다. [보안 모델](SECURITY_MODEL.md)을 참고하세요.
 
@@ -274,6 +274,7 @@ CUBRID `SHOW TRACE`를 통해 `SELECT`/`WITH` 문의 실행 계획/트레이스�
 
 - 생략하거나 `None`: 이름 순으로 처음 50개 사용자 테이블을 카운트합니다. 테이블이 더 있으면 `truncated`가 `true`이며, 나머지 이름(`all_table_names`로 확인)을 최대 50개씩 나누어 전달하세요.
 - 명시적 리스트: 해당 테이블을 카운트하며, 50개를 넘으면 `too many tables requested (N); limit is 50 per call` 오류가 발생합니다.
+- 50개 제한은 `CUBRID_MCP_MAX_ROW_COUNT_TABLES`의 기본값입니다(연결별: `CUBRID_<NAME>_MCP_MAX_ROW_COUNT_TABLES`).
 - 빈 리스트(`[]`): 아무것도 카운트하지 않고 `"tables": []`를 반환합니다.
 
 예시: `table_row_counts(table_names=["product", "note", "missing_table"])` 응답

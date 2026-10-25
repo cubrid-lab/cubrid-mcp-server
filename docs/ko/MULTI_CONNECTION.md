@@ -62,7 +62,7 @@ export CUBRID_ANALYTICS_DATABASE=analytics
 | 읽기 전용 | `CUBRID_<NAME>_MCP_READONLY` | 이 연결에만 화이트리스트 강제 |
 | 쓰기 모드 | `CUBRID_<NAME>_MCP_WRITE` | 이 연결에만 `execute_write` 옵트인 |
 | 감사 로그 | `CUBRID_<NAME>_MCP_AUDIT_LOG` | 이 연결에만 감사 스트림 |
-| 출력 제한 | `CUBRID_<NAME>_MCP_MAX_ROWS` / `_MAX_CHARS` / `_MAX_SQL_LENGTH` / `_QUERY_TIMEOUT` | 이 연결에만 튜닝 |
+| 출력 제한 | `CUBRID_<NAME>_MCP_MAX_ROWS` / `_MAX_CHARS` / `_MAX_SQL_LENGTH` / `_QUERY_TIMEOUT` / `_CONNECT_TIMEOUT` / `_MAX_ROW_COUNT_TABLES` / `_MAX_INLINE_BINARY_BYTES` | 이 연결에만 튜닝 |
 
 각 연결은 자체 잠금·연결 수명 주기·끊어진 연결 복구를 가지므로, 한 데이터베이스에서 쿼리가 멈춰도 다른 연결을 막지 않습니다.
 

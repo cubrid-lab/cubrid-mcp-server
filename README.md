@@ -104,6 +104,9 @@ Optional settings:
 | `CUBRID_MCP_MAX_ROWS` | `1000` | Max rows returned by `execute_query` before truncation |
 | `CUBRID_MCP_MAX_SQL_LENGTH` | `65536` | Max length (characters) of a submitted SQL statement |
 | `CUBRID_MCP_QUERY_TIMEOUT` | `30` | Per-statement socket read timeout in seconds. If the server sends no data within this window the query is aborted and the connection is reset. This is a socket read timeout, not a true server-side statement timeout. |
+| `CUBRID_MCP_CONNECT_TIMEOUT` | `10` | Timeout in seconds for opening a connection to the CUBRID broker (positive number). Raise it for slow or distant brokers. |
+| `CUBRID_MCP_MAX_ROW_COUNT_TABLES` | `50` | Max tables `table_row_counts` counts in one call: the default call counts the first N user tables and a longer explicit list is rejected |
+| `CUBRID_MCP_MAX_INLINE_BINARY_BYTES` | `256` | Binary values up to this many bytes are returned base64-encoded; larger ones are summarized as `<binary N bytes>`. `0` summarizes every non-empty binary value. |
 | `CUBRID_MCP_AUDIT_LOG` | `0` | Opt-in audit logging. When enabled, emits one redaction-safe JSON record per executed statement (`execute_query`/`explain_query`/`execute_write`) to **stderr** — see [Logging](#logging). Honoured per connection (`CUBRID_<NAME>_MCP_AUDIT_LOG`). |
 | `CUBRID_MCP_WRITE` | `0` | Opt-in write mode. When enabled (`1`), registers the `execute_write` tool for single-statement DML. Honoured per connection (`CUBRID_<NAME>_MCP_WRITE`); the tool is registered when any connection enables it. Off by default. |
 

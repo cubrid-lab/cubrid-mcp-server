@@ -7,6 +7,7 @@ fetch logic without a live CUBRID server by monkeypatching ``pycubrid.connect``.
 from __future__ import annotations
 
 import socket
+from dataclasses import replace
 from typing import Any
 
 import pytest
@@ -294,6 +295,21 @@ def test_connect_passes_query_timeout_as_read_timeout(monkeypatch: pytest.Monkey
     )
     Database(config).connect()
     assert captured["read_timeout"] == 12.5
+
+
+@pytest.mark.parametrize(("overrides", "expected"), [({}, 10.0), ({"connect_timeout": 2.5}, 2.5)])
+def test_connect_passes_configured_connect_timeout(
+    monkeypatch: pytest.MonkeyPatch, overrides: dict[str, Any], expected: float
+) -> None:
+    captured: dict[str, Any] = {}
+
+    def _connect(**kwargs: Any) -> FakeConnection:
+        captured.update(kwargs)
+        return FakeConnection()
+
+    monkeypatch.setattr(pycubrid, "connect", _connect)
+    Database(replace(_TEST_CONFIG, **overrides)).connect()
+    assert captured["connect_timeout"] == expected
 
 
 def test_is_timeout_error_detects_raw_and_wrapped() -> None:

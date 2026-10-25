@@ -224,7 +224,7 @@ Runs **read-only** SQL (`SELECT`, `SHOW`, `DESC`, `DESCRIBE`, `WITH`) and only s
 - statement length capped at `CUBRID_MCP_MAX_SQL_LENGTH` (default 65536),
 - per-statement socket read timeout of `CUBRID_MCP_QUERY_TIMEOUT` seconds (default 30).
 
-Multi-statement and empty (comment-only or `;`-only) input is rejected, also with `CUBRID_MCP_READONLY=0`. Comments (`--`, `//`, `/* ... */`), quotes and `;` are read with CUBRID's rules, so a comment cannot hide the leading keyword; input with an unterminated quote, or with a backslash that would change where a quote ends, is rejected. Binary values are base64-encoded when small and summarized (`<binary N bytes>`) when large.
+Multi-statement and empty (comment-only or `;`-only) input is rejected, also with `CUBRID_MCP_READONLY=0`. Comments (`--`, `//`, `/* ... */`), quotes and `;` are read with CUBRID's rules, so a comment cannot hide the leading keyword; input with an unterminated quote, or with a backslash that would change where a quote ends, is rejected. Binary values up to `CUBRID_MCP_MAX_INLINE_BINARY_BYTES` bytes (default 256) are base64-encoded; larger ones are summarized (`<binary N bytes>`).
 
 `execute_query` also rejects `INCR`, `DECR`, the serial advances `NEXT_VALUE`, `NEXTVAL` and `SERIAL_NEXT_VALUE`, and the click counter `WITH INCREMENT FOR` / `WITH DECREMENT FOR`, in any case, bare or quoted and anywhere in the statement: they change data inside a `SELECT`, the rollback does not undo them, and a `SELECT`-only grant does not prevent them. `CURRENT_VALUE`, `CURRVAL` and `SERIAL_CURRENT_VALUE` stay allowed. With `CUBRID_MCP_READONLY=0` `execute_query` rejects these forms too. See the [Security Model](SECURITY_MODEL.md).
 
@@ -272,6 +272,7 @@ Example: `explain_query(sql="SELECT name, price FROM product WHERE category = 'f
 
 - Omitted or `None`: counts the first 50 user tables in name order. If the database has more, `truncated` is `true`; pass the remaining names (from `all_table_names`) in batches of up to 50.
 - Explicit list: counts those tables; more than 50 names raises `too many tables requested (N); limit is 50 per call`.
+- The limit of 50 is the default of `CUBRID_MCP_MAX_ROW_COUNT_TABLES` (per connection: `CUBRID_<NAME>_MCP_MAX_ROW_COUNT_TABLES`).
 - Empty list (`[]`): counts nothing and returns `"tables": []`.
 
 Example: `table_row_counts(table_names=["product", "note", "missing_table"])` returns

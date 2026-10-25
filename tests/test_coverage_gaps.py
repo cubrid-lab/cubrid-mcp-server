@@ -6,7 +6,9 @@ binary summaries, startup config failure) that the happy-path tests skip.
 
 from __future__ import annotations
 
+import base64
 from contextlib import contextmanager
+from dataclasses import replace
 from typing import Any
 
 import pytest
@@ -153,13 +155,15 @@ class _RowCountErrorDB:
 
 def test_table_row_counts_rejects_too_many_tables(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(server, "_db", lambda connection=None: _NameOnlyDB(["users"]))
-    too_many = [f"t{i}" for i in range(server._MAX_ROW_COUNT_TABLES + 1)]
+    monkeypatch.setattr(server, "_cfg", lambda connection=None: _TEST_CONFIG)
+    too_many = [f"t{i}" for i in range(_TEST_CONFIG.max_row_count_tables + 1)]
     with pytest.raises(ValueError, match="too many tables"):
         server.table_row_counts(too_many)
 
 
 def test_table_row_counts_reports_per_table_error(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(server, "_db", lambda connection=None: _RowCountErrorDB())
+    monkeypatch.setattr(server, "_cfg", lambda connection=None: _TEST_CONFIG)
     result = server.table_row_counts(["users"])
     # The raw driver message is sanitized to the exception category only.
     assert result["tables"] == [{"table": "users", "row_count": None, "error": "RuntimeError"}]
@@ -184,8 +188,9 @@ class _ManyTablesDB:
 
 
 def test_table_row_counts_default_caps_beyond_limit(monkeypatch: pytest.MonkeyPatch) -> None:
-    db = _ManyTablesDB(server._MAX_ROW_COUNT_TABLES + 1)
+    db = _ManyTablesDB(_TEST_CONFIG.max_row_count_tables + 1)
     monkeypatch.setattr(server, "_db", lambda connection=None: db)
+    monkeypatch.setattr(server, "_cfg", lambda connection=None: _TEST_CONFIG)
     result = server.table_row_counts()
     assert result["truncated"] is True
     assert result["total_tables"] == 51
@@ -196,8 +201,9 @@ def test_table_row_counts_default_caps_beyond_limit(monkeypatch: pytest.MonkeyPa
 def test_table_row_counts_default_at_limit_not_truncated(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    db = _ManyTablesDB(server._MAX_ROW_COUNT_TABLES)
+    db = _ManyTablesDB(_TEST_CONFIG.max_row_count_tables)
     monkeypatch.setattr(server, "_db", lambda connection=None: db)
+    monkeypatch.setattr(server, "_cfg", lambda connection=None: _TEST_CONFIG)
     result = server.table_row_counts()
     assert result["truncated"] is False
     assert result["total_tables"] == 50
@@ -207,11 +213,25 @@ def test_table_row_counts_default_at_limit_not_truncated(
 def test_table_row_counts_explicit_list_over_limit_still_errors(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    db = _ManyTablesDB(server._MAX_ROW_COUNT_TABLES + 1)
+    db = _ManyTablesDB(_TEST_CONFIG.max_row_count_tables + 1)
     monkeypatch.setattr(server, "_db", lambda connection=None: db)
+    monkeypatch.setattr(server, "_cfg", lambda connection=None: _TEST_CONFIG)
     with pytest.raises(ValueError, match="too many tables requested \\(51\\)"):
         server.table_row_counts(list(db.names))
     assert db.counted == []
+
+
+def test_table_row_counts_honors_configured_limit(monkeypatch: pytest.MonkeyPatch) -> None:
+    db = _ManyTablesDB(5)
+    config = replace(_TEST_CONFIG, max_row_count_tables=3)
+    monkeypatch.setattr(server, "_db", lambda connection=None: db)
+    monkeypatch.setattr(server, "_cfg", lambda connection=None: config)
+    result = server.table_row_counts()
+    assert result["truncated"] is True
+    assert [r["table"] for r in result["tables"]] == db.names[:3]
+    with pytest.raises(ValueError, match="too many tables requested \\(4\\); limit is 3 per call"):
+        server.table_row_counts(db.names[:4])
+    assert len(server.table_row_counts(db.names[:3])["tables"]) == 3
 
 
 # ---------------------------------------------------------------------------
@@ -220,8 +240,32 @@ def test_table_row_counts_explicit_list_over_limit_still_errors(
 
 
 def test_coerce_oversized_binary_returns_size_summary() -> None:
-    data = b"\x00" * (server._MAX_INLINE_BINARY_BYTES + 1)
+    data = b"\x00" * (_TEST_CONFIG.max_inline_binary_bytes + 1)
     assert server._coerce(data) == f"<binary {len(data)} bytes>"
+    assert server._coerce(data[:-1]) == base64.b64encode(data[:-1]).decode("ascii")
+
+
+@pytest.mark.parametrize(
+    ("limit", "data", "expected"),
+    [
+        (4, b"\x01\x02\x03\x04", "AQIDBA=="),
+        (3, b"\x01\x02\x03\x04", "<binary 4 bytes>"),
+        (0, b"", ""),
+        (0, b"\x01", "<binary 1 bytes>"),
+    ],
+)
+def test_execute_query_honors_configured_inline_binary_limit(
+    monkeypatch: pytest.MonkeyPatch, limit: int, data: bytes, expected: str
+) -> None:
+    class _BinaryDB:
+        def fetch_many(
+            self, sql: str, params: Any = None, max_rows: int | None = None
+        ) -> tuple[list[tuple[Any, ...]], bool]:
+            return [(data,)], False
+
+    config = replace(_TEST_CONFIG, max_inline_binary_bytes=limit)
+    monkeypatch.setattr(server, "_context", single_context(config=config, database=_BinaryDB()))
+    assert server.execute_query("SELECT b FROM t")["rows"] == [[expected]]
 
 
 # ---------------------------------------------------------------------------
