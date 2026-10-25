@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Tests
+
+- **Live proof that the default configuration refuses writes (#451)** — the new
+  `integration`-marked `tests/test_integration_readonly.py` calls every SQL-accepting tool
+  through `mcp.call_tool` against the run-owned CUBRID, with no `CUBRID_MCP_READONLY`,
+  `CUBRID_MCP_WRITE` or `CUBRID_CONNECTIONS` set. `CREATE TABLE`, `INSERT`, `UPDATE`,
+  `DELETE`, `TRUNCATE`, `ALTER`, `DROP` (also behind a comment) and `SELECT 1; DROP ...`-style
+  multi-statement input fail with the documented `execute_query` and `explain_query` errors,
+  `execute_write` is not offered, and a table name carrying SQL is an unknown table for
+  `table_row_counts`; an independent session then shows the catalog, columns and rows
+  unchanged. One more test enables `CUBRID_MCP_WRITE=1`, commits an `INSERT` through
+  `execute_write` into a uniquely named table that it always drops, and shows DDL and
+  multi-statement input are still refused. Test-only; the server is unchanged.
+
 ## [0.6.0] - 2026-10-25
 
 ### Upgrade notes
@@ -41,17 +55,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Tests
 
-- **Live proof that the default configuration refuses writes (#451)** — the new
-  `integration`-marked `tests/test_integration_readonly.py` calls every SQL-accepting tool
-  through `mcp.call_tool` against the run-owned CUBRID, with no `CUBRID_MCP_READONLY`,
-  `CUBRID_MCP_WRITE` or `CUBRID_CONNECTIONS` set. `CREATE TABLE`, `INSERT`, `UPDATE`,
-  `DELETE`, `TRUNCATE`, `ALTER`, `DROP` (also behind a comment) and `SELECT 1; DROP ...`-style
-  multi-statement input fail with the documented `execute_query` and `explain_query` errors,
-  `execute_write` is not offered, and a table name carrying SQL is an unknown table for
-  `table_row_counts`; an independent session then shows the catalog, columns and rows
-  unchanged. One more test enables `CUBRID_MCP_WRITE=1`, commits an `INSERT` through
-  `execute_write` into a uniquely named table that it always drops, and shows DDL and
-  multi-statement input are still refused. Test-only; the server is unchanged.
 - **Named-connection invalid values keep the prefixed variable name (#434)** — `tests/test_config.py` now checks that an invalid `PORT`, `MCP_MAX_ROWS`, `MCP_MAX_CHARS`, `MCP_MAX_SQL_LENGTH` or `MCP_QUERY_TIMEOUT` on a named connection raises `ConfigError` naming the full `CUBRID_<NAME>_...` variable and not the bare default one, and that a blank required named variable is reported like a missing one. Test-only; `config.py` is unchanged. Refs #434.
 
 ## [0.5.6] - 2026-10-25
