@@ -301,6 +301,26 @@ def test_quote_ident_escapes_double_quotes(name: str, expected: str) -> None:
     assert server._quote_ident(name) == expected
 
 
+@pytest.mark.parametrize("alias", ["c", "catalog"])
+@pytest.mark.parametrize("owner", [None, "reporting"])
+def test_owner_filter_conditions_and_parameter_order(alias: str, owner: str | None) -> None:
+    table = server._Table(owner, "users")
+    expected = (
+        (f"{alias}.class_name = ?", ("users",))
+        if owner is None
+        else (f"{alias}.class_name = ? AND {alias}.owner_name = ?", ("users", owner))
+    )
+    assert server._owner_filter(table, alias) == expected
+
+
+@pytest.mark.parametrize("left,right", [("c", "a"), ("parent", "child")])
+@pytest.mark.parametrize("owner", [None, "reporting"])
+def test_same_owner_join_condition(left: str, right: str, owner: str | None) -> None:
+    table = server._Table(owner, "users")
+    expected = "" if owner is None else f" AND {left}.owner_name = {right}.owner_name"
+    assert server._same_owner(table, left, right) == expected
+
+
 def test_quote_ident_blocks_injection_in_count_query() -> None:
     """A malicious table name should remain a single quoted identifier with doubled quotes."""
     quoted = server._quote_ident('users"; DROP TABLE users; --')
