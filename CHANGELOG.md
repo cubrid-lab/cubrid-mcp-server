@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-10-27
+
 ### Added
 
 - **Configurable connect timeout and server output limits (#430)** — three values that were
@@ -20,11 +22,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   behavior is unchanged. README (EN/KO), `TOOLS.md`, `MULTI_CONNECTION.md` and
   `TROUBLESHOOTING.md` (EN/KO) and the `.mcpb/server.json` manifest list them.
 
+* **config:** make the connect timeout and server output limits configurable ([#454](https://github.com/cubrid-lab/cubrid-mcp-server/issues/454)) ([f65e548](https://github.com/cubrid-lab/cubrid-mcp-server/commit/f65e548348100494510838ec731ed474a889a159))
+
 ### Documentation
 
 - **README and docs site show the brand icon with white marks (#472)** — the icon URL pinned in the README, its translations and `mkdocs.yml` (logo and favicon) now points at brand revision `3a385be`, where the Python Yellow icons draw white role marks on a bare cube like every other language. Documentation only; behavior is unchanged.
 - **README and docs site show the emblem-aligned brand icon (#469)** — the icon URL pinned in the README, its translations and `mkdocs.yml` (logo and favicon) now points at the brand revision `538bad3`, whose Python Yellow keyline keeps the cube silhouette of the organization emblem (open seams, no flat bottom). Documentation only; behavior is unchanged.
 - **README and docs site show the 2026-10-25 brand icon (#456)** — the icon URL pinned in the README, its translations and `mkdocs.yml` (logo and favicon) now points at the approved CUBRID Lab brand revision `8aa81b7`. Documentation only; behavior is unchanged.
+
+* adopt type-only issue titles and shared triage guidance ([31cc0b0](https://github.com/cubrid-lab/cubrid-mcp-server/commit/31cc0b0fa536cce00845d6192e77ffd6823fea8e))
+* **readme:** repin the brand icon to the 2026-10-25 brand revision ([#457](https://github.com/cubrid-lab/cubrid-mcp-server/issues/457)) ([d35e4a5](https://github.com/cubrid-lab/cubrid-mcp-server/commit/d35e4a51bffa97bd4e51cba9f891d1578a8bf520))
+* **readme:** repin the brand icon to the emblem-aligned keyline ([#470](https://github.com/cubrid-lab/cubrid-mcp-server/issues/470)) ([c80a8c0](https://github.com/cubrid-lab/cubrid-mcp-server/commit/c80a8c0b5a10a6f0fada88b857890d15c087109c))
+* **readme:** repin the brand icon to the shared white marks ([#473](https://github.com/cubrid-lab/cubrid-mcp-server/issues/473)) ([6eaba76](https://github.com/cubrid-lab/cubrid-mcp-server/commit/6eaba766ffdb0e1f42c7e5e8dfade1d81d281f68))
 
 ### CI
 
