@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -88,3 +89,48 @@ def test_no_translations_passes_without_inspecting_git(
 
     assert MODULE.main() == 0
     assert "no translations present" in capsys.readouterr().out
+
+
+def _fake_git(monkeypatch: pytest.MonkeyPatch, stdout: str) -> list[list[str]]:
+    """Replace ``subprocess.run`` with a fake git returning ``stdout``."""
+    calls: list[list[str]] = []
+
+    def run(args: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        calls.append(args)
+        return subprocess.CompletedProcess(args, 0, stdout=stdout, stderr="")
+
+    monkeypatch.setattr(MODULE.subprocess, "run", run)
+    return calls
+
+
+def test_changed_files_lists_both_sides_of_a_rename(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("BASE_REF", raising=False)
+    calls = _fake_git(monkeypatch, "README.md\ndocs.md\n")
+
+    assert MODULE.changed_files() == {"README.md", "docs.md"}
+    (command,) = calls
+    assert "--no-renames" in command
+    assert "--find-renames" not in command
+    assert command[-1] == "origin/main...HEAD"
+
+
+def test_changed_files_ignores_blank_lines_and_surrounding_spaces(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _fake_git(monkeypatch, "\n  README.md  \n\n docs/README.ko.md\n\n")
+
+    assert MODULE.changed_files() == {"README.md", "docs/README.ko.md"}
+
+
+@pytest.mark.parametrize(
+    ("base_ref", "expected"),
+    [("release", "origin/release...HEAD"), ("origin/release", "origin/release...HEAD")],
+)
+def test_changed_files_base_ref(
+    monkeypatch: pytest.MonkeyPatch, base_ref: str, expected: str
+) -> None:
+    monkeypatch.setenv("BASE_REF", base_ref)
+    calls = _fake_git(monkeypatch, "")
+
+    assert MODULE.changed_files() == set()
+    assert calls[0][-1] == expected

@@ -8,6 +8,7 @@ The workflow wiring is checked in tests/test_ci_scope.py.
 from __future__ import annotations
 
 import importlib.util
+import subprocess
 import sys
 from pathlib import Path
 
@@ -185,6 +186,51 @@ def test_missing_docker_is_unverified(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("PATH", "")
     assert latest_server._docker("version") == ""
     assert latest_server.pull("latest") == ("", "")
+
+
+def fake_run(
+    monkeypatch: pytest.MonkeyPatch,
+    result: subprocess.CompletedProcess[str] | Exception,
+) -> list[dict[str, object]]:
+    """Replace ``subprocess.run`` in the script; record each call's keyword arguments."""
+    calls: list[dict[str, object]] = []
+
+    def run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        calls.append({"cmd": cmd, **kwargs})
+        if isinstance(result, Exception):
+            raise result
+        return result
+
+    monkeypatch.setattr(latest_server.subprocess, "run", run)
+    return calls
+
+
+def test_docker_success_returns_stripped_stdout(monkeypatch: pytest.MonkeyPatch) -> None:
+    done = subprocess.CompletedProcess(["docker"], 0, stdout=f"  {REF_A} \n", stderr="")
+    calls = fake_run(monkeypatch, done)
+    assert latest_server._docker("image", "inspect", "x") == REF_A
+    assert calls[0]["cmd"] == ["docker", "image", "inspect", "x"]
+
+
+def test_docker_nonzero_exit_discards_stdout(monkeypatch: pytest.MonkeyPatch) -> None:
+    failed = subprocess.CompletedProcess(["docker"], 1, stdout="partial output\n", stderr="")
+    fake_run(monkeypatch, failed)
+    assert latest_server._docker("pull", "-q", "cubrid/cubrid:latest") == ""
+
+
+def test_docker_timeout_is_unverified_not_raised(monkeypatch: pytest.MonkeyPatch) -> None:
+    timeout = subprocess.TimeoutExpired(["docker"], latest_server.DOCKER_TIMEOUT)
+    fake_run(monkeypatch, timeout)
+    assert latest_server._docker("pull", "-q", "cubrid/cubrid:latest") == ""
+
+
+def test_docker_passes_the_timeout_and_never_raises_on_exit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls = fake_run(monkeypatch, subprocess.CompletedProcess(["docker"], 0, stdout="", stderr=""))
+    latest_server._docker("version")
+    assert calls[0]["timeout"] == latest_server.DOCKER_TIMEOUT == 600
+    assert calls[0]["check"] is False
 
 
 def test_record_writes_the_cell_image_and_always_succeeds(
