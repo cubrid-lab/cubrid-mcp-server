@@ -187,6 +187,78 @@ def test_missing_docker_is_unverified(monkeypatch: pytest.MonkeyPatch) -> None:
     assert latest_server.pull("latest") == ("", "")
 
 
+def test_docker_returns_stripped_stdout_on_success(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Exit status 0 returns the stdout with surrounding whitespace stripped."""
+    import subprocess
+
+    def fake_run(*args: str, **kwargs: str) -> subprocess.CompletedProcess:
+        return subprocess.CompletedProcess(
+            args=["docker", *args],
+            returncode=0,
+            stdout="  cubrid/cubrid@sha256:abc \n",
+            stderr="",
+        )
+
+    monkeypatch.setattr(latest_server.subprocess, "run", fake_run)
+    result = latest_server._docker("image", "inspect", "test")
+    assert result == "cubrid/cubrid@sha256:abc"
+
+
+def test_docker_returns_empty_on_nonzero_exit(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Non-zero exit status returns "" even when stdout has content."""
+    import subprocess
+
+    def fake_run(*args: str, **kwargs: str) -> subprocess.CompletedProcess:
+        return subprocess.CompletedProcess(
+            args=["docker", *args],
+            returncode=1,
+            stdout="partial output\n",
+            stderr="error message",
+        )
+
+    monkeypatch.setattr(latest_server.subprocess, "run", fake_run)
+    result = latest_server._docker("pull", "-q", "cubrid/cubrid:latest")
+    assert result == ""
+
+
+def test_docker_returns_empty_on_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
+    """subprocess.TimeoutExpired returns "" instead of escaping."""
+    import subprocess
+
+    def fake_run(*args: str, **kwargs: str) -> None:
+        raise subprocess.TimeoutExpired(cmd=["docker", *args], timeout=600)
+
+    monkeypatch.setattr(latest_server.subprocess, "run", fake_run)
+    result = latest_server._docker("pull", "-q", "cubrid/cubrid:latest")
+    assert result == ""
+
+
+def test_docker_passes_timeout_and_check_kwargs(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Every docker call passes timeout=DOCKER_TIMEOUT and check=False."""
+    import subprocess
+
+    captured_kwargs: list[dict] = []
+
+    def fake_run(*args: str, **kwargs: str) -> subprocess.CompletedProcess:
+        captured_kwargs.append(kwargs)
+        return subprocess.CompletedProcess(
+            args=["docker", *args],
+            returncode=0,
+            stdout="",
+            stderr="",
+        )
+
+    monkeypatch.setattr(latest_server.subprocess, "run", fake_run)
+    latest_server._docker("version")
+    latest_server._docker("pull", "-q", "cubrid/cubrid:latest")
+    latest_server._docker("image", "inspect", "test")
+
+    assert len(captured_kwargs) == 3
+    for kwargs in captured_kwargs:
+        assert kwargs.get("timeout") == latest_server.DOCKER_TIMEOUT
+        assert kwargs.get("check") is False
+
+
 def test_record_writes_the_cell_image_and_always_succeeds(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
