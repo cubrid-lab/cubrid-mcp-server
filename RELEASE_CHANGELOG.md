@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.7.0](https://github.com/cubrid-lab/cubrid-mcp-server/compare/v0.6.0...v0.7.0) (2026-10-27)
+
+
+### Added
+
+* **config:** make the connect timeout and server output limits configurable ([#454](https://github.com/cubrid-lab/cubrid-mcp-server/issues/454)) ([f65e548](https://github.com/cubrid-lab/cubrid-mcp-server/commit/f65e548348100494510838ec731ed474a889a159))
+
+
+### Documentation
+
+* adopt type-only issue titles and shared triage guidance ([31cc0b0](https://github.com/cubrid-lab/cubrid-mcp-server/commit/31cc0b0fa536cce00845d6192e77ffd6823fea8e))
+* **readme:** repin the brand icon to the 2026-10-25 brand revision ([#457](https://github.com/cubrid-lab/cubrid-mcp-server/issues/457)) ([d35e4a5](https://github.com/cubrid-lab/cubrid-mcp-server/commit/d35e4a51bffa97bd4e51cba9f891d1578a8bf520))
+* **readme:** repin the brand icon to the emblem-aligned keyline ([#470](https://github.com/cubrid-lab/cubrid-mcp-server/issues/470)) ([c80a8c0](https://github.com/cubrid-lab/cubrid-mcp-server/commit/c80a8c0b5a10a6f0fada88b857890d15c087109c))
+* **readme:** repin the brand icon to the shared white marks ([#473](https://github.com/cubrid-lab/cubrid-mcp-server/issues/473)) ([6eaba76](https://github.com/cubrid-lab/cubrid-mcp-server/commit/6eaba766ffdb0e1f42c7e5e8dfade1d81d281f68))
+
 ## [0.6.0](https://github.com/cubrid-lab/cubrid-mcp-server/compare/v0.5.6...v0.6.0) (2026-10-25)
 
 
