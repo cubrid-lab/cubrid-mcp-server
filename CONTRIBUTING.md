@@ -549,8 +549,7 @@ Existing security invariants, tests, docs requirements and PR review/merge polic
 
 ## Pull request and commit titles
 
-This repository uses the canonical CUBRID Lab title format for its issues,
-pull requests and commit subjects. Its PRs are squash-merged and the pull
+This repository uses the local Conventional Commits rules for pull request titles and commit subjects. Issue titles use type-only prefixes such as `feat:` and `bug:`, without module scopes (see the [organization standard](https://github.com/cubrid-lab/.github/blob/main/docs/ISSUE_PR_COMMIT_STANDARD.md)). Its PRs are squash-merged and the pull
 request title becomes the commit title on `main`, so the PR title must be
 accurate. This repository's `PR title` check enforces that format; do not
 assume other repositories share identical check names or release mechanics.

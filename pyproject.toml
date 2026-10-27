@@ -54,7 +54,7 @@ dev = [
     # tests/test_docs_channel_notice.py renders the site notice template (#361);
     # MkDocs renders it with the same library.
     "jinja2>=3.1",
-    "ruff==0.17.1",
+    "ruff==0.17.2",
     "mypy==2.4.0",
     "pre-commit",
     "tox",
