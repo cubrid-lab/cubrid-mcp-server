@@ -10,8 +10,8 @@ theme:
   # The development-documentation notice on every page (#355).
   custom_dir: docs/overrides
   # CUBRID Lab repository icon, pinned to an immutable cubrid-lab/brand commit.
-  logo: https://raw.githubusercontent.com/cubrid-lab/brand/8aa81b79f00ae936b03a9546f14f514c5e2554a7/dist/icons/cubrid-mcp-server.svg
-  favicon: https://raw.githubusercontent.com/cubrid-lab/brand/8aa81b79f00ae936b03a9546f14f514c5e2554a7/dist/icons/cubrid-mcp-server.svg
+  logo: https://raw.githubusercontent.com/cubrid-lab/brand/538bad3929bb661ee95774119cf3b9b4aebc7f15/dist/icons/cubrid-mcp-server.svg
+  favicon: https://raw.githubusercontent.com/cubrid-lab/brand/538bad3929bb661ee95774119cf3b9b4aebc7f15/dist/icons/cubrid-mcp-server.svg
   features:
     - navigation.tabs
     - navigation.sections
