@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Documentation
+
+- **README and docs site show the transparent brand icon (#494)** — the icon URL pinned in the README, its translations and `mkdocs.yml` (logo and favicon) now points at brand revision `e55990a`, where the MCP icon's three-way router is real transparency instead of white paint. Documentation only; behavior is unchanged.
+
 ## [0.7.0] - 2026-10-27
 
 ### Added
