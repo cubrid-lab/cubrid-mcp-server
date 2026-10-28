@@ -226,6 +226,18 @@ def test_only_a_real_404_means_unpublished(dist, output, monkeypatch) -> None:
                 "urls": [{"filename": WHEEL, "digests": {"sha256": sha(b"x")}}] * 2,
             }
         ).encode(),
+        # info present but not a dict (line 128 shape check)
+        pytest.param(
+            json.dumps({"info": [PROJECT, VERSION], "urls": []}).encode(),
+            id="info-not-dict",
+        ),
+        # urls present but not a list (line 128 shape check)
+        pytest.param(
+            json.dumps(
+                {"info": {"name": PROJECT, "version": VERSION}, "urls": {}}
+            ).encode(),
+            id="urls-not-list",
+        ),
     ],
 )
 def test_ambiguous_response_fails_closed(dist, output, monkeypatch, body) -> None:
