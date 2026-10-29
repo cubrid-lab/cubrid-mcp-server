@@ -233,6 +233,31 @@ def test_candidate_needs_exactly_one_built_wheel() -> None:
     assert summary.candidate(needs("dry-run", build=build))[0] == "failure"
 
 
+@pytest.mark.parametrize("raw", ["[]", '["a.whl"]', '"x.whl"'])
+def test_built_wheel_digest_ignores_non_object_map(raw):
+    build = {"result": "success", "outputs": {"sha256": raw}}
+    assert summary.built_wheel_digest(needs("dry-run", build=build)) == ""
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        ("not json", "unreadable"),
+        ("", "-"),
+        ("{}", "-"),
+        ("[]", "-"),
+    ],
+)
+def test_hashes_cell_malformed_or_empty(raw, expected):
+    assert summary.hashes_cell({"sha256": raw}) == expected
+
+
+def test_hashes_cell_sorts_by_filename():
+    raw = json.dumps({"b.whl": "1111", "a.tar.gz": "2222"})
+    expected = "`a.tar.gz` `2222`<br>`b.whl` `1111`"
+    assert summary.hashes_cell({"sha256": raw}) == expected
+
+
 def test_failed_require_candidate_is_a_failed_candidate() -> None:
     data = needs("dry-run", require_candidate="failure")
     status, reason = summary.candidate(data)
