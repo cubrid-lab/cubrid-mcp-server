@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Documentation
 
+- **Korean README multi-connection example defines the analytics connection (#486)** — the `docs/README.ko.md` example lists `CUBRID_CONNECTIONS=reporting,analytics` and now also sets the four `CUBRID_ANALYTICS_*` variables, matching README.md, so the copied block no longer fails at startup with `missing required environment variable: CUBRID_ANALYTICS_HOST`. Documentation only; behavior is unchanged.
 - **README and docs site show the transparent brand icon (#494)** — the icon URL pinned in the README, its translations and `mkdocs.yml` (logo and favicon) now points at brand revision `e55990a`, where the MCP icon's three-way router is real transparency instead of white paint. Documentation only; behavior is unchanged.
 
 ### Tests

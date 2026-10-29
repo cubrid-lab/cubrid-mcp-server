@@ -120,6 +120,11 @@ export CUBRID_REPORTING_USER=readonly_user
 export CUBRID_REPORTING_PASSWORD=secret
 export CUBRID_REPORTING_DATABASE=reports
 export CUBRID_REPORTING_MCP_MAX_ROWS=500   # 연결별 선택 튜닝
+
+export CUBRID_ANALYTICS_HOST=analytics-db
+export CUBRID_ANALYTICS_USER=readonly_user
+export CUBRID_ANALYTICS_PASSWORD=secret
+export CUBRID_ANALYTICS_DATABASE=analytics
 ```
 
 참고: 연결 이름은 `[A-Za-z0-9_]+` 형식이며 대소문자를 구분하지 않습니다. `default`는 예약된 이름입니다. 이름 있는 연결은 기본 변수를 상속하지 않으므로 모든 필드를 지정해야 합니다. 연결별로 읽기 전용 강제가 독립적으로 적용됩니다.
