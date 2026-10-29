@@ -26,7 +26,7 @@ Run `cubrid-mcp-server --help` or `cubrid-mcp-server --version`. Both exit 0, pr
 - **Wrong port.** The server connects to the CUBRID **broker** on port 33000 (`CUBRID_PORT`), not the manager port 1523.
 - **Database does not exist.** Create it first (`cubrid createdb`) or point `CUBRID_DATABASE` at an existing database.
 - **CUBRID still starting.** A fresh CUBRID container takes a while to accept connections — the broker accepts TCP slightly after the engine is up. Wait for readiness (e.g. the docker-compose healthcheck) before starting queries. `health_check` verifies connectivity on demand.
-- **Credentials.** `CUBRID_USER`/`CUBRID_PASSWORD` must be valid; `dba` with an empty password is common in local docker setups.
+- **Credentials.** `CUBRID_USER`/`CUBRID_PASSWORD` must be valid for the server's dedicated read-only account. In a local docker lab, `dba` with an empty password is the image's administrator account: use it only to create that account (Quick Start [Step 3](quickstart.md#step-3-prepare-the-sample-table-and-the-read-only-account)), never as the server's `CUBRID_USER`.
 - **Slow or distant broker.** Opening a connection gives up after `CUBRID_MCP_CONNECT_TIMEOUT` seconds (default 10). Raise it for a broker reached over a slow link (per connection: `CUBRID_<NAME>_MCP_CONNECT_TIMEOUT`).
 
 ## Permission denied on queries
@@ -39,7 +39,7 @@ The CUBRID user lacks grants. CUBRID grants privileges **per table** — there i
 
 **Symptom:** `execute_query` rejects a statement.
 
-By design. The whitelist allows only `SELECT`, `SHOW`, `DESC`, `DESCRIBE`, and `WITH`; multi-statement input is always rejected. CUBRID has no `EXPLAIN` statement; use the `explain_query` tool for execution plans. If you truly need other statements, first put a read-only DB user in place, then consider `CUBRID_MCP_READONLY=0` — and for writes, use opt-in write mode instead of disabling the whitelist.
+By design. Do not fix a rejection by using `dba`, granting more privileges or setting `CUBRID_MCP_READONLY=0`. The whitelist allows only `SELECT`, `SHOW`, `DESC`, `DESCRIBE`, and `WITH`; multi-statement input is always rejected. CUBRID has no `EXPLAIN` statement; use the `explain_query` tool for execution plans. For writes, use [opt-in write mode](SECURITY_MODEL.md#layer-2b-opt-in-write-mode-cubrid_mcp_write) instead of disabling the whitelist. `CUBRID_MCP_READONLY=0` is only for the narrow case the [Security Model](SECURITY_MODEL.md#layer-2-read-only-sql-whitelist) describes: the DB user is already read-only and you need a result-set statement the parser misclassifies.
 
 ## Output looks cut off
 

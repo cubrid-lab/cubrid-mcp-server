@@ -21,7 +21,7 @@
 - **포트.** 서버는 CUBRID **브로커**의 33000 포트(`CUBRID_PORT`)에 연결합니다 — 매니저 포트 1523이 아닙니다.
 - **데이터베이스가 없음.** 먼저 생성하세요(`cubrid createdb`) 또는 `CUBRID_DATABASE`를 기존 데이터베이스로 지정하세요.
 - **CUBRID 기동 중.** 새 CUBRID 컨테이너는 접속 수락까지 시간이 걸립니다 — 브로커가 TCP를 열고 엔진이 준비되는 사이에 틈이 있습니다. 쿼리 전에 준비를 기다리세요(docker-compose 헬스체크 등). `health_check`가 요청 시점에 연결을 확인해 줍니다.
-- **자격 증명.** `CUBRID_USER`/`CUBRID_PASSWORD`가 유효해야 합니다. 로컬 docker에서는 빈 비밀번호의 `dba`가 흔합니다.
+- **자격 증명.** 서버 전용 읽기 전용 계정의 `CUBRID_USER`/`CUBRID_PASSWORD`가 유효해야 합니다. 로컬 docker 실습 환경에서 빈 비밀번호의 `dba`는 이미지의 관리자 계정입니다. 그 계정을 만들 때만 사용하고(빠른 시작 [3단계](quickstart.md#3단계-예제-테이블과-읽기-전용-계정-준비)), 서버의 `CUBRID_USER`로는 절대 사용하지 마세요.
 - **느리거나 먼 브로커.** 연결 시도는 `CUBRID_MCP_CONNECT_TIMEOUT`초(기본 10) 후 포기합니다. 느린 링크로 접속하는 브로커라면 늘리세요(연결별: `CUBRID_<NAME>_MCP_CONNECT_TIMEOUT`).
 
 ## 쿼리 권한 거부
@@ -34,7 +34,7 @@ CUBRID 사용자에게 권한이 없습니다. CUBRID는 **테이블 단위**로
 
 **증상:** `execute_query`가 문장을 거부함.
 
-설계된 동작입니다. 화이트리스트는 `SELECT`, `SHOW`, `DESC`, `DESCRIBE`, `WITH`만 허용하며 다중 문장은 항상 거부됩니다. CUBRID에는 `EXPLAIN` 문이 없으므로 실행 계획은 `explain_query` 도구를 사용하세요. 정말 다른 문장이 필요하면 먼저 읽기 전용 DB 사용자를 배치한 뒤 `CUBRID_MCP_READONLY=0`을 고려하세요 — 쓰기는 화이트리스트를 끄는 대신 옵트인 쓰기 모드를 사용하세요.
+설계된 동작입니다. `dba` 사용, 권한 추가 부여, `CUBRID_MCP_READONLY=0` 설정으로 거부를 해결하지 마세요. 화이트리스트는 `SELECT`, `SHOW`, `DESC`, `DESCRIBE`, `WITH`만 허용하며 다중 문장은 항상 거부됩니다. CUBRID에는 `EXPLAIN` 문이 없으므로 실행 계획은 `explain_query` 도구를 사용하세요. 쓰기는 화이트리스트를 끄는 대신 [옵트인 쓰기 모드](SECURITY_MODEL.md#계층-2b--옵트인-쓰기-모드-cubrid_mcp_write)를 사용하세요. `CUBRID_MCP_READONLY=0`은 [보안 모델](SECURITY_MODEL.md#계층-2--읽기-전용-sql-화이트리스트)이 설명하는 좁은 경우에만 사용합니다. 데이터베이스 사용자가 이미 읽기 전용이고 파서가 오판하는 결과 집합 문장이 필요할 때입니다.
 
 ## 출력이 잘린 것처럼 보임
 
