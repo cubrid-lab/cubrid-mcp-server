@@ -52,5 +52,5 @@ Part of the cubrid-lab Python ecosystem:
 
 - **cubrid-mcp-server** — MCP server — natural-language access for LLM clients
 - [pycubrid](https://github.com/cubrid-lab/pycubrid) — Pure-Python DB-API 2.0 driver for CUBRID (sync + native asyncio)
-- [sqlalchemy-cubrid](https://github.com/cubrid-lab/sqlalchemy-cubrid) — SQLAlchemy 2.0–2.2 dialect + Alembic
+- [sqlalchemy-cubrid](https://github.com/cubrid-lab/sqlalchemy-cubrid) — SQLAlchemy 2.0–2.1 dialect + Alembic
 - [cubrid-cookbook-python](https://github.com/cubrid-lab/cubrid-cookbook-python) — 68 runnable examples and application templates

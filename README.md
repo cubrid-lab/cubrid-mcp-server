@@ -345,7 +345,7 @@ connection pooling or per-request transaction isolation.
 ## Related Projects
 
 - [pycubrid](https://github.com/cubrid-lab/pycubrid) — Pure-Python DB-API 2.0 driver this server is built on
-- [sqlalchemy-cubrid](https://github.com/cubrid-lab/sqlalchemy-cubrid) — SQLAlchemy 2.0–2.2 dialect for CUBRID
+- [sqlalchemy-cubrid](https://github.com/cubrid-lab/sqlalchemy-cubrid) — SQLAlchemy 2.0–2.1 dialect for CUBRID
 - [cubrid-cookbook-python](https://github.com/cubrid-lab/cubrid-cookbook-python) — 68 runnable examples incl. one-command app templates that use this stack
 
 ## Disclaimer

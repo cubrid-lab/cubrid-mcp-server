@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Documentation
 
+- **Correct the SQLAlchemy range quoted for sqlalchemy-cubrid (#501)** — the related-projects entries in the README, the Korean README and the docs home page now say SQLAlchemy 2.0–2.1, matching the dialect's `sqlalchemy>=2.0,<2.2` dependency bound and its own documentation. Documentation only; behavior is unchanged.
 - **README and docs site show the transparent brand icon (#494)** — the icon URL pinned in the README, its translations and `mkdocs.yml` (logo and favicon) now points at brand revision `e55990a`, where the MCP icon's three-way router is real transparency instead of white paint. Documentation only; behavior is unchanged.
 
 ### Tests
