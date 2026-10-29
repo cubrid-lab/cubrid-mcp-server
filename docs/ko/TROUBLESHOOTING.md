@@ -6,6 +6,23 @@
 
 증상 → 원인 → 해결 순으로 정리했습니다.
 
+## 오류 메시지로 찾기
+
+도구 결과에는 데이터베이스 세부 정보가 모델에 전달되지 않도록 오류의 종류만 표시됩니다. 원인은 서버의 오류 출력(stderr)에 있습니다. 보이는 메시지 그대로 찾으세요.
+
+| 메시지 | 나타나는 곳 | 섹션 |
+|---|---|---|
+| `configuration error: missing required environment variable: CUBRID_HOST`(또는 다른 `CUBRID_*` 이름) | 시작 시 서버의 오류 출력. 클라이언트는 서버를 실패로 표시 | [클라이언트가 서버에 연결되지 않음](#클라이언트가-서버에-연결되지-않음) |
+| `failed to connect to CUBRID` | 모든 도구 호출 결과 | [CUBRID 연결 거부](#cubrid-연결-거부) |
+| `health_check` → `{"ok":false,"error":"DatabaseError"}` | `health_check` 결과 | [CUBRID 연결 거부](#cubrid-연결-거부) |
+| `query failed: ProgrammingError` | `execute_query` 결과 | [쿼리 권한 거부](#쿼리-권한-거부) |
+| `query failed: OperationalError` | `execute_query` 결과 | [CUBRID 연결 거부](#cubrid-연결-거부) |
+| `query exceeded timeout of 30s (CUBRID_MCP_QUERY_TIMEOUT)` | `execute_query` 결과 | [쿼리 타임아웃 의미](#쿼리-타임아웃-의미) |
+| `DELETE is not permitted in read-only mode; allowed statements: ...`(또는 다른 키워드) | `execute_query` 결과 | [읽기 전용 거부](#읽기-전용-거부) |
+| 메시지 없음: 서버는 연결됨으로 표시되지만 모든 도구가 실패함 | MCP 클라이언트 | [서버는 연결됨으로 표시되지만 모든 도구가 실패함](#서버는-연결됨으로-표시되지만-모든-도구가-실패함) |
+
+[빠른 시작의 실패 표](quickstart.md#문제가-생기면)에도 같은 메시지와 서버 오류 출력에 나오는 원인이 정리되어 있습니다.
+
 ## 클라이언트가 서버에 연결되지 않음
 
 **증상:** MCP 클라이언트가 서버를 실패 또는 사용 불가로 표시함.
@@ -13,6 +30,12 @@
 - **`uvx` 없음.** 클라이언트는 `uvx cubrid-mcp-server`를 실행합니다 — [uv](https://docs.astral.sh/uv/)를 설치해 클라이언트의 `PATH`에 두거나, 클라이언트 설정에 절대 경로를 사용하세요(`"command": "/home/you/.local/bin/uvx"`).
 - **환경 변수 누락.** `CUBRID_HOST`, `CUBRID_USER`, `CUBRID_PASSWORD`, `CUBRID_DATABASE`는 클라이언트의 `env` 블록에 있어야 합니다 — 터미널의 `export`는 Claude Desktop 같은 GUI 앱에 보이지 않습니다.
 - **설정 파일 위치.** Claude Desktop은 `~/Library/Application Support/Claude/claude_desktop_config.json`, Claude Code는 프로젝트 루트의 `.mcp.json`, Cursor는 `.cursor/mcp.json`을 읽습니다. 수정 후에는 클라이언트를 재시작하세요.
+
+## 서버는 연결됨으로 표시되지만 모든 도구가 실패함
+
+**증상:** MCP 클라이언트에 서버와 도구가 표시되지만 모든 도구 호출이 실패함(예: `failed to connect to CUBRID`).
+
+서버는 데이터베이스에 접속하지 않고 시작하며, CUBRID 연결은 첫 도구 호출 때 엽니다. 따라서 서버가 실행 중이라는 것은 설정을 읽었다는 뜻일 뿐, CUBRID에 접속할 수 있거나 자격 증명이 유효하다는 뜻은 아닙니다. `health_check`를 호출하고 서버의 오류 출력을 확인한 뒤 [CUBRID 연결 거부](#cubrid-연결-거부)를 차례로 점검하세요.
 
 ## CUBRID 연결 거부
 

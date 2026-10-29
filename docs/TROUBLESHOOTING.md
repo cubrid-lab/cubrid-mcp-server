@@ -4,6 +4,23 @@
 
 Symptom → cause → fix for the most common problems.
 
+## Find your error message
+
+Tool results name only the kind of error, so that database details do not reach the model; the cause is in the server's error output (stderr). Look up the literal message you see:
+
+| Message | Where it appears | Section |
+|---|---|---|
+| `configuration error: missing required environment variable: CUBRID_HOST` (or another `CUBRID_*` name) | Server's error output at startup; the client shows the server as failed | [The client cannot connect to the server](#the-client-cannot-connect-to-the-server) |
+| `failed to connect to CUBRID` | Result of any tool call | [CUBRID connection refused](#cubrid-connection-refused) |
+| `health_check` → `{"ok":false,"error":"DatabaseError"}` | `health_check` result | [CUBRID connection refused](#cubrid-connection-refused) |
+| `query failed: ProgrammingError` | `execute_query` result | [Permission denied on queries](#permission-denied-on-queries) |
+| `query failed: OperationalError` | `execute_query` result | [CUBRID connection refused](#cubrid-connection-refused) |
+| `query exceeded timeout of 30s (CUBRID_MCP_QUERY_TIMEOUT)` | `execute_query` result | [Query timeout semantics](#query-timeout-semantics) |
+| `DELETE is not permitted in read-only mode; allowed statements: ...` (or another keyword) | `execute_query` result | [Read-only rejection](#read-only-rejection) |
+| No message: the server shows as connected, but every tool fails | MCP client | [Server shows as connected, but every tool fails](#server-shows-as-connected-but-every-tool-fails) |
+
+The [Quick Start's failure table](quickstart.md#if-something-fails) lists the same messages with the causes printed in the server's error output.
+
 
 ## Confirming the install without a database
 
@@ -18,6 +35,12 @@ Run `cubrid-mcp-server --help` or `cubrid-mcp-server --version`. Both exit 0, pr
 - **`uvx` not found.** The client launches `uvx cubrid-mcp-server` — install [uv](https://docs.astral.sh/uv/) so `uvx` is on the client's `PATH`, or use an absolute path in the client config (`"command": "/home/you/.local/bin/uvx"`).
 - **Environment variables missing.** `CUBRID_HOST`, `CUBRID_USER`, `CUBRID_PASSWORD`, and `CUBRID_DATABASE` must be present in the client's `env` block — a plain terminal export is not visible to GUI apps like Claude Desktop.
 - **Config file location.** Claude Desktop reads `~/Library/Application Support/Claude/claude_desktop_config.json`; Claude Code reads `.mcp.json` at the project root; Cursor reads `.cursor/mcp.json`. After editing, restart the client.
+
+## Server shows as connected, but every tool fails
+
+**Symptom:** the MCP client lists the server and its tools, but every tool call fails (for example with `failed to connect to CUBRID`).
+
+The server starts without contacting the database: it opens the CUBRID connection on the first tool call. A running server therefore proves only that the configuration was read, not that CUBRID is reachable or the credentials are valid. Call `health_check` and read the server's error output, then work through [CUBRID connection refused](#cubrid-connection-refused).
 
 ## CUBRID connection refused
 
