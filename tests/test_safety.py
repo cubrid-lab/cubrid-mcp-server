@@ -124,7 +124,13 @@ def test_ensure_read_only_rejects_hidden_writes(sql: str) -> None:
         ensure_read_only(sql)
 
 
-# --- ensure_query_statement: execute_query with the whitelist disabled (#235) ---
+# --- ensure_query_statement: execute_query with the whitelist disabled ---
+#
+# CUBRID_MCP_READONLY=0 relaxes the read-only whitelist so execute_query can run
+# other result-set reads, but execute_query must still never write: writes, DDL
+# and transaction control are rejected and point the caller to execute_write,
+# which has its own opt-in gate (CUBRID_MCP_WRITE=1). A leading comment must not
+# hide the real statement (#235).
 
 
 @pytest.mark.parametrize(
@@ -154,7 +160,10 @@ def test_ensure_read_only_rejects_hidden_writes(sql: str) -> None:
         "EXECUTE s",
         "DEALLOCATE PREPARE s",
         "DO 1",
-        # Method calls and session control (#297).
+        # Method calls and session control are rejected too: CALL and EVALUATE run
+        # methods, CALL login(...) ON CLASS db_user switches the user of the shared
+        # session for every later tool call, and KILL ends other sessions'
+        # transactions (#297).
         "CALL my_proc()",
         "CALL login('dba', '') ON CLASS db_user",
         "call login('dba', '') on class db_user",
