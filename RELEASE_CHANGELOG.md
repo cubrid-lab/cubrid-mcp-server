@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.8.0](https://github.com/cubrid-lab/cubrid-mcp-server/compare/v0.7.0...v0.8.0) (2026-10-30)
+
+
+### Added
+
+* **cli:** handle --help and --version before config ([#496](https://github.com/cubrid-lab/cubrid-mcp-server/issues/496)) ([cb21925](https://github.com/cubrid-lab/cubrid-mcp-server/commit/cb2192531e900a236de30c112f6f2958ea77b3c9)), closes [#487](https://github.com/cubrid-lab/cubrid-mcp-server/issues/487)
+
+
+### Fixed
+
+* list both sides of a rename in the translation-sync changed-file list ([#468](https://github.com/cubrid-lab/cubrid-mcp-server/issues/468)) ([968d14c](https://github.com/cubrid-lab/cubrid-mcp-server/commit/968d14c5e872aaa57bc2e821e9cd49c365570230)), closes [#467](https://github.com/cubrid-lab/cubrid-mcp-server/issues/467)
+
+
+### Documentation
+
+* complete the Korean multi-connection configuration example ([#509](https://github.com/cubrid-lab/cubrid-mcp-server/issues/509)) ([ab7aaef](https://github.com/cubrid-lab/cubrid-mcp-server/commit/ab7aaef114fc59b7a86014f5ea7687083c2cd2b2))
+* correct the SQLAlchemy range quoted for sqlalchemy-cubrid ([#508](https://github.com/cubrid-lab/cubrid-mcp-server/issues/508)) ([d8c0b1b](https://github.com/cubrid-lab/cubrid-mcp-server/commit/d8c0b1b009a4f6c6022153a160d1bbf3925d78b3))
+* key Troubleshooting by the literal error messages ([#511](https://github.com/cubrid-lab/cubrid-mcp-server/issues/511)) ([c0df781](https://github.com/cubrid-lab/cubrid-mcp-server/commit/c0df781e77bd9c39e7fb0682ab41aa74f8b09850)), closes [#489](https://github.com/cubrid-lab/cubrid-mcp-server/issues/489)
+* **readme:** repin the brand icon to the transparent role marks ([#495](https://github.com/cubrid-lab/cubrid-mcp-server/issues/495)) ([30783b6](https://github.com/cubrid-lab/cubrid-mcp-server/commit/30783b67eefb7b43a29d3351d34cb46799bb965f))
+* require human-readable agent communication and self-explanatory comments ([#458](https://github.com/cubrid-lab/cubrid-mcp-server/issues/458)) ([9b38727](https://github.com/cubrid-lab/cubrid-mcp-server/commit/9b387274a6614570ab17b614fe7093e0e9c7c7d2))
+* stop presenting dba and CUBRID_MCP_READONLY=0 as troubleshooting fixes ([#510](https://github.com/cubrid-lab/cubrid-mcp-server/issues/510)) ([125425c](https://github.com/cubrid-lab/cubrid-mcp-server/commit/125425c1dc86b1a873ce09c9cd82aa059878ae42))
+* **templates:** correct the bug-report title example and collect useful diagnostics ([#493](https://github.com/cubrid-lab/cubrid-mcp-server/issues/493)) ([59d88fd](https://github.com/cubrid-lab/cubrid-mcp-server/commit/59d88fd823cdc55eefcc8b773e78f4661ca505a8))
+* use the Python yellow from the brand tokens in the site theme ([#498](https://github.com/cubrid-lab/cubrid-mcp-server/issues/498)) ([34777ed](https://github.com/cubrid-lab/cubrid-mcp-server/commit/34777edc9d274355d71b28486480729194bfccb0))
+
 ## [0.7.0](https://github.com/cubrid-lab/cubrid-mcp-server/compare/v0.6.0...v0.7.0) (2026-10-27)
 
 
