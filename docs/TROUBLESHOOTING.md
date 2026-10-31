@@ -56,13 +56,13 @@ The server starts without contacting the database: it opens the CUBRID connectio
 
 **Symptom:** authorization errors on `SELECT` statements.
 
-The CUBRID user lacks grants. CUBRID grants privileges **per table** — there is no schema-wide `db.*` grant. Create a user and grant `SELECT` on each table the model may read; see the [Security Model](SECURITY_MODEL.md#layer-1-database-permissions-required).
+The CUBRID user lacks grants. CUBRID grants privileges **per table** — there is no schema-wide `db.*` grant. Create a user and grant `SELECT` on each table the model may read; see the [Security Model](SECURITY_MODEL.md#layer-1).
 
 ## Read-only rejection
 
 **Symptom:** `execute_query` rejects a statement.
 
-By design. Do not fix a rejection by using `dba`, granting more privileges or setting `CUBRID_MCP_READONLY=0`. The whitelist allows only `SELECT`, `SHOW`, `DESC`, `DESCRIBE`, and `WITH`; multi-statement input is always rejected. CUBRID has no `EXPLAIN` statement; use the `explain_query` tool for execution plans. For writes, use [opt-in write mode](SECURITY_MODEL.md#layer-2b-opt-in-write-mode-cubrid_mcp_write) instead of disabling the whitelist. `CUBRID_MCP_READONLY=0` is only for the narrow case the [Security Model](SECURITY_MODEL.md#layer-2-read-only-sql-whitelist) describes: the DB user is already read-only and you need a result-set statement the parser misclassifies.
+By design. Do not fix a rejection by using `dba`, granting more privileges or setting `CUBRID_MCP_READONLY=0`. The whitelist allows only `SELECT`, `SHOW`, `DESC`, `DESCRIBE`, and `WITH`; multi-statement input is always rejected. CUBRID has no `EXPLAIN` statement; use the `explain_query` tool for execution plans. For writes, use [opt-in write mode](SECURITY_MODEL.md#layer-2b) instead of disabling the whitelist. `CUBRID_MCP_READONLY=0` is only for the narrow case the [Security Model](SECURITY_MODEL.md#layer-2) describes: the DB user is already read-only and you need a result-set statement the parser misclassifies.
 
 ## Output looks cut off
 
@@ -82,4 +82,4 @@ The server speaks MCP stdio: `stdout` carries the protocol stream, and **all log
 
 ## Audit log not appearing
 
-Set `CUBRID_MCP_AUDIT_LOG=1` (opt-in, off by default). With multiple connections, enable it per connection via `CUBRID_<NAME>_MCP_AUDIT_LOG`. Records are JSON lines on **stderr** — they never appear on stdout. See the [Security Model](SECURITY_MODEL.md#layer-4-audit-logging-opt-in).
+Set `CUBRID_MCP_AUDIT_LOG=1` (opt-in, off by default). With multiple connections, enable it per connection via `CUBRID_<NAME>_MCP_AUDIT_LOG`. Records are JSON lines on **stderr** — they never appear on stdout. See the [Security Model](SECURITY_MODEL.md#layer-4).

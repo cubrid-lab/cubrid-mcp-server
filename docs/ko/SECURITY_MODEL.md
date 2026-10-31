@@ -6,6 +6,8 @@
 
 `cubrid-mcp-server`는 CUBRID 데이터베이스와 MCP를 사용하는 LLM 클라이언트를 잇는 다리입니다. 모델이 보내는 모든 쿼리를 신뢰할 수 없는 입력으로 취급하세요: LLM은 파괴적 SQL을 환각할 수 있고, 악의적인 프롬프트는 서버가 노출할 의도가 없던 데이터를 빼내려 할 수 있습니다. **심층 방어**가 설계 의도입니다.
 
+<a id="layer-1"></a>
+
 ## 계층 1 — 데이터베이스 권한 (필수)
 
 모델이 사용하길 원하는 권한**만** 가진 전용 최소 권한 CUBRID 사용자로 서버를 실행하세요. 이 계정이 주된 보안 통제이며, 코드 수준의 안전 검사기는 가드레일일 뿐 이것을 대신할 수 없습니다. `dba`나 스키마 소유자 계정을 재사용하지 마세요.
@@ -29,6 +31,8 @@ GRANT SELECT ON orders TO mcp_reader;
 
 추가 강화: 시크릿 매니저의 긴 무작위 비밀번호 사용, 정기적 로테이션, 스키마 전체가 아닌 테이블 단위 부여, MCP 서버 호스트만 접근 가능한 네트워크에 CUBRID 두기. 전체 정책은 [`SECURITY.md`](https://github.com/cubrid-lab/cubrid-mcp-server/blob/main/SECURITY.md)를 참고하세요.
 
+<a id="layer-2"></a>
+
 ## 계층 2 — 읽기 전용 SQL 화이트리스트
 
 서버는 **기본적으로 읽기 전용**입니다. `CUBRID_MCP_READONLY=1`(기본값)이면 모든 문장이 `sqlparse`로 파싱되어 `SELECT`, `SHOW`, `DESC`, `DESCRIBE`, `WITH`(CTE)가 아니면 거부됩니다. CUBRID에는 `EXPLAIN` 문이 없으므로 실행 계획은 `explain_query` 도구를 사용하세요. 다중 문장 입력은 거부됩니다. 주석, 따옴표, 문장 경계는 `sqlparse`가 아니라 CUBRID 규칙으로 읽습니다. `--`, `//`, `/* ... */`가 주석이고(블록 주석은 중첩되지 않음), `#`은 주석이 아니며, 따옴표 안의 백슬래시는 일반 문자입니다. 백슬래시가 따옴표를 이스케이프하는지(서버 파라미터 `no_backslash_escapes`)에 따라 따옴표 경계가 달라지는 입력과 닫히지 않은 따옴표가 있는 입력은 거부됩니다. 문장의 첫 단어 자체도 허용된 키워드여야 합니다. `sqlparse`는 `KILL`, `EVALUATE`처럼 모르는 단어를 이름으로 읽으므로, 그렇지 않으면 `KILL (SELECT 1)`이 `SELECT`로 통과합니다. 쓰기 경로도 같은 방식으로 첫 단어를 `INSERT`, `UPDATE`, `DELETE`와 비교합니다.
@@ -40,6 +44,8 @@ GRANT SELECT ON orders TO mcp_reader;
 `CUBRID_MCP_READONLY=0`은 이 화이트리스트를 완화합니다 — 데이터베이스 사용자가 이미 읽기 전용이고 파서가 오판하는 결과 집합 문장이 필요할 때만 사용하세요. 이 설정이 `execute_query`를 쓰기 경로로 만들지는 **않습니다**: `execute_query`는 쓰기·DDL·트랜잭션 제어 키워드(`INSERT`, `UPDATE`, `DELETE`, `REPLACE`, `MERGE`, `CREATE`, `ALTER`, `DROP`, `TRUNCATE`, `RENAME`, `GRANT`, `REVOKE`, `COMMIT`, `ROLLBACK`, `SAVEPOINT`, `SET`, `PREPARE`, `EXECUTE`, `DEALLOCATE`, `DO`), 메서드 호출(`CALL`, `EVALUATE`)과 `KILL`로 시작하는 문장(선두 키워드와 문장의 첫 단어로 비교)과 다중 문장·빈 입력을 데이터베이스에 도달하기 전에 거부하고, 커밋하지 않으며, 결과 집합을 반환하지 않는 문장(연결은 유지)과 성공한 모든 읽기를 롤백합니다. `explain_query`는 이 플래그와 무관하게 **항상** 읽기 전용 검사를 적용합니다(아래 참고). 이 키워드 검사는 보안 경계가 아니라 가드레일이며, 보안 경계는 여전히 읽기 전용 데이터베이스 계정입니다. 쓰기에는 `execute_write`(옵트인 쓰기 모드)를 사용하세요. `CUBRID_MCP_READONLY=0`으로 `execute_query`를 통해 쓰기를 보내던 클라이언트는 이것으로 전환해야 합니다. `CALL login(...) ON CLASS db_user`는 캐시된 공유 세션의 사용자를 이후의 모든 도구 호출(`execute_write` 포함)에 대해 바꾸므로 `CALL`을 거부합니다. `execute_write`(`INSERT`/`UPDATE`/`DELETE`만)와 `explain_query`(`SELECT`/`WITH`만)도 이를 거부하므로 어떤 도구로도 세션 사용자를 바꿀 수 없습니다. `KILL`은 다른 세션의 트랜잭션을 종료합니다. `LOCK`은 CUBRID 문장이 아니고 `GET`은 서버 설정을 읽기만 하므로 이 검사는 둘을 거부하지 않습니다.
 
 `CUBRID_MCP_READONLY=0`이어도 `execute_query`는 읽기 전용 모드와 같은 방식으로 `INCR`, `DECR`, 시리얼 증가, 클릭 카운터를 거부합니다. 이들은 결과 집합을 반환하는 문장에서도 데이터를 바꾸며, 쓰기는 `execute_write`의 몫입니다.
+
+<a id="layer-2b"></a>
 
 ## 계층 2b — 옵트인 쓰기 모드 (`CUBRID_MCP_WRITE`)
 
@@ -59,6 +65,8 @@ GRANT SELECT ON orders TO mcp_reader;
 ## 계층 3 — 출력 제한
 
 `execute_query`는 행을 `CUBRID_MCP_MAX_ROWS`(기본 1000)로, 렌더링된 출력을 `CUBRID_MCP_MAX_CHARS`(기본 4000)로 제한합니다. 이는 모델의 컨텍스트 창을 보호하고 한 번의 탐색 쿼리가 빼낼 수 있는 데이터량을 제한합니다. 바이너리 값은 작으면 base64로, 크면 요약됩니다(`<binary N bytes>`).
+
+<a id="layer-4"></a>
 
 ## 계층 4 — 감사 로그 (옵트인)
 

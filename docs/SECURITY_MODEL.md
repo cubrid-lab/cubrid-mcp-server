@@ -4,6 +4,8 @@
 
 `cubrid-mcp-server` bridges a CUBRID database and any MCP-speaking LLM client. Treat every query coming from the model as untrusted input: the LLM may hallucinate destructive SQL, and a malicious prompt may try to exfiltrate data the server was never meant to expose. Defence in depth is the design intent.
 
+<a id="layer-1"></a>
+
 ## Layer 1 — database permissions (required)
 
 Run the server as a dedicated, least-privilege CUBRID user that has **only the privileges you want the model to use**. This account is the primary security control; the code-level safety checker is a guardrail and is not a substitute for it. Do not reuse `dba` or the owner account of the schema.
@@ -27,6 +29,8 @@ Grant `SELECT` only on the tables the model needs, and keep the account to the m
 
 Additional hardening: use a long random password from a secret manager, rotate it on your normal cadence, grant per-table rather than schema-wide, and keep CUBRID on a network only the MCP-server host can reach. See [`SECURITY.md`](https://github.com/cubrid-lab/cubrid-mcp-server/blob/main/SECURITY.md) for the full policy.
 
+<a id="layer-2"></a>
+
 ## Layer 2 — read-only SQL whitelist
 
 The server is **read-only by default**. When `CUBRID_MCP_READONLY=1` (the default), every statement is parsed with `sqlparse` and rejected unless it is `SELECT`, `SHOW`, `DESC`, `DESCRIBE`, or `WITH` (CTE). CUBRID has no `EXPLAIN` statement; use the `explain_query` tool for execution plans. Multi-statement input is rejected. Comments, quotes and statement boundaries are read with CUBRID's rules, not `sqlparse`'s: `--`, `//` and `/* ... */` are comments (block comments do not nest), `#` is not a comment, and a backslash is an ordinary character inside quotes. Input whose quote boundaries depend on whether a backslash escapes a quote (the server parameter `no_backslash_escapes`), or that has an unterminated quote, is rejected. The first word of the statement must itself be an allowed keyword: `sqlparse` reads words it does not know, such as `KILL` and `EVALUATE`, as names, so `KILL (SELECT 1)` would otherwise pass as a `SELECT`. The write path matches the first word against `INSERT`, `UPDATE` and `DELETE` the same way.
@@ -38,6 +42,8 @@ Read-only mode also rejects the CUBRID forms that change data inside a `SELECT`,
 `CUBRID_MCP_READONLY=0` relaxes this whitelist — only do so when the DB user is already read-only and you need result-set statements the parser misclassifies. It does **not** make `execute_query` a write path: `execute_query` still rejects statements that lead with a write, DDL or transaction-control keyword (`INSERT`, `UPDATE`, `DELETE`, `REPLACE`, `MERGE`, `CREATE`, `ALTER`, `DROP`, `TRUNCATE`, `RENAME`, `GRANT`, `REVOKE`, `COMMIT`, `ROLLBACK`, `SAVEPOINT`, `SET`, `PREPARE`, `EXECUTE`, `DEALLOCATE`, `DO`), method calls (`CALL`, `EVALUATE`) and `KILL` (matching the first word of the leading keyword and of the statement) and rejects multi-statement and empty input before they reach the database, never commits, and rolls back any statement that returns no result set (keeping the connection) as well as every successful read. `explain_query` always applies the read-only checks regardless of this flag (see below). This keyword check is a guardrail, not a security boundary: the read-only database account remains the security boundary. Use `execute_write` (opt-in write mode) for writes; clients that sent writes through `execute_query` with `CUBRID_MCP_READONLY=0` must switch to it. `CALL` is rejected because `CALL login(...) ON CLASS db_user` switches the user of the cached shared session for every later tool call, including `execute_write`; `execute_write` (`INSERT`/`UPDATE`/`DELETE` only) and `explain_query` (`SELECT`/`WITH` only) reject it too, so no tool can change the session user. `KILL` ends other sessions' transactions. `LOCK` is not a CUBRID statement and `GET` only reads a server setting, so neither is rejected by this check.
 
 With `CUBRID_MCP_READONLY=0`, `execute_query` still rejects `INCR`, `DECR`, serial advances and the click counter, with the same matching as read-only mode: they change data although the statement returns a result set, and writes belong to `execute_write`.
+
+<a id="layer-2b"></a>
 
 ## Layer 2b — opt-in write mode (`CUBRID_MCP_WRITE`)
 
@@ -57,6 +63,8 @@ Write access is **off by default**. Setting `CUBRID_MCP_WRITE=1` registers a sep
 ## Layer 3 — output limits
 
 `execute_query` caps rows at `CUBRID_MCP_MAX_ROWS` (default 1000) and truncates rendered output at `CUBRID_MCP_MAX_CHARS` (default 4000). This protects the model's context window and limits how much data a single probing query can exfiltrate. Binary values are base64-encoded when small and summarized (`<binary N bytes>`) when large.
+
+<a id="layer-4"></a>
 
 ## Layer 4 — audit logging (opt-in)
 
