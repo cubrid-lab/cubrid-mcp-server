@@ -1,6 +1,6 @@
 # Roadmap
 
-> **Last updated**: 2026-08-25
+> **Last updated**: 2026-10-31
 >
 > This roadmap reflects current priorities. For the ecosystem-wide view, see the
 > [CUBRID Labs Ecosystem Roadmap](https://github.com/cubrid-lab/.github/blob/main/ROADMAP.md).
@@ -22,7 +22,9 @@ The latest published release is listed on
   [pycubrid](https://pypi.org/project/pycubrid/) driver, with named multiple
   connections ([MULTI_CONNECTION](docs/MULTI_CONNECTION.md)).
 - Opt-in write mode: `execute_write` is registered only when write mode is
-  enabled, every write is audited, and per-connection audit logging is available.
+  enabled. Writes are audited only when audit logging is turned on with
+  `CUBRID_MCP_AUDIT_LOG=1` (or `CUBRID_<NAME>_MCP_AUDIT_LOG=1` for a named
+  connection); audit logging is off by default.
 - Read-only by default: a code-level SQL whitelist allows only `SELECT`, `SHOW`,
   `DESC`, `DESCRIBE`, and `WITH`, rejects multi-statement input, and
   is backed by a database user with `SELECT`-only grants.
