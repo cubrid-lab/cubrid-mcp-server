@@ -64,7 +64,7 @@ Each connection is independently configured and enforced:
 
 Each connection also has its own lock, connection lifecycle, and stale-connection recovery, so a hung query on one database does not block the others.
 
-Write-mode registration nuance: the `execute_write` tool appears in MCP capability discovery when **any** connection enables writes, but every call is enforced against the **target** connection's setting — a connection with writes off refuses the write even when another connection enables them. See the [Security Model](SECURITY_MODEL.md#layer-2b-opt-in-write-mode-cubrid_mcp_write).
+Write-mode registration nuance: the `execute_write` tool appears in MCP capability discovery when **any** connection enables writes, but every call is enforced against the **target** connection's setting — a connection with writes off refuses the write even when another connection enables them. See the [Security Model](SECURITY_MODEL.md#layer-2b).
 
 ## Resources use the default connection
 
