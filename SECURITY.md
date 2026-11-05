@@ -63,7 +63,7 @@ As with the read-only layer, this is defense-in-depth: still run the server as a
 
 ## Layer 4 — audit logging (opt-in)
 
-Set `CUBRID_MCP_AUDIT_LOG=1` to emit a structured JSON record on **stderr** for every executed statement (`execute_query`, `explain_query`), for observability and after-the-fact security review. It is **off by default**.
+Set `CUBRID_MCP_AUDIT_LOG=1` to emit a structured JSON record on **stderr** for every executed statement (`execute_query`, `explain_query`, `execute_write`), for observability and after-the-fact security review. It is **off by default** and honoured per connection (`CUBRID_<NAME>_MCP_AUDIT_LOG`), so with audit logging off, write-mode statements are not audited either.
 
 Audit records are deliberately redaction-safe and share the same sanitization guarantees as client-facing errors:
 
