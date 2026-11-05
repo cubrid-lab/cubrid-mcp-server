@@ -97,6 +97,7 @@ validation:
     omitted_files: ignore
   links:
     not_found: ignore
+    anchors: warn
 
 extra:
   # The commit this site is built from (#355). GitHub Actions sets GITHUB_SHA in
