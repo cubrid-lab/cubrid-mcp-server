@@ -6,6 +6,7 @@ import json
 import re
 import subprocess
 import sys
+from collections import Counter
 from pathlib import Path
 
 from fastmcp import Client
@@ -115,7 +116,74 @@ async def test_manifest_matches_config() -> None:
     )
 
 
+README_TABLE_MARKERS = {
+    "README.md": "Optional settings:",
+    "docs/README.ko.md": "선택 설정:",
+}
+
+
+def _table_section(page: str, marker: str) -> str:
+    """Slice one README settings table from ``marker`` to the next heading."""
+    text = _read(page)
+    start = text.index(marker)
+    rest = text[start + len(marker) :]
+    stop = re.search(r"^#{1,6} ", rest, re.MULTILINE)
+    return rest[: stop.start()] if stop else rest
+
+
+def _table_rows(page: str, marker: str) -> list[tuple[str, str]]:
+    """Every ``| `CUBRID_MCP_...` | `default` |`` row of one README settings table."""
+    return re.findall(
+        r"^\|\s*`(CUBRID_MCP_[A-Z0-9_]+)`\s*\|\s*`([^`]*)`\s*\|",
+        _table_section(page, marker),
+        re.MULTILINE,
+    )
+
+
+def _config_defaults() -> dict[str, object]:
+    """Config defaults from a bare environment, the values the README tables restate."""
+    cfg = ConnectionRegistry.from_env(
+        {
+            "CUBRID_HOST": "h",
+            "CUBRID_USER": "u",
+            "CUBRID_PASSWORD": "p",
+            "CUBRID_DATABASE": "d",
+        }
+    ).config_for(None)
+    return {
+        "CUBRID_MCP_READONLY": cfg.readonly,
+        "CUBRID_MCP_WRITE": cfg.write_enabled,
+        "CUBRID_MCP_AUDIT_LOG": cfg.audit_log,
+        "CUBRID_MCP_MAX_ROWS": cfg.max_rows,
+        "CUBRID_MCP_MAX_CHARS": cfg.max_chars,
+        "CUBRID_MCP_MAX_SQL_LENGTH": cfg.max_sql_length,
+        "CUBRID_MCP_QUERY_TIMEOUT": cfg.query_timeout,
+        "CUBRID_MCP_CONNECT_TIMEOUT": cfg.connect_timeout,
+        "CUBRID_MCP_MAX_ROW_COUNT_TABLES": cfg.max_row_count_tables,
+        "CUBRID_MCP_MAX_INLINE_BINARY_BYTES": cfg.max_inline_binary_bytes,
+    }
+
+
+def test_readme_optional_settings_match_config_defaults() -> None:
+    expected = _config_defaults()
+    for page, marker in README_TABLE_MARKERS.items():
+        rows = _table_rows(page, marker)
+        counts = Counter(name for name, _ in rows)
+        defaults = dict(rows)
+        for name, value in expected.items():
+            assert counts[name] == 1, (
+                f"{page}: {name} must appear exactly once in the optional-settings table, "
+                f"found {counts[name]}"
+            )
+            raw = defaults[name]
+            parsed = _parse_bool(raw) if isinstance(value, bool) else type(value)(raw)
+            assert parsed == value, (
+                f"{page}: {name} default {raw!r} does not match the config default {value!r}"
+            )
+
+
 def test_changelog_lint_rejects_duplicate_subsection_heading(tmp_path: Path) -> None:
+
     script = ROOT / "scripts" / "lint_changelog.py"
     scripts_dir = tmp_path / "scripts"
     scripts_dir.mkdir()

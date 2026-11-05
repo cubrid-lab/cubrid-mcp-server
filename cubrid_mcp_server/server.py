@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import argparse
 import base64
 import json
 import logging
@@ -1306,7 +1307,67 @@ def write_cubrid_sql(natural_language: str) -> str:
     )
 
 
-def main() -> None:
+_HELP_TEXT = """usage: cubrid-mcp-server [-h] [--version]
+
+MCP server for CUBRID. Speaks MCP over stdio (stdout is the JSON-RPC channel;
+logs and diagnostics go to stderr).
+
+Required environment variables:
+  CUBRID_HOST, CUBRID_USER, CUBRID_PASSWORD, CUBRID_DATABASE
+
+Docs:
+  https://github.com/cubrid-lab/cubrid-mcp-server#readme
+  https://github.com/cubrid-lab/cubrid-mcp-server/blob/main/docs/quickstart.md
+"""
+
+
+def _build_cli_parser() -> argparse.ArgumentParser:
+    """Minimal argv parser for --help/--version (no full CLI framework)."""
+    parser = argparse.ArgumentParser(
+        prog="cubrid-mcp-server",
+        add_help=False,
+        allow_abbrev=False,
+    )
+    parser.add_argument(
+        "-h",
+        "--help",
+        action="store_true",
+        help="Show usage and exit",
+    )
+    parser.add_argument(
+        "--version",
+        action="store_true",
+        help="Show version and exit",
+    )
+    return parser
+
+
+def handle_cli_flags(argv: list[str]) -> bool:
+    """Handle -h/--help and --version before configuration is loaded.
+
+    Returns True when a flag was handled (caller should exit 0). Writes help
+    and version to stderr: the issue asks for stderr for --help, and the same
+    stream for --version so a mistaken launch still leaves stdout free for MCP.
+    """
+    parser = _build_cli_parser()
+    args = parser.parse_args(argv)
+    if args.help:
+        print(_HELP_TEXT, end="", file=sys.stderr)
+        return True
+    if args.version:
+        # Same source FastMCP and the package surface already use.
+        print(f"cubrid-mcp-server {__version__}", file=sys.stderr)
+        return True
+    return False
+
+
+def main(argv: list[str] | None = None) -> None:
+    # Console script / `python -m` pass None → use process argv. Direct callers
+    # (unit tests) pass [] or an explicit list so pytest's own argv is ignored.
+    cli_argv = sys.argv[1:] if argv is None else argv
+    if handle_cli_flags(cli_argv):
+        raise SystemExit(0)
+
     # The MCP stdio transport uses stdout as the protocol channel, so ALL logging
     # must go to stderr — a stray log line on stdout corrupts the JSON-RPC stream.
     logging.basicConfig(

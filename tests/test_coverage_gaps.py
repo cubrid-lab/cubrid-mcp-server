@@ -279,7 +279,7 @@ def test_main_exits_on_config_error(monkeypatch: pytest.MonkeyPatch) -> None:
 
     monkeypatch.setattr(ConnectionRegistry, "from_env", classmethod(_raise))
     with pytest.raises(SystemExit) as excinfo:
-        server.main()
+        server.main([])
     assert excinfo.value.code == 1
 
 
@@ -289,7 +289,7 @@ def test_main_runs_server_on_valid_config(monkeypatch: pytest.MonkeyPatch) -> No
     monkeypatch.setattr(server, "_context", None)
     ran: list[bool] = []
     monkeypatch.setattr(server.mcp, "run", lambda: ran.append(True))
-    server.main()
+    server.main([])
     assert ran[0] is True
 
 

@@ -4,6 +4,30 @@
 
 Symptom → cause → fix for the most common problems.
 
+## Find your error message
+
+Tool results name only the kind of error, so that database details do not reach the model; the cause is in the server's error output (stderr). Look up the literal message you see:
+
+| Message | Where it appears | Section |
+|---|---|---|
+| `configuration error: missing required environment variable: CUBRID_HOST` (or another `CUBRID_*` name) | Server's error output at startup; the client shows the server as failed | [The client cannot connect to the server](#the-client-cannot-connect-to-the-server) |
+| `failed to connect to CUBRID` | Result of any tool call | [CUBRID connection refused](#cubrid-connection-refused) |
+| `health_check` → `{"ok":false,"error":"DatabaseError"}` | `health_check` result | [CUBRID connection refused](#cubrid-connection-refused) |
+| `query failed: ProgrammingError` | `execute_query` result | [Permission denied on queries](#permission-denied-on-queries) |
+| `query failed: OperationalError` | `execute_query` result | [CUBRID connection refused](#cubrid-connection-refused) |
+| `query exceeded timeout of 30s (CUBRID_MCP_QUERY_TIMEOUT)` | `execute_query` result | [Query timeout semantics](#query-timeout-semantics) |
+| `DELETE is not permitted in read-only mode; allowed statements: ...` (or another keyword) | `execute_query` result | [Read-only rejection](#read-only-rejection) |
+| No message: the server shows as connected, but every tool fails | MCP client | [Server shows as connected, but every tool fails](#server-shows-as-connected-but-every-tool-fails) |
+
+The [Quick Start's failure table](quickstart.md#if-something-fails) lists the same messages with the causes printed in the server's error output.
+
+
+## Confirming the install without a database
+
+**Symptom:** you want to know whether `uvx`/`pipx` installed the server and which version it is, before configuring CUBRID.
+
+Run `cubrid-mcp-server --help` or `cubrid-mcp-server --version`. Both exit 0, print to stderr, and never open a database connection. If instead you see `configuration error: missing required environment variable: …`, an older build is on your `PATH` — upgrade the package or point the client at the new console script.
+
 ## The client cannot connect to the server
 
 **Symptom:** the MCP client shows the server as failed or unavailable.
@@ -12,6 +36,12 @@ Symptom → cause → fix for the most common problems.
 - **Environment variables missing.** `CUBRID_HOST`, `CUBRID_USER`, `CUBRID_PASSWORD`, and `CUBRID_DATABASE` must be present in the client's `env` block — a plain terminal export is not visible to GUI apps like Claude Desktop.
 - **Config file location.** Claude Desktop reads `~/Library/Application Support/Claude/claude_desktop_config.json`; Claude Code reads `.mcp.json` at the project root; Cursor reads `.cursor/mcp.json`. After editing, restart the client.
 
+## Server shows as connected, but every tool fails
+
+**Symptom:** the MCP client lists the server and its tools, but every tool call fails (for example with `failed to connect to CUBRID`).
+
+The server starts without contacting the database: it opens the CUBRID connection on the first tool call. A running server therefore proves only that the configuration was read, not that CUBRID is reachable or the credentials are valid. Call `health_check` and read the server's error output, then work through [CUBRID connection refused](#cubrid-connection-refused).
+
 ## CUBRID connection refused
 
 **Symptom:** tools fail with connection or operational errors.
@@ -19,20 +49,20 @@ Symptom → cause → fix for the most common problems.
 - **Wrong port.** The server connects to the CUBRID **broker** on port 33000 (`CUBRID_PORT`), not the manager port 1523.
 - **Database does not exist.** Create it first (`cubrid createdb`) or point `CUBRID_DATABASE` at an existing database.
 - **CUBRID still starting.** A fresh CUBRID container takes a while to accept connections — the broker accepts TCP slightly after the engine is up. Wait for readiness (e.g. the docker-compose healthcheck) before starting queries. `health_check` verifies connectivity on demand.
-- **Credentials.** `CUBRID_USER`/`CUBRID_PASSWORD` must be valid; `dba` with an empty password is common in local docker setups.
+- **Credentials.** `CUBRID_USER`/`CUBRID_PASSWORD` must be valid for the server's dedicated read-only account. In a local docker lab, `dba` with an empty password is the image's administrator account: use it only to create that account (Quick Start [Step 3](quickstart.md#step-3-prepare-the-sample-table-and-the-read-only-account)), never as the server's `CUBRID_USER`.
 - **Slow or distant broker.** Opening a connection gives up after `CUBRID_MCP_CONNECT_TIMEOUT` seconds (default 10). Raise it for a broker reached over a slow link (per connection: `CUBRID_<NAME>_MCP_CONNECT_TIMEOUT`).
 
 ## Permission denied on queries
 
 **Symptom:** authorization errors on `SELECT` statements.
 
-The CUBRID user lacks grants. CUBRID grants privileges **per table** — there is no schema-wide `db.*` grant. Create a user and grant `SELECT` on each table the model may read; see the [Security Model](SECURITY_MODEL.md#layer-1-database-permissions-required).
+The CUBRID user lacks grants. CUBRID grants privileges **per table** — there is no schema-wide `db.*` grant. Create a user and grant `SELECT` on each table the model may read; see the [Security Model](SECURITY_MODEL.md#layer-1).
 
 ## Read-only rejection
 
 **Symptom:** `execute_query` rejects a statement.
 
-By design. The whitelist allows only `SELECT`, `SHOW`, `DESC`, `DESCRIBE`, and `WITH`; multi-statement input is always rejected. CUBRID has no `EXPLAIN` statement; use the `explain_query` tool for execution plans. If you truly need other statements, first put a read-only DB user in place, then consider `CUBRID_MCP_READONLY=0` — and for writes, use opt-in write mode instead of disabling the whitelist.
+By design. Do not fix a rejection by using `dba`, granting more privileges or setting `CUBRID_MCP_READONLY=0`. The whitelist allows only `SELECT`, `SHOW`, `DESC`, `DESCRIBE`, and `WITH`; multi-statement input is always rejected. CUBRID has no `EXPLAIN` statement; use the `explain_query` tool for execution plans. For writes, use [opt-in write mode](SECURITY_MODEL.md#layer-2b) instead of disabling the whitelist. `CUBRID_MCP_READONLY=0` is only for the narrow case the [Security Model](SECURITY_MODEL.md#layer-2) describes: the DB user is already read-only and you need a result-set statement the parser misclassifies.
 
 ## Output looks cut off
 
@@ -52,4 +82,4 @@ The server speaks MCP stdio: `stdout` carries the protocol stream, and **all log
 
 ## Audit log not appearing
 
-Set `CUBRID_MCP_AUDIT_LOG=1` (opt-in, off by default). With multiple connections, enable it per connection via `CUBRID_<NAME>_MCP_AUDIT_LOG`. Records are JSON lines on **stderr** — they never appear on stdout. See the [Security Model](SECURITY_MODEL.md#layer-4-audit-logging-opt-in).
+Set `CUBRID_MCP_AUDIT_LOG=1` (opt-in, off by default). With multiple connections, enable it per connection via `CUBRID_<NAME>_MCP_AUDIT_LOG`. Records are JSON lines on **stderr** — they never appear on stdout. See the [Security Model](SECURITY_MODEL.md#layer-4).

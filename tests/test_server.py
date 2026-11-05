@@ -221,6 +221,15 @@ def test_schema_definitions_composite_pk_keeps_column_order(fake_db: FakeDatabas
     assert [(c["name"], c["primary_key"]) for c in result] == [("a", True), ("b", True)]
 
 
+def test_schema_definitions_unknown_table_raises(fake_db: FakeDatabase) -> None:
+    fake_db.queue([("users",)])  # _resolve_table lookup: 'missing' not present
+    with pytest.raises(ValueError, match="unknown table"):
+        server.schema_definitions("missing")
+    # Only the table-name lookup ran. No attribute or index query was issued.
+    assert len(fake_db.calls) == 1
+    assert "db_class" in fake_db.calls[0][0]
+
+
 class FakeCursor:
     def __init__(self, parent: "FakeConnDatabase") -> None:
         self.parent = parent

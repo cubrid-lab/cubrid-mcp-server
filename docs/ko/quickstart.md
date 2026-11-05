@@ -89,6 +89,8 @@ which cubrid-mcp-server
 
 ---
 
+<a id="step-3-prepare-the-sample-table-and-the-read-only-account"></a>
+
 ## 3단계: 예제 테이블과 읽기 전용 계정 준비
 
 한 번만 하는 **관리자** 단계입니다. 먼저 새 계정의 비밀번호를 정해 이 터미널에만 보관하세요.
@@ -312,6 +314,8 @@ Error calling tool 'execute_query': DELETE is not permitted in read-only mode; a
 행은 그대로 남아 있습니다. 이 거부는 모델이 무엇을 요청하든 서버에서 일어납니다.
 
 ---
+
+<a id="if-something-fails"></a>
 
 ## 문제가 생기면
 

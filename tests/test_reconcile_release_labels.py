@@ -68,6 +68,25 @@ def test_missing_or_invalid_release_facts_remain_pending():
     assert not MODULE.ready("cubrid-lab/cubrid-mcp-server", "abc", lambda *args: {})
 
 
+@pytest.mark.parametrize(
+    "version",
+    ["1.9", "v1.9.0", 190, "1.9.0-rc.1", " 1.9.0"],
+)
+def test_invalid_manifest_version_remains_pending(version):
+    calls = []
+
+    def api(*args):
+        calls.append(args[1])
+        if "/contents/" in args[1]:
+            return {"content": base64.b64encode(json.dumps({".": version}).encode()).decode()}
+        return {}
+
+    assert MODULE.ready("cubrid-lab/cubrid-mcp-server", "abc", api) is False
+    assert len(calls) == 1
+    assert "/contents/" in calls[0]
+    assert ".release-please-manifest.json" in calls[0]
+
+
 # Blocked-preparation signal: classify pending PRs ready() could not prove.
 NOW = MODULE.datetime(2026, 10, 9, 12, 0, tzinfo=MODULE.timezone.utc)
 SHA = "d383be79e55a5f164b2569a0edb44eace9bb7e50"
