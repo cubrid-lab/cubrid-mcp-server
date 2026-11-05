@@ -55,7 +55,7 @@ dev = [
     # MkDocs renders it with the same library.
     "jinja2>=3.1",
     "ruff==0.17.2",
-    "mypy==2.4.0",
+    "mypy==2.4.1",
     "pre-commit",
     "tox",
     "build",
