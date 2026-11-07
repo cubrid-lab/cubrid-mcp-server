@@ -26,7 +26,7 @@ def _write_workspace(tmp_path: Path, *languages: str) -> None:
         (docs / f"README.{language}.md").write_text(f"# {language}\n")
 
 
-def test_readme_change_requires_korean_translation(
+def test_readme_change_warns_when_korean_translation_is_missing(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
@@ -35,10 +35,11 @@ def test_readme_change_requires_korean_translation(
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(MODULE, "changed_files", lambda: {"README.md"})
 
-    assert MODULE.main() == 1
+    assert MODULE.REQUIRED_LANGS == set()
+    assert MODULE.main() == 0
     output = capsys.readouterr().out
-    assert "::error::" in output
-    assert "docs/README.ko.md" in output
+    assert "community translation drifted: docs/README.ko.md (한국어)" in output
+    assert "::error::" not in output
 
 
 def test_missing_community_translation_warns_without_failing(
