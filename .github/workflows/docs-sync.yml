@@ -100,16 +100,16 @@ jobs:
           PY
 
   translation-sync:
-    # Advisory only: report README translation drift (including Korean) as warnings.
-    # This check no longer needs a translations-deferred bypass.
-    if: ${{ github.event_name == 'pull_request' && github.event.pull_request.user.login != 'dependabot[bot]' }}
+    # Korean README translation sync is required unless a maintainer approves a deferral.
+    # Other community translations report warnings only.
+    if: ${{ github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'translations-deferred') && github.event.pull_request.user.login != 'dependabot[bot]' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-      - name: Report README translation drift (advisory)
+      - name: Check README translations stay in sync
         env:
           BASE_REF: ${{ github.base_ref }}
         run: python scripts/check_translation_sync.py
