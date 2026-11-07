@@ -26,7 +26,7 @@ def _write_workspace(tmp_path: Path, *languages: str) -> None:
         (docs / f"README.{language}.md").write_text(f"# {language}\n")
 
 
-def test_readme_change_warns_when_korean_translation_is_missing(
+def test_readme_change_fails_when_korean_translation_is_missing(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
@@ -35,11 +35,11 @@ def test_readme_change_warns_when_korean_translation_is_missing(
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(MODULE, "changed_files", lambda: {"README.md"})
 
-    assert MODULE.REQUIRED_LANGS == set()
-    assert MODULE.main() == 0
+    assert MODULE.REQUIRED_LANGS == {"ko"}
+    assert MODULE.main() == 1
     output = capsys.readouterr().out
-    assert "community translation drifted: docs/README.ko.md (한국어)" in output
-    assert "::error::" not in output
+    assert "::error::README.md changed but the required translation did not" in output
+    assert "docs/README.ko.md (한국어)" in output
 
 
 def test_missing_community_translation_warns_without_failing(
@@ -60,6 +60,33 @@ def test_missing_community_translation_warns_without_failing(
     assert "::warning file=README.md::" in output
     assert "docs/README.de.md" in output
     assert output.rstrip().endswith("translation sync OK")
+
+
+def test_missing_korean_fails_when_other_translations_are_updated(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    _write_workspace(tmp_path, "ko", "de")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        MODULE,
+        "changed_files",
+        lambda: {"README.md", "docs/README.de.md"},
+    )
+
+    assert MODULE.main() == 1
+    output = capsys.readouterr().out
+    assert "docs/README.ko.md (한국어)" in output
+    assert "docs/README.de.md (Deutsch)" not in output
+    assert "::warning" not in output
+
+
+def test_workflow_preserves_maintainer_deferral() -> None:
+    workflow = (Path(__file__).resolve().parents[1] / ".github/workflows/docs-sync.yml").read_text()
+    translation = workflow.split("  translation-sync:", 1)[1]
+    assert "!contains(github.event.pull_request.labels.*.name, 'translations-deferred')" in translation
+    assert "python scripts/check_translation_sync.py" in translation
 
 
 def test_unchanged_readme_passes_without_translation_checks(
