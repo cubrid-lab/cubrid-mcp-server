@@ -18,6 +18,7 @@ concurrency:
 
 jobs:
   correct:
+    if: github.ref == 'refs/heads/main' && github.repository == 'cubrid-lab/cubrid-mcp-server'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
