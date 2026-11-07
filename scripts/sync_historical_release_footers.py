@@ -9,7 +9,7 @@ REPO = "cubrid-lab/cubrid-mcp-server"
 FOOTERS = {
     "v0.1.0": "**Full Changelog:** [v0.1.0 commits](https://github.com/cubrid-lab/cubrid-mcp-server/commits/v0.1.0)",
     "v0.3.1": "**Full Changelog:** [v0.3.0...v0.3.1](https://github.com/cubrid-lab/cubrid-mcp-server/compare/v0.3.0...v0.3.1)",
-    "v0.4.0": "**Full Changelog:** [v0.3.1...v0.4.0](https://github.com/cubrid-lab/cubrid-mcp-server/compare/v0.3.1...v0.4.0)"
+    "v0.4.0": "**Full Changelog:** [v0.3.1...v0.4.0](https://github.com/cubrid-lab/cubrid-mcp-server/compare/v0.3.1...v0.4.0)",
 }
 ROOT = Path("docs/release-note-repairs")
 
