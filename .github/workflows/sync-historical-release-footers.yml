@@ -1,0 +1,32 @@
+name: Add reviewed historical Release comparisons
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "docs/release-note-repairs/**"
+      - "scripts/sync_historical_release_footers.py"
+      - ".github/workflows/sync-historical-release-footers.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: cubrid-mcp-server-release-footer-corrections
+  cancel-in-progress: false
+
+jobs:
+  correct:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Check three approved footer-only changes
+        run: python3 scripts/sync_historical_release_footers.py
+      - name: Correct existing published descriptions and verify
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/sync_historical_release_footers.py --apply
