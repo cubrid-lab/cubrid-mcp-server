@@ -441,6 +441,12 @@ and every Korean page links the English page below its translation note.
 | `docs/TROUBLESHOOTING.md`, `/TROUBLESHOOTING/` | User with a problem: what does this symptom mean? | Help | Any page / issue forms or `SECURITY.md` | Unchanged content |
 | `docs/README.ko.md`, `docs/ko/*.md`, `/ko/...` | Korean reader: the same questions | 한국어 tab, same groups (moved from Project → Translations) | Same as English | Translators; the existing warning-level sync rule |
 
+The `translation-sync` check reports a warning (not a failed PR) if the
+English `README.md` changes without its Korean `docs/README.ko.md` update.
+No `translations-deferred` label is required. This does not change the
+independent checks for the Korean documentation site or the coverage of
+English/Korean tool references.
+
 No file is renamed, so every existing page URL and heading anchor stays. The chat-client
 configurations stay at the end of the Quick Start
 (`/quickstart/#optional-use-the-same-server-from-a-chat-client`).
