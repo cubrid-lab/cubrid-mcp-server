@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.8.1](https://github.com/cubrid-lab/cubrid-mcp-server/compare/v0.8.0...v0.8.1) (2026-11-07)
+
+
+### Fixed
+
+* **ci:** require Korean README translation updates ([#527](https://github.com/cubrid-lab/cubrid-mcp-server/issues/527)) ([74aefbd](https://github.com/cubrid-lab/cubrid-mcp-server/commit/74aefbd3b480da930be92405aa8ffc574a4c99e0))
+
+
+### Documentation
+
+* make Korean README translation drift advisory after finals ([#525](https://github.com/cubrid-lab/cubrid-mcp-server/issues/525)) ([094790b](https://github.com/cubrid-lab/cubrid-mcp-server/commit/094790be31f94fb00bb6722910630023bca9b4ad))
+
 ## [0.8.0](https://github.com/cubrid-lab/cubrid-mcp-server/compare/v0.7.0...v0.8.0) (2026-11-05)
 
 
