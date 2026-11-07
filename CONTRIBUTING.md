@@ -439,13 +439,14 @@ and every Korean page links the English page below its translation note.
 | `docs/TOOLS.md`, `/TOOLS/` | User: what exactly does each tool, resource and prompt take and return? | Reference | Any page | Unchanged content (kept in sync by `tests/test_docs_alignment.py`) |
 | `docs/SECURITY_MODEL.md`, `/SECURITY_MODEL/` | User or reviewer: what do the read-only checks protect, and what not? | Reference | Any page | Unchanged content; the Quick Start keeps its own least-privilege and data-exposure warnings |
 | `docs/TROUBLESHOOTING.md`, `/TROUBLESHOOTING/` | User with a problem: what does this symptom mean? | Help | Any page / issue forms or `SECURITY.md` | Unchanged content |
-| `docs/README.ko.md`, `docs/ko/*.md`, `/ko/...` | Korean reader: the same questions | 한국어 tab, same groups (moved from Project → Translations) | Same as English | Translators; the existing warning-level sync rule |
+| `docs/README.ko.md`, `docs/ko/*.md`, `/ko/...` | Korean reader: the same questions | 한국어 tab, same groups (moved from Project → Translations) | Same as English | Translators; required Korean README sync and separate docs/ko structure checks |
 
-The `translation-sync` check reports a warning (not a failed PR) if the
-English `README.md` changes without its Korean `docs/README.ko.md` update.
-No `translations-deferred` label is required. This does not change the
-independent checks for the Korean documentation site or the coverage of
-English/Korean tool references.
+The `translation-sync` check fails a PR if English `README.md` changes
+without updating Korean `docs/README.ko.md`; other community translations
+produce warnings only. A contributor needing a deferral must request explicit
+maintainer approval through the `translations-deferred` label, with a recorded
+follow-up. This is separate from required Korean documentation-site structure
+and English/Korean tool-reference coverage checks.
 
 No file is renamed, so every existing page URL and heading anchor stays. The chat-client
 configurations stay at the end of the Quick Start
