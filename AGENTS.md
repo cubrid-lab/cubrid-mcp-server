@@ -374,7 +374,7 @@ documentation, presentations, and other maintainer-facing writing.
   Do not substitute `P1`/`P2` for repository priority labels.
 - When an internal identifier is necessary for accurate cross-reference,
   **describe the subject first**, then add the identifier in context:
-  `pycubrid introduction (0:20; storyboard shot P1)`. Use descriptive
+  `MCP tool introduction (0:20; section 1)`. Use descriptive
   names and timestamps, section titles, or paths wherever practical.
 - Use natural, actionable wording. Prefer `Listen to the full narration and
   verify the pronunciation of each project name` to `Maintainer full listen`.
@@ -411,3 +411,9 @@ Makefile checks and the review and merge rules above. The rule is a writing
 convention checked during normal review, not a CI gate or required
 reviewer. Do not rename test names, fixtures, agent-eval task IDs or other
 machine-readable identifiers only to improve prose.
+
+## Local design and evidence authority
+
+This repository owns **the Python MCP server and CUBRID tool schemas**. Even when an issue, PR or release note mentions another CUBRID Lab project, its title, opening rationale, test evidence, ADR decision and implementation acceptance must be independently understandable using MCP protocol/tool API, connection/session handlers, tool error responses and end-to-end integrations executed in this repository. Do not copy another repository's language/tool requirements, issue tracking, architecture approval or release schedule.
+
+Drivers and example packages may be dependencies or documented usage links; another project's test pass does not certify MCP tool results here. Use external links as explicit dependency or research context; keep local tests, review decisions and issue closure local. Verify the relevant PR title/body, issue, contributor instructions and published docs for pasted foreign terminology. This is a manual writing check and leaves existing CI and maintainer approval unchanged.
