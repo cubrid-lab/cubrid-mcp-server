@@ -87,8 +87,7 @@ def test_workflow_preserves_maintainer_deferral() -> None:
     workflow = (repo_root / ".github/workflows/docs-sync.yml").read_text()
     translation = workflow.split("  translation-sync:", 1)[1]
     assert (
-        "!contains(github.event.pull_request.labels.*.name, 'translations-deferred')"
-        in translation
+        "!contains(github.event.pull_request.labels.*.name, 'translations-deferred')" in translation
     )
     assert "python scripts/check_translation_sync.py" in translation
 
