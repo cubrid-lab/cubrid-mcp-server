@@ -4,10 +4,7 @@ Thanks for your interest in improving the CUBRID MCP server. This guide covers
 the specifics of **this** repository — the Makefile targets, the checks CI
 enforces, and how to run the integration suite against a live CUBRID.
 
-For the organization-wide contribution guidelines (code of conduct, how to file
-issues, DCO/sign-off, review flow), see the shared
-[cubrid-lab/.github/CONTRIBUTING.md](https://github.com/cubrid-lab/.github/blob/main/CONTRIBUTING.md).
-This document only adds what is repo-specific; it does not repeat the org guide.
+This repository's own issue, pull request, review and release procedures are described below. For conduct and vulnerability reporting, use the local [Code of Conduct](CODE_OF_CONDUCT.md) and [Security Policy](SECURITY.md). Do not assume external organization instructions are inherited by this repository.
 
 ## Prerequisites
 
@@ -556,7 +553,7 @@ Existing security invariants, tests, docs requirements and PR review/merge polic
 
 ## Pull request and commit titles
 
-This repository uses the local Conventional Commits rules for pull request titles and commit subjects. Issue titles use type-only prefixes such as `feat:` and `bug:`, without module scopes (see the [organization standard](https://github.com/cubrid-lab/.github/blob/main/docs/ISSUE_PR_COMMIT_STANDARD.md)). Its PRs are squash-merged and the pull
+This repository uses the local Conventional Commits rules for pull request titles and commit subjects. Issue titles use type-only prefixes such as `feat:` and `bug:`, without module scopes (see the local issue forms and [AGENTS.md](AGENTS.md)). Its PRs are squash-merged and the pull
 request title becomes the commit title on `main`, so the PR title must be
 accurate. This repository's `PR title` check enforces that format; do not
 assume other repositories share identical check names or release mechanics.
