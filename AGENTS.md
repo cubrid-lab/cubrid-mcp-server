@@ -1,8 +1,8 @@
 # AGENTS.md
 
-## Organization-wide writing standard
+## Issue, PR, and commit writing (cubrid-mcp-server)
 
-Issue titles use **type only** (such as `feat: ...`, `bug: ...`), with no required module scope. Explain a clear human-readable problem or goal and verifiable acceptance criteria; separate verified observations from assumptions and omit personal comments/internal IDs. Triage evaluates validity, duplication, scope, priority and size; PRs/commits follow local Conventional Commits and existing PR validation gates. See [cubrid-lab's writing standard](https://github.com/cubrid-lab/.github/blob/main/docs/ISSUE_PR_COMMIT_STANDARD.md).
+Issue titles use **type only** (such as `feat: ...`, `bug: ...`), with no required module scope. Explain a clear human-readable problem or goal and verifiable acceptance criteria; separate verified observations from assumptions and omit personal comments/internal IDs. Triage evaluates validity, duplication, scope, priority and size; PRs/commits follow local Conventional Commits and existing PR validation gates. Follow [CONTRIBUTING.md](CONTRIBUTING.md) and the local issue forms.
 
 
 Guidance for AI agents and contributors working in this repository.
@@ -285,7 +285,7 @@ issue title or body. Outside reporters only describe urgency and effort and do n
 need label-write permission; all new issues first get `status: needs triage`
 and receive final priority/size labels during maintainer review.
 
-Issue titles use `type: description` without a module scope (see [organization standard](https://github.com/cubrid-lab/.github/blob/main/docs/ISSUE_PR_COMMIT_STANDARD.md)).
+Issue titles use `type: description` without a module scope; see [CONTRIBUTING.md](CONTRIBUTING.md) and the local issue forms.
 
 Use the following exact names, with **one space after the colon**:
 
@@ -389,15 +389,13 @@ documentation, presentations, and other maintainer-facing writing.
   separate lookup table. Edit an existing editable comment to correct unclear
   wording rather than adding redundant follow-up comments.
 
-This is a shared writing convention, not a new CI check, reviewer approval,
-or merge gate. Keep existing repository-specific technical and safety rules.
+These are local writing expectations, not a new CI check, reviewer approval,
+or merge gate. Existing MCP tool safety, tests and release requirements remain authoritative.
 
 ### Self-explanatory code comments, tests and review text
 
 Source comments, test names and test comments, examples, PR descriptions
-and review replies follow the organization rule in
-[Explanations in code, tests, reviews and agent-written text](https://github.com/cubrid-lab/.github/blob/main/docs/ISSUE_PR_COMMIT_STANDARD.md#6-explanations-in-code-tests-reviews-and-agent-written-text)
-(section 6 of the shared standard; it is linked here, not copied). In short:
+and review replies follow the local explanation guidance below:
 say what happens, why it matters and which constraint applies, then add an
 issue number only for traceability. For SQL safety code this means naming
 the invariant, for example: "`execute_query` must never write, even with
