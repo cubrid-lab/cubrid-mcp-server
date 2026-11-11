@@ -1,0 +1,5 @@
+# THIRD_PARTY_LICENSES.md is the inventory NOTICE refers to.
+# setuptools also includes tests/test*.py by default; those modules are not
+# a runnable suite (no conftest.py or helpers.py), so keep them out of the sdist.
+include THIRD_PARTY_LICENSES.md
+prune tests

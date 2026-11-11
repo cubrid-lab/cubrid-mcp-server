@@ -29,10 +29,12 @@ column names the installed packages whose requirements pull each one in.
 ## What cubrid-mcp-server distributes
 
 - **Wheel**: only the `cubrid_mcp_server` package and its metadata, plus
-  `LICENSE` and `NOTICE`. No third-party source code or asset is vendored, and
-  no source file carries a third-party copyright notice.
-- **Source distribution**: the same files, project metadata (`README.md`,
-  `pyproject.toml`, `setup.cfg`) and the test suite.
+  `LICENSE`, `NOTICE`, and `THIRD_PARTY_LICENSES.md`. No third-party source
+  code or asset is vendored, and no source file carries a third-party
+  copyright notice.
+- **Source distribution**: the same files and project metadata (`README.md`,
+  `pyproject.toml`, `setup.cfg`). The test suite lives in the repository and
+  is not included.
 - **Dependencies** are installed by users from PyPI. cubrid-mcp-server declares
   them; it does not bundle or redistribute them.
 
