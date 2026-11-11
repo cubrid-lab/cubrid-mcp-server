@@ -69,7 +69,9 @@ def test_sdist_ships_the_license_inventory_and_omits_partial_tests(dist_dir: Pat
 
 def test_wheel_ships_the_license_inventory(dist_dir: Path) -> None:
     names = _artifact_names(_one(dist_dir, ".whl"))
-    licenses = [n for n in names if n.startswith("cubrid_mcp_server-") and ".dist-info/licenses/" in n]
+    licenses = [
+        n for n in names if n.startswith("cubrid_mcp_server-") and ".dist-info/licenses/" in n
+    ]
     basenames = {Path(n).name for n in licenses}
     assert basenames == {"LICENSE", "NOTICE", "THIRD_PARTY_LICENSES.md"}
     assert not any("/tests/" in n or n.startswith("tests/") for n in names)
