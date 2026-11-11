@@ -80,7 +80,7 @@ def test_client_setup_docs_cover_windows_and_macos() -> None:
         for expected in (
             "which cubrid-mcp-server",
             "`.venv\\Scripts\\activate`",
-            "`.venv\\Scripts\\Activate.ps1`",
+            "`.\\.venv\\Scripts\\Activate.ps1`",
             "`where cubrid-mcp-server`",
             "`(Get-Command cubrid-mcp-server).Source`",
         ):

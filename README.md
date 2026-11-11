@@ -188,7 +188,7 @@ pip install -e .
 cubrid-mcp-server
 ```
 
-On Windows, activate the environment with `.venv\Scripts\activate` (Command Prompt) or `.venv\Scripts\Activate.ps1` (PowerShell) instead of `source .venv/bin/activate`.
+On Windows, activate the environment with `.venv\Scripts\activate` (Command Prompt) or `.\.venv\Scripts\Activate.ps1` (PowerShell) instead of `source .venv/bin/activate`.
 
 ## MCP Client Integration
 

@@ -99,7 +99,7 @@ environment active.
 
 On Windows, which this walkthrough was not run on, the virtual environment
 keeps its commands in `.venv\Scripts` instead of `.venv/bin`. Activate it with
-`.venv\Scripts\activate` in Command Prompt or `.venv\Scripts\Activate.ps1` in
+`.venv\Scripts\activate` in Command Prompt or `.\.venv\Scripts\Activate.ps1` in
 PowerShell, and print the server's full path with `where cubrid-mcp-server`
 (Command Prompt) or `(Get-Command cubrid-mcp-server).Source` (PowerShell)
 instead of `which`.

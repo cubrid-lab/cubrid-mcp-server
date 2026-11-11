@@ -89,7 +89,7 @@ which cubrid-mcp-server
 
 이 안내는 Windows에서 실행해 보지 않았습니다. Windows에서는 가상 환경의 명령이 `.venv/bin` 대신
 `.venv\Scripts`에 있습니다. 명령 프롬프트에서는 `.venv\Scripts\activate`, PowerShell에서는
-`.venv\Scripts\Activate.ps1`로 활성화하고, `which` 대신 `where cubrid-mcp-server`(명령 프롬프트) 또는
+`.\.venv\Scripts\Activate.ps1`로 활성화하고, `which` 대신 `where cubrid-mcp-server`(명령 프롬프트) 또는
 `(Get-Command cubrid-mcp-server).Source`(PowerShell)로 서버의 전체 경로를 출력하세요.
 
 ---
