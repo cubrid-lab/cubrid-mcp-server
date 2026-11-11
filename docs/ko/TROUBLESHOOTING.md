@@ -83,9 +83,19 @@ CUBRID 사용자에게 권한이 없습니다. CUBRID는 **테이블 단위**로
 
 `CUBRID_MCP_QUERY_TIMEOUT`(기본 30)은 **소켓 읽기 타임아웃**이지 서버 측 문장 타임아웃이 아닙니다: 서버가 이 시간 안에 데이터를 보내지 않으면 쿼리가 중단되고 연결이 재설정됩니다. 워크로드에 맞게 조정하세요(연결별 `CUBRID_<NAME>_MCP_QUERY_TIMEOUT`도 가능).
 
+<a id="no-logs-anywhere"></a>
+
 ## 로그가 안 보임 / 서버 출력이 JSON 깨진 것처럼 보임
 
 서버는 MCP stdio를 사용합니다: `stdout`은 프로토콜 스트림이고 **모든 로그는 stderr**로 갑니다. 클라이언트의 MCP 로그 창을 보거나(직접 실행 시 `2>server.log` 리다이렉트) 확인하세요. 커스터마이즈에서 `print()`를 stdout에 절대 추가하지 마세요 — 프로토콜 스트림이 오염되어 연결이 깨집니다.
+
+**Claude Desktop**에는 터미널이 없습니다. 각 stdio 서버의 stderr를 `mcp-server-SERVERNAME.log` 파일에 기록하므로, README의 `cubrid` 키를 쓰면 파일 이름은 `mcp-server-cubrid.log`이고 위치는 다음과 같습니다.
+
+- macOS: `~/Library/Logs/Claude`
+- Windows: `%APPDATA%\Claude\logs`
+- Linux: `~/.config/Claude/logs`
+
+이 위치는 MCP 가이드 [Connect to local MCP servers](https://modelcontextprotocol.io/docs/develop/connect-local-servers)에 나와 있습니다. 로그에는 SQL 텍스트가 포함될 수 있으므로 공개 이슈에 붙여 넣지 마세요.
 
 ## 감사 로그가 안 남음
 

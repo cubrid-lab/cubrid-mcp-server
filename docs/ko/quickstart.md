@@ -321,7 +321,8 @@ Error calling tool 'execute_query': DELETE is not permitted in read-only mode; a
 
 도구 결과에는 데이터베이스의 세부 정보가 모델에 전달되지 않도록 오류의 종류만 나옵니다. 원인은
 서버의 오류 출력에 나오며, 이 스크립트는 그것을 터미널에 출력합니다. 오류 출력에는 SQL 텍스트가
-포함될 수 있으므로 공개 이슈에 붙여 넣지 마세요.
+포함될 수 있으므로 공개 이슈에 붙여 넣지 마세요. 터미널이 없는 Claude Desktop 같은 채팅 클라이언트에서는
+[문제 해결](TROUBLESHOOTING.md#no-logs-anywhere)에 안내된 위치에서 같은 출력을 찾으세요.
 
 | 보이는 내용 | 의미 | 확인할 것 |
 |---|---|---|
