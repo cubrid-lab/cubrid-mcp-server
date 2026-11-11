@@ -5,8 +5,10 @@ Read main's CHANGELOG at the generator base SHA, never a previously composed
 candidate. Generated headers belong in RELEASE_CHANGELOG.md; publication keeps
 its strict bracket/date contract. Curated and generated entries are merged under
 the standard ``###`` headings in the standard order, so the candidate passes
-scripts/lint_changelog.py. Generated issue references are rendered as "refs",
-not "closes" (see GENERATED_REFERENCES). Call only after the freeze-label check.
+scripts/lint_changelog.py. A generated bullet is dropped when it shares an
+issue or pull-request reference with a curated ``[Unreleased]`` entry. Generated
+issue references are rendered as "refs", not "closes" (see GENERATED_REFERENCES).
+Call only after the freeze-label check.
 
 With ``--pr-body``, read a GitHub pull request JSON instead and apply the same
 reference rewrite to the release PR body, so GitHub does not treat the
@@ -54,6 +56,77 @@ GENERATED_ALIASES = {"⚠ BREAKING CHANGES": "Upgrade notes"}
 # keyword is lost, so "closes" can be false; "refs" is true for every trailer.
 # The match is tied to the commit-hash link that precedes the reference list.
 GENERATED_REFERENCES = re.compile(r"(\(\[[0-9a-f]{7,40}\]\([^)\s]+\)\)), closes (?=\[)")
+# Local ``#123`` / ``[#123]`` / ``(#123)`` references, not ``owner/repo#123``.
+LOCAL_REFERENCE = re.compile(r"(?<![A-Za-z0-9])#(\d+)")
+
+
+# An inline code span: a run of backticks, its content, and an equal-length run.
+CODE_SPAN = re.compile(r"(?<!`)(`+)(?!`).+?(?<!`)\1(?!`)", re.DOTALL)
+
+
+def _references(text: str) -> set[int]:
+    """Issue or pull request numbers cited in the prose of a changelog fragment.
+
+    Fenced code blocks and inline code spans are content, not references, so a
+    ``#430`` inside them never matches a generated bullet.
+    """
+    prose: list[str] = []
+    fence: str | None = None
+    for line in text.splitlines():
+        match = FENCE.match(line)
+        if fence is None:
+            if match:
+                fence = match.group(1)
+                continue
+            prose.append(line)
+        elif (
+            match
+            and match.group(1)[0] == fence[0]
+            and len(match.group(1)) >= len(fence)
+            and not line[match.end() :].strip()
+        ):
+            fence = None
+    return {int(n) for n in LOCAL_REFERENCE.findall(CODE_SPAN.sub("", "\n".join(prose)))}
+
+
+def _entries(body: str) -> list[str]:
+    """Split a section body into bullets, keeping wrapped continuation lines.
+
+    Lines inside a fenced code block are content of the current entry, even when
+    they look like bullets.
+    """
+    entries: list[str] = []
+    current: list[str] = []
+    fence: str | None = None
+    for line in body.splitlines():
+        if fence is None and line.startswith(("* ", "- ", "+ ")) and current:
+            entries.append("\n".join(current))
+            current = [line]
+        else:
+            current.append(line)
+        match = FENCE.match(line)
+        if match:
+            marker = match.group(1)
+            if fence is None:
+                fence = marker
+            elif (
+                marker[0] == fence[0]
+                and len(marker) >= len(fence)
+                and not line[match.end() :].strip()
+            ):
+                fence = None
+    if current:
+        entries.append("\n".join(current))
+    return [entry for entry in entries if entry.strip()]
+
+
+def _without_duplicate_references(body: str, curated_refs: set[int]) -> str:
+    """Drop generated bullets that cite a reference already used in curated notes."""
+    entries = _entries(body)
+    kept = [entry for entry in entries if not (_references(entry) & curated_refs)]
+    if kept == entries:
+        return body
+    return "\n\n".join(kept)
 
 
 def _find(pattern: re.Pattern[str], text: str, origin: str) -> list[re.Match[str]]:
@@ -167,10 +240,21 @@ def compose(base: str, generated: str, version: str) -> str:
         base[head.end() : history_start], "curated [Unreleased]", {}
     )
     # Merge curated and generated entries under one standard heading each, in the
-    # standard order; curated text comes first and is copied unchanged.
+    # standard order; curated text comes first and is copied unchanged. Generated
+    # bullets that share an issue or pull-request number with any curated entry
+    # are omitted so the same change is listed once.
+    curated_refs: set[int] = set()
+    for parts in curated_bodies.values():
+        for part in parts:
+            curated_refs |= _references(part)
     blocks = [curated_preamble] if curated_preamble.strip() else []
     for title in ALLOWED_SECTIONS:
-        parts = curated_bodies.get(title, []) + generated_bodies.get(title, [])
+        generated_parts = []
+        for part in generated_bodies.get(title, []):
+            filtered = _without_duplicate_references(part, curated_refs)
+            if filtered.strip():
+                generated_parts.append(filtered)
+        parts = curated_bodies.get(title, []) + generated_parts
         if parts:
             blocks.append(f"### {title}\n\n" + "\n\n".join(p.strip("\n") for p in parts))
     body = "\n\n".join(blocks)
