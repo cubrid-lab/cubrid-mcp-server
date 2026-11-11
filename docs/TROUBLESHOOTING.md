@@ -76,9 +76,19 @@ Row and character caps protect the model's context window. Raise `CUBRID_MCP_MAX
 
 `CUBRID_MCP_QUERY_TIMEOUT` (default 30) is a **socket read timeout**, not a true server-side statement timeout: if the server sends no data within the window, the query is aborted and the connection reset. Tune it per workload (and per connection via `CUBRID_<NAME>_MCP_QUERY_TIMEOUT`).
 
+<a id="no-logs-anywhere"></a>
+
 ## No logs anywhere / server output looks like JSON garbage
 
 The server speaks MCP stdio: `stdout` carries the protocol stream, and **all logging goes to stderr**. Look at the client's MCP log pane (or launch the server manually and redirect `2>server.log`). Never add `print()` to stdout in customizations — it corrupts the protocol stream and breaks the connection.
+
+**Claude Desktop** has no terminal: it writes each stdio server's stderr to a file named `mcp-server-SERVERNAME.log`, so with the `cubrid` key used in the README the file is `mcp-server-cubrid.log` in:
+
+- macOS: `~/Library/Logs/Claude`
+- Windows: `%APPDATA%\Claude\logs`
+- Linux: `~/.config/Claude/logs`
+
+These locations come from the MCP guide [Connect to local MCP servers](https://modelcontextprotocol.io/docs/develop/connect-local-servers). The log can include SQL text, so do not paste it into public issues.
 
 ## Audit log not appearing
 

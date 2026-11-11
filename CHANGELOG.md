@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Ship a self-consistent sdist and the license inventory NOTICE references (#507)** — the source distribution no longer ships a partial `tests/` tree (test modules without `conftest.py` or `helpers.py`). `THIRD_PARTY_LICENSES.md` is included in both the wheel and the sdist so the file NOTICE refers to is present, and the inventory no longer claims the sdist carries the test suite.
 
+### Documentation
+
+- **Troubleshooting says where Claude Desktop keeps the server's error output (#483)** — tool results carry only an error category and the cause goes to stderr, but a Claude Desktop user has no terminal. The "No logs anywhere" entry of `docs/TROUBLESHOOTING.md` and `docs/ko/TROUBLESHOOTING.md` now names the file, `mcp-server-cubrid.log` for the README's `cubrid` key, and its folder on macOS (`~/Library/Logs/Claude`), Windows (`%APPDATA%\Claude\logs`) and Linux (`~/.config/Claude/logs`), as the MCP guide documents, keeps the `2>server.log` advice and warns that the log can contain SQL. The entry gets an explicit `no-logs-anywhere` anchor, and both Quick Start "If something fails" paragraphs point chat-client users to it. Documentation only; behavior is unchanged.
+
 ### CI
 
 - **List each change once when composing release notes (#506)** — `scripts/compose_release_changelog.py` drops a generated bullet that references the same issue or pull request as a curated `[Unreleased]` entry. Historical release notes are left unchanged.
