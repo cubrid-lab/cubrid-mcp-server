@@ -198,3 +198,39 @@ def test_changelog_lint_rejects_duplicate_subsection_heading(tmp_path: Path) -> 
     )
     assert result.returncode == 1
     assert "Duplicate subsection heading '### CI' in [Unreleased]" in result.stderr
+
+
+def test_readme_quick_start_requirements_match_package_and_server() -> None:
+    """The Quick Start requirements state the supported Python and CUBRID versions (#485)."""
+    python_min = re.search(
+        r'^requires-python = ">=(\d+\.\d+)"', _read("pyproject.toml"), re.MULTILINE
+    )
+    assert python_min is not None
+    cubrid_range = re.search(
+        r"targets CUBRID SQL \((\d+\.\d+)–(\d+\.\d+)\)", server.mcp.instructions or ""
+    )
+    assert cubrid_range is not None
+    low, high = cubrid_range.groups()
+    sections = {
+        "README.md": (
+            _section(_read("README.md"), "### Requirements"),
+            "or later",
+            "docs/quickstart.md",
+        ),
+        "docs/README.ko.md": (
+            _section(_read("docs", "README.ko.md"), "### 요구 사항"),
+            "이상",
+            "ko/quickstart.md",
+        ),
+    }
+    for page, (section, at_least, quickstart) in sections.items():
+        assert f"Python {python_min.group(1)} {at_least}" in section, page
+        assert f"CUBRID {low}–{high}" in section, page
+        assert "33000" in section, page
+        assert "`uvx`" in section and "`pipx run`" in section, page
+        assert f"]({quickstart}#step-1-start-a-disposable-cubrid-lab)" in section, page
+    english_step1 = _read("docs", "quickstart.md")
+    assert re.search(r"^## Step 1: Start a disposable CUBRID lab$", english_step1, re.MULTILINE)
+    assert '<a id="step-1-start-a-disposable-cubrid-lab"></a>' in _read(
+        "docs", "ko", "quickstart.md"
+    )

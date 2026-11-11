@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Ship a self-consistent sdist and the license inventory NOTICE references (#507)** — the source distribution no longer ships a partial `tests/` tree (test modules without `conftest.py` or `helpers.py`). `THIRD_PARTY_LICENSES.md` is included in both the wheel and the sdist so the file NOTICE refers to is present, and the inventory no longer claims the sdist carries the test suite.
 
+### Documentation
+
+- **README Quick Start lists its requirements (#485)** — `README.md` and `docs/README.ko.md` add a Requirements list before Configure: Python 3.11 or later (`requires-python`), a reachable CUBRID 10.2–11.4 broker on port 33000 (the server's supported range; installing the package does not install CUBRID) with a link to Quick Start Step 1 for a disposable one, and uv for `uvx` or pipx for `pipx run`. The Korean Quick Start's Step 1 gets the explicit `step-1-start-a-disposable-cubrid-lab` anchor, and a docs-alignment test keeps both lists in step with `pyproject.toml` and the server instructions. Documentation only; behavior is unchanged.
+
 ### CI
 
 - **List each change once when composing release notes (#506)** — `scripts/compose_release_changelog.py` drops a generated bullet that references the same issue or pull request as a curated `[Unreleased]` entry. Historical release notes are left unchanged.
