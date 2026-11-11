@@ -8,6 +8,7 @@ dynamic = ["version"]
 description = "Model Context Protocol server for CUBRID database"
 readme = "README.md"
 license = "MIT"
+license-files = ["LICENSE", "NOTICE", "THIRD_PARTY_LICENSES.md"]
 requires-python = ">=3.11"
 authors = [
     {name = "Yeongseon Choe", email = "yeongseon.choe@gmail.com"},
@@ -54,7 +55,7 @@ dev = [
     # tests/test_docs_channel_notice.py renders the site notice template (#361);
     # MkDocs renders it with the same library.
     "jinja2>=3.1",
-    "ruff==0.17.3",
+    "ruff==0.17.4",
     "mypy==2.4.1",
     "pre-commit",
     "tox",
