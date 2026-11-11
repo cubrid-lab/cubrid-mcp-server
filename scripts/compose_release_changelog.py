@@ -6,8 +6,9 @@ candidate. Generated headers belong in RELEASE_CHANGELOG.md; publication keeps
 its strict bracket/date contract. Curated and generated entries are merged under
 the standard ``###`` headings in the standard order, so the candidate passes
 scripts/lint_changelog.py. A generated bullet is dropped when it shares an
-issue or pull-request reference with a curated ``[Unreleased]`` entry. Generated issue references are rendered as "refs",
-not "closes" (see GENERATED_REFERENCES). Call only after the freeze-label check.
+issue or pull-request reference with a curated ``[Unreleased]`` entry. Generated
+issue references are rendered as "refs", not "closes" (see GENERATED_REFERENCES).
+Call only after the freeze-label check.
 
 With ``--pr-body``, read a GitHub pull request JSON instead and apply the same
 reference rewrite to the release PR body, so GitHub does not treat the
