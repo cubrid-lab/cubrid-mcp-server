@@ -13,13 +13,13 @@ A [Model Context Protocol](https://modelcontextprotocol.io) server for [CUBRID](
 
 <!-- mcp-name: io.github.cubrid-lab/cubrid-mcp-server -->
 
-<img src="docs/demo.gif" alt="Terminal recording: an MCP client lists the tools, calls all_table_names, and execute_query rejects DROP TABLE" width="100%"/>
+<img src="https://raw.githubusercontent.com/cubrid-lab/cubrid-mcp-server/main/docs/demo.gif" alt="Terminal recording: an MCP client lists the tools, calls all_table_names, and execute_query rejects DROP TABLE" width="100%"/>
 
 <sub>Terminal recording of a real MCP stdio session (<code>demos/mcp_demo.py</code>, recorded with <code>demos/record_demo.sh</code>).</sub>
 
 ## Start here
 
-New to CUBRID or to MCP? Follow the [Quick Start guide](docs/quickstart.md). It
+New to CUBRID or to MCP? Follow the [Quick Start guide](https://github.com/cubrid-lab/cubrid-mcp-server/blob/main/docs/quickstart.md). It
 starts a disposable local CUBRID lab, prepares a sample table and a dedicated
 read-only account, connects one MCP client (a short Python script) and runs a
 first query, showing what each result means and how to clean up. The sections
@@ -53,7 +53,7 @@ Schema metadata is also exposed as read-only [MCP Resources](https://modelcontex
 | `cubrid://schema` | `application/json` | Whole-schema index: every user table with its per-table resource URI |
 | `cubrid://schema/{table}` | `application/json` | Per-table metadata (columns, primary key, indexes) — mirrors `describe_table` |
 
-Schema resources always read the `default` connection (see [Multi-Connection](docs/MULTI_CONNECTION.md)). The guides are static Markdown. Table names in `{table}` are percent-decoded by URI-template matching; an unknown or system table produces a resource-read error, matching the `describe_table` tool.
+Schema resources always read the `default` connection (see [Multi-Connection](https://github.com/cubrid-lab/cubrid-mcp-server/blob/main/docs/MULTI_CONNECTION.md)). The guides are static Markdown. Table names in `{table}` are percent-decoded by URI-template matching; an unknown or system table produces a resource-read error, matching the `describe_table` tool.
 
 ## Prompts
 
@@ -80,8 +80,8 @@ the underlying tools (`execute_query`/`explain_query` via `safety.py`).
 ## Quick Start
 
 The values below are placeholders for your own database and account. The
-[Quick Start guide](docs/quickstart.md) walks through the same settings with a
-prepared lab, using the account `mcp_reader` from [SECURITY.md](SECURITY.md).
+[Quick Start guide](https://github.com/cubrid-lab/cubrid-mcp-server/blob/main/docs/quickstart.md) walks through the same settings with a
+prepared lab, using the account `mcp_reader` from [SECURITY.md](https://github.com/cubrid-lab/cubrid-mcp-server/blob/main/SECURITY.md).
 
 ### Configure
 
@@ -257,11 +257,11 @@ Add to `.cursor/mcp.json`:
 
 The server is **read-only by default**. A code-level SQL whitelist allows only `SELECT`, `SHOW`, `DESC`, `DESCRIBE`, and `WITH` statements. Multi-statement queries are rejected. CUBRID has no `EXPLAIN` statement; use the `explain_query` tool for execution plans (it executes the statement under `SET TRACE ON` and rolls back).
 
-Read-only mode also rejects `INCR`, `DECR`, serial advances (`NEXT_VALUE`, `NEXTVAL`, `SERIAL_NEXT_VALUE`) and the click counter `WITH INCREMENT FOR`: they change data inside a `SELECT`, the rollback does not undo them, and **a `SELECT`-only grant does not prevent them**. See the [Security Model](docs/SECURITY_MODEL.md).
+Read-only mode also rejects `INCR`, `DECR`, serial advances (`NEXT_VALUE`, `NEXTVAL`, `SERIAL_NEXT_VALUE`) and the click counter `WITH INCREMENT FOR`: they change data inside a `SELECT`, the rollback does not undo them, and **a `SELECT`-only grant does not prevent them**. See the [Security Model](https://github.com/cubrid-lab/cubrid-mcp-server/blob/main/docs/SECURITY_MODEL.md).
 
-> **The SQL keyword checks are a guardrail and defense-in-depth, not a security boundary.** The primary control is a dedicated least-privilege database account: **run the server as a CUBRID user that has `SELECT` only on the tables the model needs**, never reuse `dba` or the owner account, and keep the account to the minimum privileges required, with no DDL rights. See [`SECURITY.md`](./SECURITY.md).
+> **The SQL keyword checks are a guardrail and defense-in-depth, not a security boundary.** The primary control is a dedicated least-privilege database account: **run the server as a CUBRID user that has `SELECT` only on the tables the model needs**, never reuse `dba` or the owner account, and keep the account to the minimum privileges required, with no DDL rights. See [`SECURITY.md`](https://github.com/cubrid-lab/cubrid-mcp-server/blob/main/SECURITY.md).
 
-For production use, also configure a read-only database user. See [`SECURITY.md`](./SECURITY.md) for the recommended setup.
+For production use, also configure a read-only database user. See [`SECURITY.md`](https://github.com/cubrid-lab/cubrid-mcp-server/blob/main/SECURITY.md) for the recommended setup.
 
 ### Write mode (opt-in)
 
@@ -273,7 +273,7 @@ Constraints and rationale:
 - **DDL is intentionally unsupported.** `execute_write` is a DML tool (`INSERT`/`UPDATE`/`DELETE`) and `execute_query` is read-only, so `CREATE`/`ALTER`/`DROP`/`TRUNCATE` are rejected by both. (The server runs pycubrid with autocommit off; on the CUBRID versions tested (10.2, 11.2, 11.4) DDL is transactional and is rolled back if it is not committed, so the exclusion rests on the tool contracts, not on DDL auto-commit.)
 - **Write mode is per-connection.** `execute_write` accepts the same optional `connection` argument as the read tools and runs against that connection; a connection whose `CUBRID_<NAME>_MCP_WRITE` is off refuses the write even when another connection enables it.
 - `execute_query` never becomes a write path through the write-mode flag or `CUBRID_MCP_READONLY`: with `CUBRID_MCP_READONLY=0` it still rejects write, DDL and transaction-control statements, method calls (`CALL`, `EVALUATE`) and `KILL` before they run, so `CALL login(...)` cannot change the session user, rejects `INCR`, `DECR`, serial advances and the click counter, which change data inside a `SELECT`, and rolls back any statement that returns no result set. Clients that sent writes through `execute_query` with `CUBRID_MCP_READONLY=0` must switch to `execute_write`.
-- Enforcement is defense-in-depth; still run the server as a CUBRID user granted only the privileges it needs. See [`SECURITY.md`](./SECURITY.md).
+- Enforcement is defense-in-depth; still run the server as a CUBRID user granted only the privileges it needs. See [`SECURITY.md`](https://github.com/cubrid-lab/cubrid-mcp-server/blob/main/SECURITY.md).
 
 ## Logging
 
@@ -328,7 +328,7 @@ make docker-down    # keeps the data volume; make docker-clean deletes it
 ```
 
 CI calls the same Make targets; `make help` lists them all and
-[CONTRIBUTING.md](CONTRIBUTING.md) describes each one.
+[CONTRIBUTING.md](https://github.com/cubrid-lab/cubrid-mcp-server/blob/main/CONTRIBUTING.md) describes each one.
 
 The live shared-session concurrency regression can also be run on its own:
 
@@ -355,4 +355,4 @@ connection pooling or per-request transaction isolation.
 
 ## License
 
-MIT (see [`LICENSE`](./LICENSE)).
+MIT (see [`LICENSE`](https://github.com/cubrid-lab/cubrid-mcp-server/blob/main/LICENSE)).
