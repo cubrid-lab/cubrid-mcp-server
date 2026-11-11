@@ -162,11 +162,16 @@ pip install -e .
 cubrid-mcp-server
 ```
 
+Windows에서는 `source .venv/bin/activate` 대신 `.venv\Scripts\activate`(명령 프롬프트) 또는 `.\.venv\Scripts\Activate.ps1`(PowerShell)로 가상 환경을 활성화하세요.
+
 ## MCP 클라이언트 연동
 
 ### Claude Desktop
 
-`~/Library/Application Support/Claude/claude_desktop_config.json`에 추가:
+Claude Desktop 설정 파일에 추가합니다(Settings → Developer → Edit Config로 열 수 있습니다).
+
+- macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
+- Windows: `%APPDATA%\Claude\claude_desktop_config.json`
 
 ```json
 {

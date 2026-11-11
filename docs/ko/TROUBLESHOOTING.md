@@ -31,7 +31,7 @@
 
 - **`uvx` 없음.** 클라이언트는 `uvx cubrid-mcp-server`를 실행합니다 — [uv](https://docs.astral.sh/uv/)를 설치해 클라이언트의 `PATH`에 두거나, 클라이언트 설정에 절대 경로를 사용하세요(`"command": "/home/you/.local/bin/uvx"`).
 - **환경 변수 누락.** `CUBRID_HOST`, `CUBRID_USER`, `CUBRID_PASSWORD`, `CUBRID_DATABASE`는 클라이언트의 `env` 블록에 있어야 합니다 — 터미널의 `export`는 Claude Desktop 같은 GUI 앱에 보이지 않습니다.
-- **설정 파일 위치.** Claude Desktop은 `~/Library/Application Support/Claude/claude_desktop_config.json`, Claude Code는 프로젝트 루트의 `.mcp.json`, Cursor는 `.cursor/mcp.json`을 읽습니다. 수정 후에는 클라이언트를 재시작하세요.
+- **설정 파일 위치.** Claude Desktop은 macOS에서 `~/Library/Application Support/Claude/claude_desktop_config.json`, Windows에서 `%APPDATA%\Claude\claude_desktop_config.json`(Settings → Developer → Edit Config로 열 수 있음), Claude Code는 프로젝트 루트의 `.mcp.json`, Cursor는 `.cursor/mcp.json`을 읽습니다. 수정 후에는 클라이언트를 재시작하세요.
 
 <a id="server-shows-as-connected-but-every-tool-fails"></a>
 

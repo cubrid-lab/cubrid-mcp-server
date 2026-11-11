@@ -188,11 +188,16 @@ pip install -e .
 cubrid-mcp-server
 ```
 
+On Windows, activate the environment with `.venv\Scripts\activate` (Command Prompt) or `.\.venv\Scripts\Activate.ps1` (PowerShell) instead of `source .venv/bin/activate`.
+
 ## MCP Client Integration
 
 ### Claude Desktop
 
-Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
+Add to Claude Desktop's configuration file (Settings → Developer → Edit Config opens it):
+
+- macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
+- Windows: `%APPDATA%\Claude\claude_desktop_config.json`
 
 ```json
 {

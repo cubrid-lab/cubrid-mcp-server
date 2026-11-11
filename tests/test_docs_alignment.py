@@ -45,6 +45,65 @@ PROMPT_SECTIONS = {
 RESOURCE_PAGES = {"docs/TOOLS.md": TOOLS_MD, "docs/ko/TOOLS.md": TOOLS_KO}
 
 
+WINDOWS_CLAUDE_CONFIG = "`%APPDATA%\\Claude\\claude_desktop_config.json`"
+MACOS_CLAUDE_CONFIG = "`~/Library/Application Support/Claude/claude_desktop_config.json`"
+
+
+def test_client_setup_docs_cover_windows_and_macos() -> None:
+    """Windows users get the config location, venv layout and path lookup too (#480)."""
+    claude_sections = {
+        "README.md": ("README.md", "### Claude Desktop"),
+        "docs/README.ko.md": ("docs/README.ko.md", "### Claude Desktop"),
+        "docs/quickstart.md": (
+            "docs/quickstart.md",
+            "## Optional: use the same server from a chat client",
+        ),
+        "docs/ko/quickstart.md": (
+            "docs/ko/quickstart.md",
+            "## 선택: 채팅 클라이언트에서 같은 서버 사용",
+        ),
+    }
+    for name, (page, heading) in claude_sections.items():
+        section = _section(_read(*page.split("/")), heading)
+        assert MACOS_CLAUDE_CONFIG in section, name
+        assert WINDOWS_CLAUDE_CONFIG in section, name
+    for page in ("docs/TROUBLESHOOTING.md", "docs/ko/TROUBLESHOOTING.md"):
+        text = _read(*page.split("/"))
+        line = next(row for row in text.splitlines() if "claude_desktop_config.json" in row)
+        assert MACOS_CLAUDE_CONFIG in line and WINDOWS_CLAUDE_CONFIG in line, page
+    install_sections = {
+        "docs/quickstart.md": "## Step 2: Install the server in a virtual environment",
+        "docs/ko/quickstart.md": "## 2단계: 가상 환경에 서버 설치",
+    }
+    for page, heading in install_sections.items():
+        section = _section(_read(*page.split("/")), heading)
+        for expected in (
+            "which cubrid-mcp-server",
+            "`.venv\\Scripts\\activate`",
+            "`.\\.venv\\Scripts\\Activate.ps1`",
+            "`where cubrid-mcp-server`",
+            "`(Get-Command cubrid-mcp-server).Source`",
+        ):
+            assert expected in section, (page, expected)
+    for page in ("README.md", "docs/README.ko.md"):
+        assert "`.venv\\Scripts\\activate`" in _read(*page.split("/")), page
+
+
+def test_quickstart_windows_command_example_is_valid_json() -> None:
+    """The escaped Windows path example parses to a real .venv\\Scripts executable path (#480)."""
+    for page, heading in (
+        ("docs/quickstart.md", "## Optional: use the same server from a chat client"),
+        ("docs/ko/quickstart.md", "## 선택: 채팅 클라이언트에서 같은 서버 사용"),
+    ):
+        section = _section(_read(*page.split("/")), heading)
+        match = re.search(r'`("command": "[^`]*Scripts[^`]*")`', section)
+        assert match is not None, page
+        command = json.loads("{" + match.group(1) + "}")["command"]
+        assert (
+            command == "C:\\Users\\you\\cubrid-quickstart\\.venv\\Scripts\\cubrid-mcp-server.exe"
+        ), page
+
+
 async def test_tools_md_lists_every_tool_and_prompt_and_resource() -> None:
     async with Client(server.mcp) as client:
         tools = {tool.name for tool in await client.list_tools()}

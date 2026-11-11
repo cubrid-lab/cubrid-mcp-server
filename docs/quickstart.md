@@ -97,6 +97,13 @@ command inside `.venv/bin`. Create every file below in
 this folder, and run every command in this terminal with the virtual
 environment active.
 
+On Windows, which this walkthrough was not run on, the virtual environment
+keeps its commands in `.venv\Scripts` instead of `.venv/bin`. Activate it with
+`.venv\Scripts\activate` in Command Prompt or `.\.venv\Scripts\Activate.ps1` in
+PowerShell, and print the server's full path with `where cubrid-mcp-server`
+(Command Prompt) or `(Get-Command cubrid-mcp-server).Source` (PowerShell)
+instead of `which`.
+
 ---
 
 ## Step 3: Prepare the sample table and the read-only account
@@ -339,7 +346,7 @@ into public issues.
 
 | What you see | What it means | What to check |
 |---|---|---|
-| `cubrid-mcp-server not found: activate the virtual environment from Step 2.` | The client cannot find the server's command. | Run `source .venv/bin/activate` in this folder. A chat client needs the command's full path instead (`which cubrid-mcp-server`). |
+| `cubrid-mcp-server not found: activate the virtual environment from Step 2.` | The client cannot find the server's command. | Run `source .venv/bin/activate` (`.venv\Scripts\activate` on Windows) in this folder. A chat client needs the command's full path instead (`which cubrid-mcp-server`, or `where cubrid-mcp-server` on Windows). |
 | `MCP_READER_PASSWORD is not set in this terminal (see Step 3).` | The configuration has no password to pass on. | Run the scripts in the terminal where you set it in Step 3, or set it again with the account's password. |
 | `configuration error: missing required environment variable: CUBRID_HOST` | The server started without its settings. | The client's `env` block, not your terminal, must hold the `CUBRID_*` variables. |
 | `health_check: {"ok":false,"error":"DatabaseError"}` | The client reached the server, but the server could not connect to CUBRID. | The server's error output names the cause: `failed to connect to CUBRID broker` (nothing at that host and port: is the lab running?), `Failed to connect to database server, 'nosuchdb', ...` (wrong database name) or `Incorrect or missing password.` (wrong `MCP_READER_PASSWORD`). |
@@ -419,9 +426,16 @@ and restart the client after editing it. Use the full path that
 virtual environment, and put the account's real password only into the
 client's local configuration, never into a file you commit or share.
 
+On Windows, use the path that `where cubrid-mcp-server` prints, which ends in
+`.venv\Scripts\cubrid-mcp-server.exe`, and double every backslash inside the
+JSON string, for example
+`"command": "C:\\Users\\you\\cubrid-quickstart\\.venv\\Scripts\\cubrid-mcp-server.exe"`.
+
 ### Claude Desktop
 
-Add to `~/Library/Application Support/Claude/claude_desktop_config.json` on macOS:
+Add to `~/Library/Application Support/Claude/claude_desktop_config.json` on macOS
+or `%APPDATA%\Claude\claude_desktop_config.json` on Windows (Settings → Developer → Edit Config
+opens it):
 
 ```json
 {
