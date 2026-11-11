@@ -43,6 +43,8 @@
 
 ---
 
+<a id="step-1-start-a-disposable-cubrid-lab"></a>
+
 ## 1단계: 일회용 CUBRID 실습 환경 시작
 
 `testdb` 데이터베이스가 있는 일회용 CUBRID 11.4 서버를 시작합니다.
