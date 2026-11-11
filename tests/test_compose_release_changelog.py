@@ -364,3 +364,27 @@ def test_keeps_generated_entries_without_a_shared_reference() -> None:
     actual = compose(base, generated, "1.9.0")
     candidate = actual[actual.index("## [1.9.0]") : actual.index("## [1.8.0]")]
     assert "#430" in candidate and "#454" in candidate
+
+
+def test_code_hashes_in_curated_notes_are_not_references() -> None:
+    # "#430" inside an inline code span or a fenced block is not an issue
+    # reference, so the generated bullet that refs #430 must stay.
+    base = (
+        "# Changelog\n\n## [Unreleased]\n\n"
+        "### Fixed\n\n- Accept CSS colours like `#430` in themes\n\n"
+        "- Escape comment markers:\n\n  ```sql\n  SELECT 1 -- #431\n  ```\n\n"
+        "## [1.8.0] - 2026-09-01\n\nOld history.\n"
+    )
+    generated = (
+        "# Changelog\n\n## [1.9.0](https://github.com/example/compare/v1.8.0...v1.9.0) (2026-10-03)\n\n"
+        "### Fixed\n\n"
+        "* config: reject empty hosts "
+        "([#454](https://example/issues/454)) ([aaaaaaa](https://example/commit/a))"
+        ", closes [#430](https://example/issues/430)\n\n"
+        "* sql: keep comment text ([#455](https://example/issues/455)) "
+        "([bbbbbbb](https://example/commit/b)), closes [#431](https://example/issues/431)\n"
+    )
+    actual = compose(base, generated, "1.9.0")
+    candidate = actual[actual.index("## [1.9.0]") : actual.index("## [1.8.0]")]
+    assert "#454" in candidate
+    assert "#455" in candidate

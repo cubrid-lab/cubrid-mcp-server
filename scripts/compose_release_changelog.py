@@ -59,9 +59,33 @@ GENERATED_REFERENCES = re.compile(r"(\(\[[0-9a-f]{7,40}\]\([^)\s]+\)\)), closes 
 LOCAL_REFERENCE = re.compile(r"(?<![A-Za-z0-9])#(\d+)")
 
 
+# An inline code span: a run of backticks, its content, and an equal-length run.
+CODE_SPAN = re.compile(r"(?<!`)(`+)(?!`).+?(?<!`)\1(?!`)", re.DOTALL)
+
+
 def _references(text: str) -> set[int]:
-    """Issue or pull request numbers cited in a changelog fragment."""
-    return {int(n) for n in LOCAL_REFERENCE.findall(text)}
+    """Issue or pull request numbers cited in the prose of a changelog fragment.
+
+    Fenced code blocks and inline code spans are content, not references, so a
+    ``#430`` inside them never matches a generated bullet.
+    """
+    prose: list[str] = []
+    fence: str | None = None
+    for line in text.splitlines():
+        match = FENCE.match(line)
+        if fence is None:
+            if match:
+                fence = match.group(1)
+                continue
+            prose.append(line)
+        elif (
+            match
+            and match.group(1)[0] == fence[0]
+            and len(match.group(1)) >= len(fence)
+            and not line[match.end() :].strip()
+        ):
+            fence = None
+    return {int(n) for n in LOCAL_REFERENCE.findall(CODE_SPAN.sub("", "\n".join(prose)))}
 
 
 def _entries(body: str) -> list[str]:
