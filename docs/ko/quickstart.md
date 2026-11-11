@@ -87,6 +87,11 @@ which cubrid-mcp-server
 경로를 출력합니다. 아래의 모든 파일은 이 폴더에 만들고, 모든 명령은 가상 환경이 활성화된 이
 터미널에서 실행하세요.
 
+이 안내는 Windows에서 실행해 보지 않았습니다. Windows에서는 가상 환경의 명령이 `.venv/bin` 대신
+`.venv\Scripts`에 있습니다. 명령 프롬프트에서는 `.venv\Scripts\activate`, PowerShell에서는
+`.venv\Scripts\Activate.ps1`로 활성화하고, `which` 대신 `where cubrid-mcp-server`(명령 프롬프트) 또는
+`(Get-Command cubrid-mcp-server).Source`(PowerShell)로 서버의 전체 경로를 출력하세요.
+
 ---
 
 <a id="step-3-prepare-the-sample-table-and-the-read-only-account"></a>
@@ -325,7 +330,7 @@ Error calling tool 'execute_query': DELETE is not permitted in read-only mode; a
 
 | 보이는 내용 | 의미 | 확인할 것 |
 |---|---|---|
-| `cubrid-mcp-server not found: activate the virtual environment from Step 2.` | 클라이언트가 서버 명령을 찾지 못합니다. | 이 폴더에서 `source .venv/bin/activate`를 실행하세요. 채팅 클라이언트에는 대신 명령의 전체 경로(`which cubrid-mcp-server`)가 필요합니다. |
+| `cubrid-mcp-server not found: activate the virtual environment from Step 2.` | 클라이언트가 서버 명령을 찾지 못합니다. | 이 폴더에서 `source .venv/bin/activate`(Windows에서는 `.venv\Scripts\activate`)를 실행하세요. 채팅 클라이언트에는 대신 명령의 전체 경로(`which cubrid-mcp-server`, Windows에서는 `where cubrid-mcp-server`)가 필요합니다. |
 | `MCP_READER_PASSWORD is not set in this terminal (see Step 3).` | 설정이 전달할 비밀번호가 없습니다. | 3단계에서 비밀번호를 설정한 터미널에서 스크립트를 실행하거나, 계정의 비밀번호로 다시 설정하세요. |
 | `configuration error: missing required environment variable: CUBRID_HOST` | 서버가 설정 없이 시작되었습니다. | `CUBRID_*` 변수는 터미널이 아니라 클라이언트의 `env` 블록에 있어야 합니다. |
 | `health_check: {"ok":false,"error":"DatabaseError"}` | 클라이언트는 서버에 닿았지만 서버가 CUBRID에 연결하지 못했습니다. | 서버의 오류 출력이 원인을 알려 줍니다. `failed to connect to CUBRID broker`(그 호스트와 포트에 아무것도 없음: 실습 환경이 실행 중인가요?), `Failed to connect to database server, 'nosuchdb', ...`(잘못된 데이터베이스 이름), `Incorrect or missing password.`(잘못된 `MCP_READER_PASSWORD`). |
@@ -402,9 +407,14 @@ Removed table mcp_quickstart_books.
 `which cubrid-mcp-server`가 출력하는 전체 경로를 사용하세요. 계정의 실제 비밀번호는 클라이언트의
 로컬 설정에만 넣고, 커밋하거나 공유하는 파일에는 절대 넣지 마세요.
 
+Windows에서는 `where cubrid-mcp-server`가 출력하는, `.venv\Scripts\cubrid-mcp-server.exe`로 끝나는
+경로를 쓰고, JSON 문자열 안의 백슬래시는 모두 두 번 씁니다. 예:
+`"command": "C:\\Users\\you\\cubrid-quickstart\\.venv\\Scripts\\cubrid-mcp-server.exe"`.
+
 ### Claude Desktop
 
-macOS에서는 `~/Library/Application Support/Claude/claude_desktop_config.json`에 추가합니다.
+macOS에서는 `~/Library/Application Support/Claude/claude_desktop_config.json`, Windows에서는
+`%APPDATA%\Claude\claude_desktop_config.json`에 추가합니다(Settings → Developer → Edit Config로 열 수 있습니다).
 
 ```json
 {
