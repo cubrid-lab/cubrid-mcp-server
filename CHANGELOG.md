@@ -7,9 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.1] - 2026-11-13
+
 ### Fixed
 
 - **Ship a self-consistent sdist and the license inventory NOTICE references (#507)** — the source distribution no longer ships a partial `tests/` tree (test modules without `conftest.py` or `helpers.py`). `THIRD_PARTY_LICENSES.md` is included in both the wheel and the sdist so the file NOTICE refers to is present, and the inventory no longer claims the sdist carries the test suite.
+
+* **ci:** require Korean README translation updates ([#527](https://github.com/cubrid-lab/cubrid-mcp-server/issues/527)) ([74aefbd](https://github.com/cubrid-lab/cubrid-mcp-server/commit/74aefbd3b480da930be92405aa8ffc574a4c99e0))
+* **ci:** restrict historical release edits to upstream main ([#533](https://github.com/cubrid-lab/cubrid-mcp-server/issues/533)) ([70bb7c3](https://github.com/cubrid-lab/cubrid-mcp-server/commit/70bb7c37d78eb5113d92a3a97537a53e6f566da2))
+* drop duplicate release-note bullets that share a reference ([#549](https://github.com/cubrid-lab/cubrid-mcp-server/issues/549)) ([8ffae2f](https://github.com/cubrid-lab/cubrid-mcp-server/commit/8ffae2fe1956f73611464e8d32d0f896e47f8abe))
+* ship the license inventory and omit partial tests from the sdist ([#548](https://github.com/cubrid-lab/cubrid-mcp-server/issues/548)) ([da36be8](https://github.com/cubrid-lab/cubrid-mcp-server/commit/da36be884d5080d7b386e0041e56f3f2c648eb9b))
+
+### Documentation
+
+* clarify cubrid-mcp-server local issue and PR evidence ([090e761](https://github.com/cubrid-lab/cubrid-mcp-server/commit/090e76189a0a93c52f71c586737dcf1839793b4f))
+* clarify issue handoff and work states ([95e347f](https://github.com/cubrid-lab/cubrid-mcp-server/commit/95e347f69ab305222094f2de09c385ccfe39660e))
+* clarify local issue and PR evidence ownership ([#528](https://github.com/cubrid-lab/cubrid-mcp-server/issues/528)) ([090e761](https://github.com/cubrid-lab/cubrid-mcp-server/commit/090e76189a0a93c52f71c586737dcf1839793b4f))
+* define issue handoff and development states ([#556](https://github.com/cubrid-lab/cubrid-mcp-server/issues/556)) ([95e347f](https://github.com/cubrid-lab/cubrid-mcp-server/commit/95e347f69ab305222094f2de09c385ccfe39660e))
+* drop deprecated organization planning references ([a59b554](https://github.com/cubrid-lab/cubrid-mcp-server/commit/a59b554b0fc1fd7db345bdd8f3f928ca55a1f651))
+* make Korean README translation drift advisory after finals ([#525](https://github.com/cubrid-lab/cubrid-mcp-server/issues/525)) ([094790b](https://github.com/cubrid-lab/cubrid-mcp-server/commit/094790be31f94fb00bb6722910630023bca9b4ad))
+* make MCP Server contributor rules self-contained ([#544](https://github.com/cubrid-lab/cubrid-mcp-server/issues/544)) ([6e6b2d2](https://github.com/cubrid-lab/cubrid-mcp-server/commit/6e6b2d28b61c7491a1bcaa2980683d73d010fc85))
+* **release:** freeze release candidates only when their review starts ([#550](https://github.com/cubrid-lab/cubrid-mcp-server/issues/550)) ([4b4d580](https://github.com/cubrid-lab/cubrid-mcp-server/commit/4b4d5802c7cba2a95d5545277d062898a8291f0f))
+* remove obsolete organization roadmap and board links ([#542](https://github.com/cubrid-lab/cubrid-mcp-server/issues/542)) ([a59b554](https://github.com/cubrid-lab/cubrid-mcp-server/commit/a59b554b0fc1fd7db345bdd8f3f928ca55a1f651))
+* restore missing comparison links in early MCP releases ([#532](https://github.com/cubrid-lab/cubrid-mcp-server/issues/532)) ([fbaa160](https://github.com/cubrid-lab/cubrid-mcp-server/commit/fbaa160573c67938ea8fc273c290b80037c6be21))
+* track issue work without project boards ([1a4f2e9](https://github.com/cubrid-lab/cubrid-mcp-server/commit/1a4f2e9b0ccb451ab1f049409668d8b0fe876e4f))
+* use issues and pull requests without project boards ([#557](https://github.com/cubrid-lab/cubrid-mcp-server/issues/557)) ([1a4f2e9](https://github.com/cubrid-lab/cubrid-mcp-server/commit/1a4f2e9b0ccb451ab1f049409668d8b0fe876e4f))
 
 ### CI
 
