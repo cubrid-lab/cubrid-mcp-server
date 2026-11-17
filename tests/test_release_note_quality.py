@@ -1,4 +1,5 @@
 """Candidate release-note editorial gate regression tests (no DB or GitHub calls)."""
+
 from __future__ import annotations
 
 import importlib.util
@@ -31,7 +32,7 @@ def test_accepts_small_curated_patch() -> None:
 
 
 def test_rejects_missing_intro() -> None:
-    assert any("summary" in e for e in MODULE.violations(GOOD[GOOD.index("### Fixed"):]))
+    assert any("summary" in e for e in MODULE.violations(GOOD[GOOD.index("### Fixed") :]))
 
 
 def test_rejects_generated_raw_bullet() -> None:
@@ -41,7 +42,9 @@ def test_rejects_generated_raw_bullet() -> None:
 
 def test_rejects_exact_duplicate() -> None:
     entry = "- **Authentication** — Invalid credentials now produce a clear diagnostic ([#10](https://github.com/cubrid-lab/cubrid-mcp-server/pull/10)) by @maintainer."
-    assert any("duplicate" in e for e in MODULE.violations(GOOD.replace(entry, entry + "\n" + entry)))
+    assert any(
+        "duplicate" in e for e in MODULE.violations(GOOD.replace(entry, entry + "\n" + entry))
+    )
 
 
 def test_rejects_missing_candidate_version() -> None:
