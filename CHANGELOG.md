@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### CI
 
+- **Auto-merge only pull requests that Dependabot opened (#566)** — `dependabot-auto-merge.yml` runs on `pull_request_target` with a write-capable token and checked only `github.actor`. The `auto-merge` job now also requires the pull request author to be Dependabot, and `contents`/`pull-requests` write is granted to that job instead of the whole workflow, as in the cookbook. Dependabot updates merge as before.
 - **List each change once when composing release notes (#506)** — `scripts/compose_release_changelog.py` drops a generated bullet that references the same issue or pull request as a curated `[Unreleased]` entry. Historical release notes are left unchanged.
 
 ## [0.8.0] - 2026-11-05
