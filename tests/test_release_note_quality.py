@@ -31,7 +31,7 @@ def test_accepts_small_curated_patch() -> None:
 
 
 def test_rejects_missing_intro() -> None:
-    assert any("summary" in e for e in MODULE.violations(GOOD.split("### Fixed", 1)[1].join(["### Fixed"])))
+    assert any("summary" in e for e in MODULE.violations(GOOD[GOOD.index("### Fixed"):]))
 
 
 def test_rejects_generated_raw_bullet() -> None:
