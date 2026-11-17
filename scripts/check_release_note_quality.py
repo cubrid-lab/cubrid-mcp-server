@@ -4,6 +4,7 @@
 Older published versions remain untouched: release history requires its own
 version-scoped review and safeguarded body-only synchronization.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -27,7 +28,7 @@ def release_section(changelog: str, version: str) -> str:
     for i, match in enumerate(matches):
         if match.group(1) == version:
             end = matches[i + 1].start() if i + 1 < len(matches) else len(changelog)
-            return changelog[match.end():end]
+            return changelog[match.end() : end]
     raise ValueError(f"release [{version}] not found in CHANGELOG")
 
 
@@ -37,7 +38,7 @@ def violations(body: str) -> list[str]:
     headings = list(SECTION.finditer(body))
     if not headings:
         return ["missing categorized ### changes"]
-    intro = " ".join(body[:headings[0].start()].split())
+    intro = " ".join(body[: headings[0].start()].split())
     if not intro:
         errors.append("missing introductory user-impact summary")
     elif len(intro) > 900:
@@ -47,14 +48,16 @@ def violations(body: str) -> list[str]:
     for index, match in enumerate(headings):
         end = headings[index + 1].start() if index + 1 < len(headings) else len(body)
         title = match.group(1)
-        chunk = body[match.end():end]
+        chunk = body[match.end() : end]
         entries = [line.strip() for line in chunk.splitlines() if BULLET.match(line)]
         if not entries:
             errors.append(f"empty section {title}")
         for line in entries:
             count += 1
             if RAW.match(line):
-                errors.append(f"uncurated generated bullet in {title}; summarize outcome and cite evidence")
+                errors.append(
+                    f"uncurated generated bullet in {title}; summarize outcome and cite evidence"
+                )
             key = re.sub(r"\s+", " ", line.casefold())
             if key in seen:
                 errors.append(f"duplicate bullet in {title}")
