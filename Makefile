@@ -118,6 +118,7 @@ release-check: ## Read-only release consistency gate (run by release-please.yml 
 	@$(PYTHON) -c 'import json, sys; d = json.load(open(".mcpb/server.json")); found = {d["version"]} | {p["version"] for p in d["packages"]}; sys.exit(0) if found == {"$(VERSION)"} else sys.exit("ERROR: .mcpb/server.json versions %s, expected $(VERSION)" % sorted(found))' && \
 		echo "OK: .mcpb/server.json versions == $(VERSION)"
 	$(PYTHON) scripts/lint_changelog.py
+	$(PYTHON) scripts/check_release_note_quality.py --version "$(VERSION)"
 	$(PYTHON) scripts/extract_release_notes.py v$(VERSION)
 	rm -f RELEASE_NOTES.md
 	rm -rf dist

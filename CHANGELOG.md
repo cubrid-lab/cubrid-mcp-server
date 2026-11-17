@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Documentation
 
+- **README Quick Start lists its requirements (#485)** — `README.md` and `docs/README.ko.md` add a Requirements list before Configure: Python 3.11 or later (`requires-python`), a reachable CUBRID 10.2–11.4 broker on port 33000 (the server's supported range; installing the package does not install CUBRID) with a link to Quick Start Step 1 for a disposable one, and uv for `uvx` or pipx for `pipx run`. The Korean Quick Start's Step 1 gets the explicit `step-1-start-a-disposable-cubrid-lab` anchor, and a docs-alignment test keeps both lists in step with `pyproject.toml` and the server instructions. Documentation only; behavior is unchanged.
 - **Windows client setup next to macOS/Linux (#480)** — README, `docs/README.ko.md`, Troubleshooting and the English/Korean Quick Start now give Claude Desktop's Windows configuration file (`%APPDATA%\Claude\claude_desktop_config.json`) beside the macOS one, as the MCP guide documents, and mention Settings → Developer → Edit Config. The Quick Start's install step shows the Windows `.venv\Scripts` layout, `activate`/`Activate.ps1`, and `where` / `Get-Command` instead of `which`, labelled as not run for the walkthrough, and the chat-client section shows the `.exe` path with JSON-escaped backslashes. Documentation only; behavior is unchanged.
 
 ### CI

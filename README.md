@@ -83,6 +83,16 @@ The values below are placeholders for your own database and account. The
 [Quick Start guide](docs/quickstart.md) walks through the same settings with a
 prepared lab, using the account `mcp_reader` from [SECURITY.md](SECURITY.md).
 
+### Requirements
+
+- Python 3.11 or later.
+- A reachable CUBRID 10.2–11.4 broker (default port 33000). Installing this
+  package does not install CUBRID; Quick Start
+  [Step 1](docs/quickstart.md#step-1-start-a-disposable-cubrid-lab) starts a
+  disposable one.
+- [uv](https://docs.astral.sh/uv/) for `uvx`, or [pipx](https://pipx.pypa.io/stable/)
+  for `pipx run`.
+
 ### Configure
 
 Set the required environment variables:

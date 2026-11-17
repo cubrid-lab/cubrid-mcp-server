@@ -74,6 +74,16 @@ CUBRID나 MCP가 처음이라면 [빠른 시작 가이드](ko/quickstart.md)를 
 [빠른 시작 가이드](ko/quickstart.md)는 준비된 실습 환경에서 [SECURITY.md](https://github.com/cubrid-lab/cubrid-mcp-server/blob/main/SECURITY.md)의 계정
 `mcp_reader`로 같은 설정을 단계별로 안내합니다.
 
+### 요구 사항
+
+- Python 3.11 이상.
+- 접속 가능한 CUBRID 10.2–11.4 브로커(기본 포트 33000). 이 패키지를 설치해도
+  CUBRID는 설치되지 않습니다. 빠른 시작
+  [1단계](ko/quickstart.md#step-1-start-a-disposable-cubrid-lab)에서 일회용
+  서버를 시작할 수 있습니다.
+- `uvx`를 쓰려면 [uv](https://docs.astral.sh/uv/), `pipx run`을 쓰려면
+  [pipx](https://pipx.pypa.io/stable/).
+
 ### 설정
 
 필수 환경 변수:
