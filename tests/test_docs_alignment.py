@@ -45,6 +45,33 @@ PROMPT_SECTIONS = {
 RESOURCE_PAGES = {"docs/TOOLS.md": TOOLS_MD, "docs/ko/TOOLS.md": TOOLS_KO}
 
 
+def test_troubleshooting_names_claude_desktop_log_files() -> None:
+    """Chat-client users can find the server's stderr, the only place the cause is (#483)."""
+    entries = {
+        "docs/TROUBLESHOOTING.md": "## No logs anywhere",
+        "docs/ko/TROUBLESHOOTING.md": "## 로그가 안 보임",
+    }
+    for page, heading in entries.items():
+        text = _read(*page.split("/"))
+        assert f'<a id="no-logs-anywhere"></a>\n\n{heading}' in text, page
+        entry = _section(text, heading)
+        for expected in (
+            "`mcp-server-cubrid.log`",
+            "`~/Library/Logs/Claude`",
+            "`%APPDATA%\\Claude\\logs`",
+            "`2>server.log`",
+            "SQL",
+        ):
+            assert expected in entry, (page, expected)
+    failure_sections = {
+        "docs/quickstart.md": "## If something fails",
+        "docs/ko/quickstart.md": "## 문제가 생기면",
+    }
+    for page, heading in failure_sections.items():
+        section = _section(_read(*page.split("/")), heading)
+        assert "](TROUBLESHOOTING.md#no-logs-anywhere)" in section, page
+
+
 async def test_tools_md_lists_every_tool_and_prompt_and_resource() -> None:
     async with Client(server.mcp) as client:
         tools = {tool.name for tool in await client.list_tools()}

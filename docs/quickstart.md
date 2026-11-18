@@ -335,7 +335,9 @@ refusal happens in the server, whatever the model asks for.
 Tool results name only the kind of error, so that database details do not
 reach the model. The cause appears in the server's error output, which this
 script prints in your terminal; it can include SQL text, so do not paste it
-into public issues.
+into public issues. In a chat client such as Claude Desktop, which has no
+terminal, find the same output as described in
+[Troubleshooting](TROUBLESHOOTING.md#no-logs-anywhere).
 
 | What you see | What it means | What to check |
 |---|---|---|
