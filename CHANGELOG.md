@@ -720,35 +720,35 @@ This release strengthens read-only SQL validation, limits query output, improves
 
 ### Upgrade notes
 
-- **FastMCP 3.x and bounded query results** — FastMCP 2.x is no longer supported (`fastmcp>=3.0,<4`). `execute_query` now returns at most `CUBRID_MCP_MAX_ROWS` rows (default 1000), truncates oversized individual values and reports the actual returned row count; `table_row_counts` is limited to 50 tables per call ([#35](https://github.com/cubrid-lab/cubrid-mcp-server/issues/35), [#37](https://github.com/cubrid-lab/cubrid-mcp-server/issues/37), [#38](https://github.com/cubrid-lab/cubrid-mcp-server/issues/38), [#45](https://github.com/cubrid-lab/cubrid-mcp-server/issues/45), [PR #61](https://github.com/cubrid-lab/cubrid-mcp-server/pull/61)) by @yeongseon.
+- **FastMCP 3.x and bounded query results** — FastMCP 2.x is no longer supported (`fastmcp>=3.0,<4`). `execute_query` now returns at most `CUBRID_MCP_MAX_ROWS` rows (default 1000), truncates oversized individual values and reports the actual returned row count; `table_row_counts` is limited to 50 tables per call (#35, #37, #38, #45, [PR #61](https://github.com/cubrid-lab/cubrid-mcp-server/pull/61)) by @yeongseon.
 
 ### Added
 
-- **Typing and release metadata** — A `py.typed` marker exposes package type information. The version comes from the package, and the CI/publish checks include coverage, lowest-direct dependencies, version consistency and attestations ([#50](https://github.com/cubrid-lab/cubrid-mcp-server/issues/50), [#51](https://github.com/cubrid-lab/cubrid-mcp-server/issues/51), [#54](https://github.com/cubrid-lab/cubrid-mcp-server/issues/54), [#55](https://github.com/cubrid-lab/cubrid-mcp-server/issues/55), [#56](https://github.com/cubrid-lab/cubrid-mcp-server/issues/56), [PR #61](https://github.com/cubrid-lab/cubrid-mcp-server/pull/61)) by @yeongseon.
+- **Typing and release metadata** — A `py.typed` marker exposes package type information. The version comes from the package, and the CI/publish checks include coverage, lowest-direct dependencies, version consistency and attestations (#50, #51, #54, #55, #56, [PR #61](https://github.com/cubrid-lab/cubrid-mcp-server/pull/61)) by @yeongseon.
 
 ### Changed
 
-- **Catalog and row representations** — Schema, index and row-count tools reject unknown or system-only tables instead of silently returning an invalid result. Binary data is base64-encoded when small or summarized by byte count when large ([#42](https://github.com/cubrid-lab/cubrid-mcp-server/issues/42), [#43](https://github.com/cubrid-lab/cubrid-mcp-server/issues/43), [#47](https://github.com/cubrid-lab/cubrid-mcp-server/issues/47), [#48](https://github.com/cubrid-lab/cubrid-mcp-server/issues/48), [PR #61](https://github.com/cubrid-lab/cubrid-mcp-server/pull/61)) by @yeongseon.
+- **Catalog and row representations** — Schema, index and row-count tools reject unknown or system-only tables instead of silently returning an invalid result. Binary data is base64-encoded when small or summarized by byte count when large (#42, #43, #47, #48, [PR #61](https://github.com/cubrid-lab/cubrid-mcp-server/pull/61)) by @yeongseon.
 
-- **Trace consistency** — `explain_query` keeps the connection locked for the full `SET TRACE` / `SHOW TRACE` sequence without consuming the user's result set ([#44](https://github.com/cubrid-lab/cubrid-mcp-server/issues/44), [PR #61](https://github.com/cubrid-lab/cubrid-mcp-server/pull/61)) by @yeongseon.
+- **Trace consistency** — `explain_query` keeps the connection locked for the full `SET TRACE` / `SHOW TRACE` sequence without consuming the user's result set (#44, [PR #61](https://github.com/cubrid-lab/cubrid-mcp-server/pull/61)) by @yeongseon.
 
 ### Fixed
 
-- **Connection and configuration failures** — Missing/invalid configuration fails at startup; cached connections are closed before replacement, cursor use is serialized, passwords are excluded from config `repr()`, and error messages do not echo credentials. Logs go to stderr, keeping the stdio MCP protocol stream clean ([#33](https://github.com/cubrid-lab/cubrid-mcp-server/issues/33), [#34](https://github.com/cubrid-lab/cubrid-mcp-server/issues/34), [#39](https://github.com/cubrid-lab/cubrid-mcp-server/issues/39), [#41](https://github.com/cubrid-lab/cubrid-mcp-server/issues/41), [#46](https://github.com/cubrid-lab/cubrid-mcp-server/issues/46), [#57](https://github.com/cubrid-lab/cubrid-mcp-server/issues/57), [PR #61](https://github.com/cubrid-lab/cubrid-mcp-server/pull/61)) by @yeongseon.
+- **Connection and configuration failures** — Missing/invalid configuration fails at startup; cached connections are closed before replacement, cursor use is serialized, passwords are excluded from config `repr()`, and error messages do not echo credentials. Logs go to stderr, keeping the stdio MCP protocol stream clean (#33, #34, #39, #41, #46, #57, [PR #61](https://github.com/cubrid-lab/cubrid-mcp-server/pull/61)) by @yeongseon.
 
 - **Query explanation and truncated display** — The `explain_query` tool rejects a multiple-statement bypass, and truncated results retain at least one row when appropriate ([PR #29](https://github.com/cubrid-lab/cubrid-mcp-server/pull/29), [PR #30](https://github.com/cubrid-lab/cubrid-mcp-server/pull/30)) by @paikend.
 
 ### Security
 
-- **No hidden write inside a read-only query** — The full SQL token stream is checked: a CTE containing `DELETE` and a `SELECT ... FOR UPDATE` are refused, not accepted merely because the input begins with an allowed keyword. `explain_query` remains read-only regardless of `CUBRID_MCP_READONLY`; use a database user with only the required privileges ([#40](https://github.com/cubrid-lab/cubrid-mcp-server/issues/40), [#59](https://github.com/cubrid-lab/cubrid-mcp-server/issues/59), [PR #61](https://github.com/cubrid-lab/cubrid-mcp-server/pull/61)) by @yeongseon.
+- **No hidden write inside a read-only query** — The full SQL token stream is checked: a CTE containing `DELETE` and a `SELECT ... FOR UPDATE` are refused, not accepted merely because the input begins with an allowed keyword. `explain_query` remains read-only regardless of `CUBRID_MCP_READONLY`; use a database user with only the required privileges (#40, #59, [PR #61](https://github.com/cubrid-lab/cubrid-mcp-server/pull/61)) by @yeongseon.
 
 ### Documentation
 
-- **Installation and permissions** — The README describes source installation alongside PyPI entry points, and `SECURITY.md` gives correct per-table CUBRID GRANT syntax ([#36](https://github.com/cubrid-lab/cubrid-mcp-server/issues/36), [#49](https://github.com/cubrid-lab/cubrid-mcp-server/issues/49), [PR #61](https://github.com/cubrid-lab/cubrid-mcp-server/pull/61)) by @yeongseon.
+- **Installation and permissions** — The README describes source installation alongside PyPI entry points, and `SECURITY.md` gives correct per-table CUBRID GRANT syntax (#36, #49, [PR #61](https://github.com/cubrid-lab/cubrid-mcp-server/pull/61)) by @yeongseon.
 
 ### Tests
 
-- **Safety and renderer regressions** — Added edge-case tests for SQL safety, row rendering, values and identifier quoting; pytest now continues to report the full failure surface instead of stopping after 25 failures ([PR #31](https://github.com/cubrid-lab/cubrid-mcp-server/pull/31), [#60](https://github.com/cubrid-lab/cubrid-mcp-server/issues/60), [PR #61](https://github.com/cubrid-lab/cubrid-mcp-server/pull/61)) by @paikend and @yeongseon.
+- **Safety and renderer regressions** — Added edge-case tests for SQL safety, row rendering, values and identifier quoting; pytest now continues to report the full failure surface instead of stopping after 25 failures ([PR #31](https://github.com/cubrid-lab/cubrid-mcp-server/pull/31), #60, [PR #61](https://github.com/cubrid-lab/cubrid-mcp-server/pull/61)) by @paikend and @yeongseon.
 
 **Full Changelog**: https://github.com/cubrid-lab/cubrid-mcp-server/compare/v0.1.0...v0.2.1
 
