@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Documentation
 
 - **README Quick Start lists its requirements (#485)** — `README.md` and `docs/README.ko.md` add a Requirements list before Configure: Python 3.11 or later (`requires-python`), a reachable CUBRID 10.2–11.4 broker on port 33000 (the server's supported range; installing the package does not install CUBRID) with a link to Quick Start Step 1 for a disposable one, and uv for `uvx` or pipx for `pipx run`. The Korean Quick Start's Step 1 gets the explicit `step-1-start-a-disposable-cubrid-lab` anchor, and a docs-alignment test keeps both lists in step with `pyproject.toml` and the server instructions. Documentation only; behavior is unchanged.
+- **Troubleshooting says where Claude Desktop keeps the server's error output (#483)** — tool results carry only an error category and the cause goes to stderr, but a Claude Desktop user has no terminal. The "No logs anywhere" entry of `docs/TROUBLESHOOTING.md` and `docs/ko/TROUBLESHOOTING.md` now names the file, `mcp-server-cubrid.log` for the README's `cubrid` key, and its folder on macOS (`~/Library/Logs/Claude`), Windows (`%APPDATA%\Claude\logs`) and Linux (`~/.config/Claude/logs`), as the MCP guide documents, keeps the `2>server.log` advice and warns that the log can contain SQL. The entry gets an explicit `no-logs-anywhere` anchor, and both Quick Start "If something fails" paragraphs point chat-client users to it. Documentation only; behavior is unchanged.
 
 ### CI
 
