@@ -3,6 +3,12 @@ contact_links:
   - name: cubrid-mcp-server Documentation
     url: https://cubrid-lab.github.io/cubrid-mcp-server/
     about: Documentation site — tools, security model, multi-connection, troubleshooting
+  - name: Troubleshooting
+    url: https://github.com/cubrid-lab/cubrid-mcp-server/blob/main/docs/TROUBLESHOOTING.md
+    about: Fixes for common setup, connection and client problems; check here before opening an issue
   - name: CUBRID Documentation
     url: https://cubrid.org/documentation
     about: Official CUBRID database documentation
+  - name: Report a Security Vulnerability
+    url: https://github.com/cubrid-lab/cubrid-mcp-server/blob/main/SECURITY.md#reporting-a-vulnerability
+    about: Do not open a public issue; SECURITY.md describes the private email reporting route
