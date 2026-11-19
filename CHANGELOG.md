@@ -651,80 +651,107 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.4.0] - 2026-09-09
 
+This release improves PyPI installation, documentation and release verification, and fixes `list_serials` on CUBRID 11.4. It does not introduce a new default write path.
+
 ### Added
-- Published to PyPI: `uvx cubrid-mcp-server` and `pipx run cubrid-mcp-server` now install from PyPI instead of a git checkout.
-- Documentation site (mkdocs-material) deployed to https://cubrid-lab.github.io/cubrid-mcp-server/ — quickstart, full tool reference, security model, multi-connection guide, and troubleshooting.
-- Korean README translation (`docs/README.ko.md`), matching the sibling repositories' translation set.
-- `upstream-canary.yml` now also tracks `fastmcp@latest` in addition to `pycubrid@main`, giving the eventual fastmcp 4.x migration decision CI evidence. The dependency pin intentionally remains `>=3.0,<4` until that canary is green.
-- `THIRD_PARTY_LICENSES.md` (full runtime license inventory, pip-licenses generated) and a `NOTICE` file (original implementation, no third-party code embedded) added.
-- Official MCP Registry readiness: PyPI ownership-verification marker (`mcp-name: io.github.cubrid-lab/cubrid-mcp-server`) embedded in README, and `glama.json` added at the repo root for Glama registry indexing.
+
+- **Install and discover the server** — `uvx cubrid-mcp-server` and `pipx run cubrid-mcp-server` use the PyPI distribution; package metadata and README now expose the documentation and changelog, MCP Registry verification marker and Glama indexing information ([PR #145](https://github.com/cubrid-lab/cubrid-mcp-server/pull/145)) by @yeongseon.
+
+- **Published documentation** — The MkDocs site includes quickstart, tools, read-only/write permissions, named connections and troubleshooting; the README also has a Korean translation ([PR #145](https://github.com/cubrid-lab/cubrid-mcp-server/pull/145)) by @yeongseon.
 
 ### Changed
-- Development Status classifier raised from `2 - Pre-Alpha` to `4 - Beta`: the server has shipped multi-database connections, opt-in write mode, audit logging, Resources, and Prompts since 0.3.0.
-- `[project.urls]` now includes `Documentation` and `Changelog` links, matching the sibling repositories.
-- `Framework :: AsyncIO` trove classifier added for registry/search discoverability.
+
+- **Beta and dependency visibility** — The project status classifier is raised from Pre-Alpha to Beta and FastMCP latest is added to the upstream canary. The supported FastMCP package range remains `>=3.0,<4`; canary success is not a compatibility promise ([PR #145](https://github.com/cubrid-lab/cubrid-mcp-server/pull/145)) by @yeongseon.
 
 ### Fixed
-- README: removed a duplicated `CUBRID_MCP_WRITE` row in the configuration table.
-- `list_serials` now works on **CUBRID 11.4**: the `db_serial` system catalog renamed its `att_name` column to `attr_name` in 11.4, so the hardcoded query failed there with a semantic error. The column is now resolved once per connection by a zero-row probe against a fixed allowlist and aliased back to `att_name`, keeping the tool's output shape identical on both versions. Found by the new 11.2+11.4 integration matrix.
 
-### CI
-- Integration tests now run against a CUBRID **11.2 + 11.4 job matrix** (previously 11.2 only), matching the pycubrid/sqlalchemy-cubrid integration matrices and the cookbook smoke matrix.
+- **CUBRID 11.4 serial metadata** — `list_serials` now adapts to the `db_serial.attr_name` column in CUBRID 11.4 (called `att_name` in older catalog versions), preserving the tool's response fields across tested versions ([PR #145](https://github.com/cubrid-lab/cubrid-mcp-server/pull/145)) by @yeongseon.
 
 ### Documentation
-- **CUBRID server license relationship documented; copyright and authors unified (#150)** — `THIRD_PARTY_LICENSES.md` carries the verified upstream licensing statement (server engine Apache-2.0, APIs/connectors BSD per CUBRID's `COPYING` — the often-cited GPL v2+ no longer applies; independent wire-protocol client, Docker image CI-only). LICENSE/NOTICE copyright lines now read `Yeongseon Choe, Gyeongjun Paik` (2025-2026), and `pyproject.toml` lists both primary authors.
+
+- **Licenses and authorship** — Added `THIRD_PARTY_LICENSES.md` and `NOTICE`, documented the CUBRID server's own license relationship separately from this client, and recorded the verified primary copyright holders ([PR #151](https://github.com/cubrid-lab/cubrid-mcp-server/pull/151), [PR #152](https://github.com/cubrid-lab/cubrid-mcp-server/pull/152)) by @yeongseon.
+
+### CI
+
+- **Broader real-database coverage** — Live integration checks now cover CUBRID 11.2 and 11.4; coverage results are also published to Codecov ([PR #148](https://github.com/cubrid-lab/cubrid-mcp-server/pull/148)) by @yeongseon; ([PR #147](https://github.com/cubrid-lab/cubrid-mcp-server/pull/147)) by @paikend.
 
 ## [0.3.1] - 2026-09-02
 
+This patch fixes the targeting and permission checks of `execute_write` for named database connections and makes connection-specific audit and write settings work as intended. Users of v0.3.0 multi-database write mode should upgrade.
+
 ### Fixed
-- `execute_write` now honours the per-call `connection` argument instead of always writing to the `default` connection, matching the read tools and the v0.3.0 multi-connection contract. (#136)
-- Per-connection `CUBRID_<NAME>_MCP_WRITE` and `CUBRID_<NAME>_MCP_AUDIT_LOG` settings are now actually applied: write-enablement is enforced against the *target* connection's config (a connection with writes off refuses even when another enables them), the `execute_write` tool is registered whenever **any** connection opts into write mode, and audit logging is resolved per connection so a named connection's `MCP_AUDIT_LOG` takes effect independently of the default. `execute_write` calls are now audited as well. (#137)
+
+- **Named write target and permissions** — `execute_write(connection=...)` now uses the selected database instead of always using `default`; write permission is checked against the *selected* connection. The write tool is registered when any connection opts in. Each connection's `CUBRID_<NAME>_MCP_WRITE` and `CUBRID_<NAME>_MCP_AUDIT_LOG` settings take effect independently, and writes are included in audit logs ([#136](https://github.com/cubrid-lab/cubrid-mcp-server/issues/136), [#137](https://github.com/cubrid-lab/cubrid-mcp-server/issues/137), [PR #138](https://github.com/cubrid-lab/cubrid-mcp-server/pull/138)) by @yeongseon.
 
 ## [0.3.0] - 2026-09-01
 
-### Added
-- Schema metadata is now exposed as read-only **MCP Resources** in addition to the existing tools: `cubrid://schema` (a whole-schema index listing every user table with its per-table resource URI) and the `cubrid://schema/{table}` template (per-table columns, primary key, and indexes, mirroring `describe_table`). Resources reuse the same read-only catalog queries — no new data access or write surface — and return `application/json`. (#124)
-- Opt-in audit logging (`CUBRID_MCP_AUDIT_LOG`, off by default): emits one redaction-safe JSON record per executed statement (`execute_query`/`explain_query`) to stderr with the statement category, extracted table identifiers, timing, and row counts. Raw SQL text, bound parameters, and literal values are never logged. (#127)
-- MCP Prompt templates (`summarize_table`, `explain_query`, `inspect_schema`, `find_index_candidates`): guidance-only interaction templates that instruct clients which existing read-only tools to call. They never touch the database or execute SQL, add no new data-access surface, and fence user-supplied arguments as untrusted data. (#125)
-- `ROADMAP.md` describing the current baseline, future direction, compatibility, and shipped history, matching the sibling repos in the Python line. (#96)
-- Multi-database connection management: configure additional named connections via `CUBRID_CONNECTIONS` plus `CUBRID_<NAME>_*` variables, and target them per call with the new optional `connection` argument on every tool. The bare `CUBRID_*` variables continue to define the reserved `default` connection, so single-database setups are unchanged. Each connection has its own lock, read-only enforcement, and stale-connection lifecycle. (#126)
-- Opt-in write mode (`CUBRID_MCP_WRITE=1`) exposing an `execute_write` tool that runs a single `INSERT`/`UPDATE`/`DELETE` statement in an atomic transaction (commit on success, rollback on failure). Disabled by default; when off the tool is not registered so no write path is exposed. DDL is intentionally unsupported (CUBRID auto-commits DDL) and `execute_query` stays read-only regardless. (#123)
-- Repo-local `CONTRIBUTING.md` documenting the Makefile targets, the CI gates a PR must clear (ruff, mypy strict, 95% coverage floor, lowest-direct, changelog lint), and how to run the integration suite against a live CUBRID. (#94)
+This release adds schema Resources, MCP Prompt templates, named database connections, redacted audit logging and an optional DML write tool. **Read-only mode remains the default.** Review the write-mode limitation below before enabling it.
 
-### Security
-- Write mode is strictly gated: a dedicated DML-only whitelist (`ensure_write_allowed`) rejects standalone reads, DDL, transaction-control, and multi-statement input, and leaves the read-only default path unchanged. (#123)
+### Upgrade notes
+
+- **Named-connection write limitation in this version** — The new `execute_write` tool does not correctly honor the named `connection` argument or each connection's write/audit flags in v0.3.0. The behavior was corrected in v0.3.1; use v0.3.1 or later before relying on named-connection write isolation ([PR #133](https://github.com/cubrid-lab/cubrid-mcp-server/pull/133), [v0.3.1 fix](https://github.com/cubrid-lab/cubrid-mcp-server/pull/138)) by @yeongseon.
+
+### Added
+
+- **Schema MCP Resources** — `cubrid://schema` lists user tables and the `cubrid://schema/{table}` resource provides read-only column, key and index metadata ([PR #129](https://github.com/cubrid-lab/cubrid-mcp-server/pull/129)) by @yeongseon.
+
+- **MCP Prompt templates** — `summarize_table`, `explain_query`, `inspect_schema` and `find_index_candidates` guide callers to existing tools; the prompts do not execute SQL ([PR #130](https://github.com/cubrid-lab/cubrid-mcp-server/pull/130)) by @yeongseon.
+
+- **Named database connections** — `CUBRID_CONNECTIONS` and per-name settings add connection selection to the read tools while retaining the original `default` configuration ([PR #131](https://github.com/cubrid-lab/cubrid-mcp-server/pull/131)) by @yeongseon.
+
+- **Opt-in redacted audit logs** — `CUBRID_MCP_AUDIT_LOG` records statement category, identifiers, timing and row counts to stderr without raw SQL, parameters or literal values ([PR #132](https://github.com/cubrid-lab/cubrid-mcp-server/pull/132)) by @yeongseon.
+
+- **Optional DML tool** — `CUBRID_MCP_WRITE=1` enables `execute_write` for one atomic `INSERT`, `UPDATE` or `DELETE` statement. The tool is not registered by default; DDL and transaction-control statements are unsupported ([PR #133](https://github.com/cubrid-lab/cubrid-mcp-server/pull/133)) by @yeongseon.
 
 ### Changed
-- Ruff's lint rule set is now declared explicitly (`select = ["E4", "E7", "E9", "F"]`) instead of inheriting ruff's implicit defaults, which grew from 59 to 413 rules in ruff 0.16 and broke CI on an unrelated version bump. (#88)
+
+- **Stable lint rule selection** — Explicit Ruff rule selection prevents a tool update from unexpectedly expanding the required lint rules ([PR #90](https://github.com/cubrid-lab/cubrid-mcp-server/pull/90)) by @paikend.
+
+### Security
+
+- **Separate read and write paths** — `execute_query` continues to require read-only statements, and `execute_write` uses an opt-in DML-only whitelist. Use a database account with appropriate permissions; the v0.3.0 named-connection caveat above still applies ([PR #133](https://github.com/cubrid-lab/cubrid-mcp-server/pull/133)) by @yeongseon.
+
+### Documentation
+
+- **Contributor and project guides** — Added `ROADMAP.md` and repository-local `CONTRIBUTING.md` with development and CI instructions ([PR #121](https://github.com/cubrid-lab/cubrid-mcp-server/pull/121), [PR #122](https://github.com/cubrid-lab/cubrid-mcp-server/pull/122)) by @yeongseon.
 
 ## [0.2.1] - 2026-08-06
 
-### Security
-- Read-only checker now scans the full token stream and rejects statements that begin with an allowed keyword but embed a forbidden one, e.g. a CTE `WITH ... DELETE` or a `SELECT ... FOR UPDATE`. (#40)
-- `main()` fails fast with a clear stderr message when configuration is missing or invalid, instead of surfacing the error on the first tool call. (#46)
+This release strengthens read-only SQL validation, limits query output, improves per-connection lifecycle safety and packaging, and requires FastMCP 3.x. The database account's privileges remain the final protection against unintended writes.
 
-### Changed
-- `execute_query` now caps results at `CUBRID_MCP_MAX_ROWS` (default 1000, streamed via `fetchmany`) and truncates oversized *individual values* rather than dropping whole rows; `row_count` reflects the number of rows actually returned. (#37, #38)
-- Pinned `fastmcp>=3.0,<4`; the 2.x decorator typing behaviour is no longer supported. (#35)
-- Schema/describe/index/row-count tools resolve the requested table against the catalog first and raise a clear error for unknown tables (excluding system classes and views). (#42, #43, #47)
-- `explain_query` holds the connection lock across the whole `SET TRACE ... SHOW TRACE` sequence and no longer drains the user query result set. (#44)
-- `table_row_counts` is capped at 50 tables per call. (#45)
-- Binary column values are base64-encoded when small and summarized as `<binary N bytes>` when large. (#48)
-- `Config.password` is excluded from `repr()`, and connection errors no longer echo the password or raw driver message. (#34, #41)
-- The database wrapper closes stale connections before discarding them and serializes cursor access behind a re-entrant lock. (#33, #39)
-- All logging is directed to stderr so it cannot corrupt the stdio MCP protocol stream on stdout. (#57)
-- `--maxfail=25` removed from pytest defaults so the full failure surface is visible in CI. (#60)
-- `explain_query` is documented as intentionally always read-only regardless of `CUBRID_MCP_READONLY`, since it only ever plans SELECT/WITH queries. (#59)
-- `SECURITY.md` updated with correct per-table CUBRID GRANT syntax. (#49)
+### Upgrade notes
+
+- **FastMCP 3.x and bounded query results** — FastMCP 2.x is no longer supported (`fastmcp>=3.0,<4`). `execute_query` now returns at most `CUBRID_MCP_MAX_ROWS` rows (default 1000), truncates oversized individual values and reports the actual returned row count; `table_row_counts` is limited to 50 tables per call (#35, #37, #38, #45, [PR #61](https://github.com/cubrid-lab/cubrid-mcp-server/pull/61)) by @yeongseon.
 
 ### Added
-- `py.typed` marker so downstream users get type information; package version is now derived dynamically from `cubrid_mcp_server.__version__`. (#54, #55)
-- CI reports coverage and runs a lowest-direct dependency-resolution job; the publish workflow verifies the tag matches the package version, runs `twine check`, and emits attestations. (#50, #51, #56)
+
+- **Typing and release metadata** — A `py.typed` marker exposes package type information. The version comes from the package, and the CI/publish checks include coverage, lowest-direct dependencies, version consistency and attestations (#50, #51, #54, #55, #56, [PR #61](https://github.com/cubrid-lab/cubrid-mcp-server/pull/61)) by @yeongseon.
+
+### Changed
+
+- **Catalog and row representations** — Schema, index and row-count tools reject unknown or system-only tables instead of silently returning an invalid result. Binary data is base64-encoded when small or summarized by byte count when large (#42, #43, #47, #48, [PR #61](https://github.com/cubrid-lab/cubrid-mcp-server/pull/61)) by @yeongseon.
+
+- **Trace consistency** — `explain_query` keeps the connection locked for the full `SET TRACE` / `SHOW TRACE` sequence without consuming the user's result set (#44, [PR #61](https://github.com/cubrid-lab/cubrid-mcp-server/pull/61)) by @yeongseon.
 
 ### Fixed
-- Corrected the repository org in project URLs and docs (`cubrid-labs` → `cubrid-lab`). (#53)
-- README documents install-from-source path alongside `uvx`/`pipx` for PyPI. (#36)
 
+- **Connection and configuration failures** — Missing/invalid configuration fails at startup; cached connections are closed before replacement, cursor use is serialized, passwords are excluded from config `repr()`, and error messages do not echo credentials. Logs go to stderr, keeping the stdio MCP protocol stream clean (#33, #34, #39, #41, #46, #57, [PR #61](https://github.com/cubrid-lab/cubrid-mcp-server/pull/61)) by @yeongseon.
+
+- **Query explanation and truncated display** — The `explain_query` tool rejects a multiple-statement bypass, and truncated results retain at least one row when appropriate ([PR #29](https://github.com/cubrid-lab/cubrid-mcp-server/pull/29), [PR #30](https://github.com/cubrid-lab/cubrid-mcp-server/pull/30)) by @paikend.
+
+### Security
+
+- **No hidden write inside a read-only query** — The full SQL token stream is checked: a CTE containing `DELETE` and a `SELECT ... FOR UPDATE` are refused, not accepted merely because the input begins with an allowed keyword. `explain_query` remains read-only regardless of `CUBRID_MCP_READONLY`; use a database user with only the required privileges (#40, #59, [PR #61](https://github.com/cubrid-lab/cubrid-mcp-server/pull/61)) by @yeongseon.
+
+### Documentation
+
+- **Installation and permissions** — The README describes source installation alongside PyPI entry points, and `SECURITY.md` gives correct per-table CUBRID GRANT syntax (#36, #49, [PR #61](https://github.com/cubrid-lab/cubrid-mcp-server/pull/61)) by @yeongseon.
+
+### Tests
+
+- **Safety and renderer regressions** — Added edge-case tests for SQL safety, row rendering, values and identifier quoting; pytest now continues to report the full failure surface instead of stopping after 25 failures ([PR #31](https://github.com/cubrid-lab/cubrid-mcp-server/pull/31), #60, [PR #61](https://github.com/cubrid-lab/cubrid-mcp-server/pull/61)) by @paikend and @yeongseon.
+
+**Full Changelog**: https://github.com/cubrid-lab/cubrid-mcp-server/compare/v0.1.0...v0.2.1
 
 ## [0.2.0] - 2026-05-15
 
@@ -744,4 +771,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.1.0] - 2026-04-13
 
-Initial release. Six MCP tools for read-only CUBRID inspection: `all_table_names`, `filter_table_names`, `schema_definitions`, `describe_table`, `list_indexes`, `execute_query`.
+This first release provides ten MCP tools for inspecting CUBRID tables, schema, indexes, sequences and query results. It includes the initial four-tool implementation and six additional tools merged before the v0.1.0 tag; all database access is read-only by default.
+
+### Added
+
+- **Ten inspection tools** — `all_table_names`, `filter_table_names`, `schema_definitions`, `describe_table`, `list_indexes`, `explain_query`, `table_row_counts`, `list_serials`, `list_class_hierarchy` and `execute_query` are present in the tagged server ([PR #14](https://github.com/cubrid-lab/cubrid-mcp-server/pull/14), [PR #27](https://github.com/cubrid-lab/cubrid-mcp-server/pull/27)) by @paikend.
+
+- **Connection and setup** — Environment-based CUBRID configuration, a connection wrapper with reconnection handling, and the client setup guide are included ([PR #25](https://github.com/cubrid-lab/cubrid-mcp-server/pull/25)) by @paikend.
+
+### Security
+
+- **Read-only default** — The SQL safety checker limits the default query path, and the security guide recommends using a database account without write permissions; this is not a promise that every CUBRID configuration has been tested ([PR #12](https://github.com/cubrid-lab/cubrid-mcp-server/pull/12), [PR #15](https://github.com/cubrid-lab/cubrid-mcp-server/pull/15)) by @paikend.
+
