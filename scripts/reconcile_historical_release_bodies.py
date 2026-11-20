@@ -81,15 +81,11 @@ def api(path: str, body: dict | None = None) -> dict:
 
 
 def source_head() -> str:
-    return subprocess.check_output(
-        ["git", "rev-parse", "HEAD"], text=True
-    ).strip()
+    return subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
 
 
 def source_is_clean() -> bool:
-    return not subprocess.check_output(
-        ["git", "status", "--porcelain"], text=True
-    ).strip()
+    return not subprocess.check_output(["git", "status", "--porcelain"], text=True).strip()
 
 
 def canonical_body(tag: str) -> str:
@@ -125,13 +121,15 @@ def save_backup(release: dict, tag: str, directory: Path) -> Path:
 
 def run(args: argparse.Namespace) -> None:
     if args.apply:
-        if not all((
-            args.approved_body_only,
-            args.source_sha,
-            args.expected_remote_sha256,
-            args.backup_dir,
-            args.exclusive_edit_window,
-        )):
+        if not all(
+            (
+                args.approved_body_only,
+                args.source_sha,
+                args.expected_remote_sha256,
+                args.backup_dir,
+                args.exclusive_edit_window,
+            )
+        ):
             raise ValueError(
                 "apply requires independently approved source SHA, expected "
                 "remote body SHA-256, backup directory, body-only approval and "
@@ -145,19 +143,22 @@ def run(args: argparse.Namespace) -> None:
     check_public(public, args.tag)
     old_body = public["body"]
     print(
-        f"{args.tag}: current body SHA-256={digest(old_body)}, "
-        f"canonical SHA-256={digest(proposed)}"
+        f"{args.tag}: current body SHA-256={digest(old_body)}, canonical SHA-256={digest(proposed)}"
     )
     if old_body == proposed:
         print("Already equal; no write is needed.")
         return
 
-    print("".join(difflib.unified_diff(
-        old_body.splitlines(keepends=True),
-        proposed.splitlines(keepends=True),
-        fromfile="published body",
-        tofile="approved canonical body",
-    )))
+    print(
+        "".join(
+            difflib.unified_diff(
+                old_body.splitlines(keepends=True),
+                proposed.splitlines(keepends=True),
+                fromfile="published body",
+                tofile="approved canonical body",
+            )
+        )
+    )
 
     if not args.apply:
         print("Dry-run only. Public GitHub Release was not changed.")
