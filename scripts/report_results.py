@@ -96,11 +96,20 @@ def _outcome(case: ET.Element) -> str:
 _SEVERITY = {"passed": 0, "xfailed": 1, "skipped": 2, "failed": 3, "errors": 4}
 
 
+def _load_xml(path: Path) -> ET.Element:
+    """Parse a local XML report, rejecting NUL bytes, DTD, and entity declarations."""
+    payload = path.read_text(encoding="utf-8-sig")
+    upper = payload.upper()
+    if "\x00" in payload or "<!DOCTYPE" in upper or "<!ENTITY" in upper:
+        raise ET.ParseError(f"{path}: DTD/entity declarations are forbidden")
+    return ET.fromstring(payload)
+
+
 def parse_junit(path: Path) -> dict[str, int] | None:
     """Count the tests of a JUnit file; None if it is missing or unreadable."""
     try:
-        root = ET.parse(path).getroot()
-    except (OSError, ET.ParseError):
+        root = _load_xml(path)
+    except (OSError, ValueError, ET.ParseError):
         return None
     outcomes: dict[tuple[str, str], str] = {}
     for case in root.iter("testcase"):
@@ -118,7 +127,7 @@ def parse_junit(path: Path) -> dict[str, int] | None:
 def parse_coverage(path: Path) -> float | None:
     """Line coverage percent from a Cobertura ``coverage.xml``; None if unavailable."""
     try:
-        rate = ET.parse(path).getroot().get("line-rate")
+        rate = _load_xml(path).get("line-rate")
         return None if rate is None else round(float(rate) * 100, 2)
     except (OSError, ET.ParseError, ValueError):
         return None
