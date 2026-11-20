@@ -32,14 +32,16 @@ def release(body: str = "old") -> dict:
         "created_at": "2026-04-13T13:01:00Z",
         "updated_at": "2026-11-18T00:00:00Z",
         "target_commitish": "main",
-        "assets": [{
-            "id": 12,
-            "name": "original.zip",
-            "label": None,
-            "size": 55,
-            "state": "uploaded",
-            "content_type": "application/zip",
-        }],
+        "assets": [
+            {
+                "id": 12,
+                "name": "original.zip",
+                "label": None,
+                "size": 55,
+                "state": "uploaded",
+                "content_type": "application/zip",
+            }
+        ],
     }
 
 
@@ -58,9 +60,7 @@ def args(tmp_path, **changes):
 
 
 def test_does_not_target_versions_without_an_existing_release() -> None:
-    assert MODULE.EARLY_TAGS == (
-        "v0.1.0", "v0.2.1", "v0.3.0", "v0.3.1", "v0.4.0"
-    )
+    assert MODULE.EARLY_TAGS == ("v0.1.0", "v0.2.1", "v0.3.0", "v0.3.1", "v0.4.0")
     assert "v0.2.0" not in MODULE.EARLY_TAGS
 
 
@@ -126,9 +126,7 @@ def test_patch_changes_body_only_and_reads_back(tmp_path, monkeypatch) -> None:
 
     monkeypatch.setattr(MODULE, "api", api)
     MODULE.run(args(tmp_path))
-    assert [payload for _, payload in requests if payload is not None] == [
-        {"body": "new"}
-    ]
+    assert [payload for _, payload in requests if payload is not None] == [{"body": "new"}]
     assert len(requests) == 4
     assert json.loads(next(tmp_path.glob("*-original.json")).read_text()) == release("old")
 
