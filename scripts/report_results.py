@@ -97,9 +97,17 @@ _SEVERITY = {"passed": 0, "xfailed": 1, "skipped": 2, "failed": 3, "errors": 4}
 
 
 def parse_junit(path: Path) -> dict[str, int] | None:
-    """Count the tests of a JUnit file; None if it is missing or unreadable."""
+    """Count the tests of a JUnit file; None if it is missing or unreadable.
+
+    DTD and entity declarations are rejected before parsing, as in the
+    pycubrid report utilities: a JUnit file that carries them is not valid
+    CI evidence and must never produce a PASS.
+    """
     try:
-        root = ET.parse(path).getroot()
+        payload = path.read_bytes()
+        if b"\x00" in payload or b"<!DOCTYPE" in payload.upper() or b"<!ENTITY" in payload.upper():
+            return None
+        root = ET.fromstring(payload)
     except (OSError, ET.ParseError):
         return None
     outcomes: dict[tuple[str, str], str] = {}
