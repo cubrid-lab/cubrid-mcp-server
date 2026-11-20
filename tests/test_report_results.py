@@ -118,6 +118,33 @@ def test_missing_junit_is_incomplete_after_success_and_fail_after_failure(tmp_pa
     assert summarize(tmp_path, 0)["status"] == "INCOMPLETE"
 
 
+@pytest.mark.parametrize(
+    "payload",
+    [
+        "<!DOCTYPE testsuites><testsuites><testsuite><testcase name='p'/></testsuite></testsuites>",
+        "<!doctype testsuites><testsuites><testsuite><testcase name='p'/></testsuite></testsuites>",
+        (
+            "<!DOCTYPE testsuites [<!ENTITY xxe 'ok'>]>"
+            "<testsuites><testsuite><testcase name='p'/></testsuite></testsuites>"
+        ),
+        "<!ENTITY xxe 'ok'><testsuites><testsuite><testcase name='p'/></testsuite></testsuites>",
+        "<testsuites>\x00<testsuite><testcase name='p'/></testsuite></testsuites>",
+    ],
+    ids=["doctype", "doctype-lower", "doctype-entity", "entity", "nul-byte"],
+)
+def test_junit_with_dtd_entity_or_nul_is_rejected_and_never_passes(
+    tmp_path: Path, payload: str
+) -> None:
+    junit_path = tmp_path / "junit.xml"
+    junit_path.write_text(payload, encoding="utf-8")
+
+    assert report.parse_junit(junit_path) is None
+    summary_ok = summarize(tmp_path, 0)
+    assert summary_ok["status"] == "INCOMPLETE"
+    assert summary_ok["counts"]["passed"] == 0
+    assert summarize(tmp_path, 1)["status"] == "FAIL"
+
+
 def test_explicit_junit_path_is_used(tmp_path: Path) -> None:
     junit_path = tmp_path / "other.xml"
     junit(tmp_path, "pass").replace(junit_path)
