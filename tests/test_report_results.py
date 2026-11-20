@@ -118,6 +118,26 @@ def test_missing_junit_is_incomplete_after_success_and_fail_after_failure(tmp_pa
     assert summarize(tmp_path, 0)["status"] == "INCOMPLETE"
 
 
+@pytest.mark.parametrize(
+    "declaration",
+    [
+        "<!DOCTYPE testsuites [ <!ENTITY greeting 'hello'> ]>",
+        "<!DOCTYPE testsuites [ <!ENTITY x SYSTEM 'file:///etc/passwd'> ]>",
+        "<!DOCTYPE testsuites>",
+    ],
+    ids=["internal-entity", "external-entity", "bare-doctype"],
+)
+def test_junit_with_dtd_or_entity_declaration_cannot_pass(tmp_path: Path, declaration: str) -> None:
+    path = tmp_path / "junit.xml"
+    path.write_text(
+        f"{declaration}<testsuites><testsuite name='pytest'>"
+        "<testcase name='p'/></testsuite></testsuites>"
+    )
+
+    assert report.parse_junit(path) is None
+    assert summarize(tmp_path, 0)["status"] == "INCOMPLETE"
+
+
 def test_explicit_junit_path_is_used(tmp_path: Path) -> None:
     junit_path = tmp_path / "other.xml"
     junit(tmp_path, "pass").replace(junit_path)
