@@ -11,6 +11,7 @@ from pathlib import Path
 
 from fastmcp import Client
 
+import cubrid_mcp_server
 from cubrid_mcp_server import server
 from cubrid_mcp_server.config import ConnectionRegistry, _parse_bool
 
@@ -248,6 +249,48 @@ def _config_defaults() -> dict[str, object]:
         "CUBRID_MCP_MAX_ROW_COUNT_TABLES": cfg.max_row_count_tables,
         "CUBRID_MCP_MAX_INLINE_BINARY_BYTES": cfg.max_inline_binary_bytes,
     }
+
+
+def _manifest_version_drift(
+    manifest: dict, package_version: str, release_version: str
+) -> list[str]:
+    """Version fields in .mcpb/server.json that differ from the package version."""
+    drift = []
+    for field, value in [("version", manifest.get("version"))] + [
+        (f"packages[{i}].version", package.get("version"))
+        for i, package in enumerate(manifest.get("packages", []))
+    ]:
+        if value != package_version:
+            drift.append(f"{field}={value!r}")
+    if release_version != package_version:
+        drift.append(f"release-please manifest={release_version!r}")
+    return drift
+
+
+def _committed_versions() -> tuple[dict, str, str]:
+    manifest = json.loads((ROOT / ".mcpb" / "server.json").read_text(encoding="utf-8"))
+    release = json.loads((ROOT / ".release-please-manifest.json").read_text(encoding="utf-8"))
+    return manifest, cubrid_mcp_server.__version__, release["."]
+
+
+def test_registry_manifest_versions_match_package_version() -> None:
+    manifest, package_version, release_version = _committed_versions()
+    assert manifest["packages"], "server.json lists no packages"
+    assert _manifest_version_drift(manifest, package_version, release_version) == []
+
+
+def test_registry_manifest_version_check_reports_drift() -> None:
+    manifest, package_version, release_version = _committed_versions()
+    drifted = json.loads(json.dumps(manifest))
+    drifted["version"] = "0.0.0-drift"
+    drifted["packages"][0]["version"] = "0.0.0-drift"
+
+    drift = _manifest_version_drift(drifted, package_version, release_version)
+
+    assert drift == ["version='0.0.0-drift'", "packages[0].version='0.0.0-drift'"]
+    assert _manifest_version_drift(manifest, package_version, "0.0.0-drift") == [
+        "release-please manifest='0.0.0-drift'"
+    ]
 
 
 def test_readme_optional_settings_match_config_defaults() -> None:
