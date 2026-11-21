@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib
 import json
 from dataclasses import replace
 from typing import Any
@@ -1521,3 +1522,36 @@ def test_audit_raises_runtime_error_when_no_audit_logger(monkeypatch: pytest.Mon
     monkeypatch.setattr(server, "_get_context", lambda: _NoAuditContext())
     with pytest.raises(RuntimeError, match=r"audit_for\(\) returned no audit logger"):
         server._audit()
+
+
+def _tools_missing_connection(tools: list[Any]) -> list[str]:
+    """Tools whose input schema lacks an optional ``connection`` property."""
+    missing = []
+    for tool in tools:
+        schema = tool.inputSchema or {}
+        if "connection" not in schema.get("properties", {}) or "connection" in schema.get(
+            "required", []
+        ):
+            missing.append(tool.name)
+    return missing
+
+
+@pytest.mark.parametrize("write_enabled", [False, True], ids=["default", "write-enabled"])
+async def test_every_tool_declares_optional_connection(
+    monkeypatch: pytest.MonkeyPatch, write_enabled: bool
+) -> None:
+    # docs/MULTI_CONNECTION.md: every tool accepts an optional named connection (#585).
+    # execute_write is registered at import time only in write mode, so reload the module.
+    if write_enabled:
+        monkeypatch.setenv("CUBRID_MCP_WRITE", "1")
+    else:
+        monkeypatch.delenv("CUBRID_MCP_WRITE", raising=False)
+    module = importlib.reload(server)
+    try:
+        async with Client(module.mcp) as client:
+            tools = await client.list_tools()
+        assert ("execute_write" in {tool.name for tool in tools}) is write_enabled
+        assert _tools_missing_connection(tools) == []
+    finally:
+        monkeypatch.delenv("CUBRID_MCP_WRITE", raising=False)
+        importlib.reload(server)
