@@ -2,13 +2,16 @@
 """Drive cubrid-mcp-server over MCP stdio for the terminal demo recording.
 
 The script starts the server with ``python -m cubrid_mcp_server`` (passing the
-``CUBRID_*`` environment), then prints what a real MCP session returns: the
-server name from initialization, the tool count and whether ``execute_write``
-is offered from tool discovery, the result of ``all_table_names``, and the
-error ``execute_query`` returns for a ``DROP TABLE`` (the read-only whitelist
-rejects it). The ``>`` lines are labels the script prints before each call;
-every value after them comes from the session. Nothing is written to the
-database.
+``CUBRID_*`` environment), then prints the server name from initialization, the
+tool count and whether ``execute_write`` is offered from tool discovery, the
+validated table list from ``all_table_names``, and the read-only guard rejection
+summary after verifying that ``execute_query`` rejects ``DROP TABLE`` with the
+exact error raised by :func:`cubrid_mcp_server.safety.ensure_read_only`. The
+``>`` lines are labels printed before each call; server metadata, tool
+discovery, and validated table names come from the MCP session, while the
+``rejected: ...`` line is emitted from the local ``ensure_read_only`` message
+once the server response matches it verbatim (avoiding echoing untrusted error
+text). Nothing is written to the database.
 
 Requires a reachable CUBRID (``CUBRID_HOST``, ``CUBRID_PORT``,
 ``CUBRID_DATABASE``, ``CUBRID_USER``, ``CUBRID_PASSWORD``) and the package
@@ -20,6 +23,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import re
 import sys
 import time
 
@@ -31,6 +35,10 @@ from cubrid_mcp_server.safety import UnsafeSQLError, ensure_read_only
 PAUSE = 1.2
 DROP_PROBE_SQL = "DROP TABLE product"
 _FASTMCP_ERROR_PREFIX = "Error calling tool 'execute_query': "
+# Matches unqualified (pre-11.2) or owner-qualified (11.2+) CUBRID table names
+# such as ``product`` or ``dba.product``, while rejecting key=value secrets,
+# whitespace, control characters, and arbitrary punctuation.
+_TABLE_NAME_RE = re.compile(r"[A-Za-z_#][A-Za-z0-9_#$]*(?:\.[A-Za-z_#][A-Za-z0-9_#$]*)?")
 
 
 def show(text: str, pause: float = PAUSE) -> None:
@@ -50,10 +58,12 @@ def _expected_drop_rejection() -> str:
 def _extract_table_names(result: object) -> tuple[bool, list[str] | None]:
     """Return ``(ok, table_names)`` for a validated ``all_table_names`` tool result.
 
-    Requires ``is_error is False`` and a list of non-empty, single-line table
-    name strings (from ``structured_content["result"]`` when present, else
-    ``data``). Malformed payloads, error results, ``None``, or non-string items
-    fail closed so untrusted or secret-bearing data is never printed to stdout.
+    Requires ``is_error is False`` and a list of safe CUBRID table identifier
+    strings (unqualified or ``owner.table``, matched with :data:`_TABLE_NAME_RE`)
+    from ``structured_content["result"]`` when present, else ``data``. Malformed
+    payloads, error results, ``None``, non-string items, or strings containing
+    unexpected characters (e.g. ``CUBRID_PASSWORD=...`` or ``token=abc``) fail
+    closed so untrusted or secret-bearing data is never printed to stdout.
     """
     is_error = getattr(result, "is_error", None)
     if is_error is not False:
@@ -70,12 +80,7 @@ def _extract_table_names(result: object) -> tuple[bool, list[str] | None]:
     if not isinstance(raw, list):
         return False, None
     for item in raw:
-        if (
-            not isinstance(item, str)
-            or not item
-            or item.strip() != item
-            or any(not ch.isprintable() or ch.isspace() for ch in item)
-        ):
+        if not isinstance(item, str) or _TABLE_NAME_RE.fullmatch(item) is None:
             return False, None
     return True, raw
 

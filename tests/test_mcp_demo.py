@@ -3,9 +3,9 @@
 These tests verify that the recorded demo fails closed when ``execute_query``
 unexpectedly accepts ``DROP TABLE``, fails with an unrelated error, or returns
 a malformed tool result, and when ``all_table_names`` returns an error or
-malformed payload, while preserving the normal read-only rejection flow and
-never leaking database credentials. No real CUBRID server or destructive SQL
-execution is involved.
+malformed/secret-bearing payload, while preserving the normal read-only
+rejection flow and never leaking database credentials. No real CUBRID server or
+destructive SQL execution is involved.
 """
 
 from __future__ import annotations
@@ -132,7 +132,9 @@ async def test_demo_returns_zero_when_drop_table_is_rejected(
     secret_pw = "super-secret-demo-password-123"
     monkeypatch.setenv("CUBRID_PASSWORD", secret_pw)
 
-    tables_result = _valid_tables_result(["dba.product", "dba.orders"])
+    tables_result = _valid_tables_result(
+        ["product", "dba.product", "dba.orders_2026", "app_user.tbl$1", "#tmp_items"]
+    )
     drop_result = _valid_drop_rejection(with_prefix=True)
     clients = _patch_demo_io(
         monkeypatch,
@@ -146,7 +148,10 @@ async def test_demo_returns_zero_when_drop_table_is_rejected(
     assert rc == 0
     assert "connected: cubrid-mcp-server (MCP stdio)" in captured.out
     assert "2 tools; execute_write not offered (write mode is off)" in captured.out
-    assert '["dba.product", "dba.orders"]' in captured.out
+    assert (
+        '["product", "dba.product", "dba.orders_2026", "app_user.tbl$1", "#tmp_items"]'
+        in captured.out
+    )
     assert f"rejected: {EXPECTED_REJECTION}" in captured.out
     assert captured.err == ""
     assert secret_pw not in captured.out
@@ -371,6 +376,38 @@ async def test_demo_fails_nonzero_on_malformed_drop_result(
         pytest.param(
             SimpleNamespace(
                 is_error=False,
+                structured_content={"result": ["CUBRID_PASSWORD=leaked-table-secret"]},
+                data=None,
+            ),
+            id="single-line-secret-env-assignment",
+        ),
+        pytest.param(
+            SimpleNamespace(
+                is_error=False,
+                structured_content={"result": ["token=abc"]},
+                data=None,
+            ),
+            id="malformed-identifier-key-value",
+        ),
+        pytest.param(
+            SimpleNamespace(
+                is_error=False,
+                structured_content={"result": ["dba.a.b"]},
+                data=None,
+            ),
+            id="too-many-dots-in-table-name",
+        ),
+        pytest.param(
+            SimpleNamespace(
+                is_error=False,
+                structured_content={"result": ["dba.product\n"]},
+                data=None,
+            ),
+            id="trailing-newline-in-table-name",
+        ),
+        pytest.param(
+            SimpleNamespace(
+                is_error=False,
                 structured_content={"result": ["dba.product\nCUBRID_PASSWORD=leaked-table-secret"]},
                 data=None,
             ),
@@ -404,6 +441,8 @@ async def test_demo_fails_nonzero_on_malformed_table_list_result(
     assert "malformed or error" in captured.err
     assert "leaked-table-secret" not in captured.out
     assert "leaked-table-secret" not in captured.err
+    assert "token=abc" not in captured.out
+    assert "token=abc" not in captured.err
 
 
 async def test_demo_falls_back_to_data_when_structured_content_missing(
