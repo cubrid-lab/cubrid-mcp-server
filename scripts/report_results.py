@@ -96,11 +96,13 @@ def _outcome(case: ET.Element) -> str:
 _SEVERITY = {"passed": 0, "xfailed": 1, "skipped": 2, "failed": 3, "errors": 4}
 
 
+_FORBIDDEN_XML_DECL = re.compile(rb"<!(?:DOCTYPE|ENTITY)\b", re.IGNORECASE)
+
+
 def _load_xml(path: Path) -> ET.Element:
-    """Parse a local XML report, rejecting NUL bytes, DTD, and entity declarations."""
-    payload = path.read_text(encoding="utf-8-sig")
-    upper = payload.upper()
-    if "\x00" in payload or "<!DOCTYPE" in upper or "<!ENTITY" in upper:
+    """Parse a local XML report from raw bytes, rejecting NUL, DTD, and entity declarations."""
+    payload = path.read_bytes()
+    if b"\x00" in payload or _FORBIDDEN_XML_DECL.search(payload):
         raise ET.ParseError(f"{path}: DTD/entity declarations are forbidden")
     return ET.fromstring(payload)
 
