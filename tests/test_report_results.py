@@ -130,8 +130,20 @@ def test_missing_junit_is_incomplete_after_success_and_fail_after_failure(tmp_pa
         b"<!ENTITY xxe 'ok'><testsuites><testsuite><testcase name='p'/></testsuite></testsuites>",
         b"<testsuites>\x00<testsuite><testcase name='p'/></testsuite></testsuites>",
         b"\xff\xfe<testsuites><testsuite><testcase name='p'/></testsuite></testsuites>",
+        (
+            b'<?xml version="1.0" encoding="unknown-codec"?>'
+            b"<testsuites><testsuite><testcase name='p'/></testsuite></testsuites>"
+        ),
     ],
-    ids=["doctype", "doctype-lower", "doctype-entity", "entity", "nul-byte", "invalid-bytes"],
+    ids=[
+        "doctype",
+        "doctype-lower",
+        "doctype-entity",
+        "entity",
+        "nul-byte",
+        "invalid-bytes",
+        "unknown-codec",
+    ],
 )
 def test_junit_with_dtd_entity_nul_or_invalid_bytes_never_passes(
     tmp_path: Path, payload: bytes
@@ -165,8 +177,9 @@ def test_junit_with_declared_non_utf8_encoding_passes(tmp_path: Path) -> None:
         b"<!DOCTYPE coverage><coverage line-rate='0.99'/>",
         b"<!ENTITY xxe '1'><coverage line-rate='0.99'/>",
         b"\xff\xfe<coverage line-rate='0.99'/>",
+        b'<?xml version="1.0" encoding="unknown-codec"?><coverage line-rate="0.99"/>',
     ],
-    ids=["doctype", "entity", "invalid-bytes"],
+    ids=["doctype", "entity", "invalid-bytes", "unknown-codec"],
 )
 def test_coverage_with_dtd_entity_or_invalid_bytes_is_omitted(
     tmp_path: Path, payload: bytes
