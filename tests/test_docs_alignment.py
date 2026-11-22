@@ -11,7 +11,7 @@ from pathlib import Path
 
 from fastmcp import Client
 
-import cubrid_mcp_server
+from cubrid_mcp_server import __version__ as installed_version
 from cubrid_mcp_server import server
 from cubrid_mcp_server.config import ConnectionRegistry, _parse_bool
 
@@ -270,7 +270,7 @@ def _manifest_version_drift(
 def _committed_versions() -> tuple[dict, str, str]:
     manifest = json.loads((ROOT / ".mcpb" / "server.json").read_text(encoding="utf-8"))
     release = json.loads((ROOT / ".release-please-manifest.json").read_text(encoding="utf-8"))
-    return manifest, cubrid_mcp_server.__version__, release["."]
+    return manifest, installed_version, release["."]
 
 
 def test_registry_manifest_versions_match_package_version() -> None:
