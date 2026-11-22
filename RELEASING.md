@@ -1,5 +1,22 @@
 # Releasing cubrid-mcp-server
 
+## Publisher naming and configuration migration
+
+The package publisher is `.github/workflows/publish.yml`. Its
+`publish-production` job uses the `production` GitHub Environment.
+Release PR preparation uses `release-please.yml`, tests use `ci.yml`,
+and documentation deployment uses `docs.yml` when present.
+An optional test-index publisher uses job `publish-test` and environment
+`test`; candidate artifact checks require no test-index publication.
+
+Before merging the naming migration, configure `production` with the
+existing publisher environment's deployment ref restrictions, protection
+rules and applicable settings. Update the registry Trusted Publisher to
+authorize this repository, `publish.yml` and `production`, and verify
+the saved identity. Keep the previous configuration available until the
+replacement is verified. After cutover, verify the normal release and
+recovery route before retiring the obsolete configuration.
+
 Merging a reviewed release PR is the only normal way to release `cubrid-mcp-server`.
 Nobody pushes tags or runs a publish workflow by hand, and ordinary PR merges
 never deploy. This procedure is kept identical (except for package names, the
@@ -26,11 +43,11 @@ Key invariants:
 
 `release-please.yml` ("Prepare release") prepares a release PR on pushes to
 `main` or manual dispatch. Reviewed squash merge starts the unchanged guarded
-`publish-pypi.yml` publisher. The old `prepare-release.yml` entry point is removed
+`publish.yml` publisher. The old `prepare-release.yml` entry point is removed
 in the same cutover (#254).
 
 ```text
-release-please.yml  ->  release PR (freeze, review, start CI)  ->  squash-merge  ->  publish-pypi.yml
+release-please.yml  ->  release PR (freeze, review, start CI)  ->  squash-merge  ->  publish.yml
 ```
 
 ### 1. Prepare and regenerate
@@ -162,7 +179,7 @@ it is neither a bug nor approval to release.
 
    Only *successful* at the final head counts. The others are not a pass and
    never a reason to loosen a gate, add a PAT, rename the registered
-   `publish-pypi.yml` or its environment, or close and reopen the PR without
+   `publish.yml` or its environment, or close and reopen the PR without
    checking first.
 3. **Review evidence.** The submitted review of the final head that the
    repository requires, and the disposition of every finding.
@@ -183,7 +200,7 @@ After the merge, the release is complete when the publisher evidence shows
 both publication and post-publication verification for the same tag, release
 SHA and version:
 
-- the `publish-pypi.yml` run at the merge SHA (or a `resume` dispatch for that
+- the `publish.yml` run at the merge SHA (or a `resume` dispatch for that
   tag) reports `published and verified`; or
 - that run reports `published; post-release verification failed`, and a later
   [`verify-only` dispatch](#recovery-dispatch-the-only-manual-entry-point) for
@@ -208,13 +225,13 @@ state, not something to fix by tagging.
 
 Merge only the reviewed candidate; keep release-please's title
 (`chore(main): release X.Y.Z`). Git version facts, rather than its title,
-start `publish-pypi.yml`. release-please is **PR-only** (`skip-github-release: true`);
+start `publish.yml`. release-please is **PR-only** (`skip-github-release: true`);
 it cannot tag, create a Release or publish to PyPI.
 
 Before another generation, `reconcile_release_labels.py` changes a merged PR
 from `autorelease: pending` to `autorelease: tagged` only when the manifest at
 its merge SHA matches a published nondraft GitHub Release, the dereferenced
-tag points at that SHA, and a successful `publish-pypi.yml` run at that SHA has
+tag points at that SHA, and a successful `publish.yml` run at that SHA has
 both **Tag, GitHub Release and PyPI** and **Require a verified release** jobs
 successful. A dry run or partial publication cannot clear pending. Until
 publication completes, upstream release-please blocks a subsequent candidate.
@@ -254,7 +271,7 @@ proves strategy/file generation, not authenticated live GitHub PR creation,
 repository settings or a full broker matrix. Test-generated 0.5.0 is a
 fixture, not the approved next release version.
 
-### 4. Automatic release (`publish-pypi.yml`)
+### 4. Automatic release (`publish.yml`)
 
 Every push to `main` runs the cheap **detect** job
 (`scripts/release_detect.py`). It is a release only when all of these hold at
@@ -280,8 +297,8 @@ and chained with explicit `needs:` (tags and Releases created with
 | `matrix` | The full Python {3.11–3.14} × CUBRID {10.2, 11.0, 11.2, 11.4} integration matrix: `integration-full.yml` called through `workflow_call` at the SHA. A release call always plans the full matrix (only a manual `corners` dispatch runs fewer cells) and never starts the advisory newest-image check, and the result job fails unless the full matrix ran and every cell passed. |
 | `build` | Builds the wheel and sdist **once**, `twine check`, wheel/sdist install smoke tests, extracts the release notes (the CHANGELOG section byte for byte plus one `**Full Changelog**` link to the previous CHANGELOG version; none for the first release or when the section already has a compare link), generates the SPDX SBOM and records SHA-256 hashes. Artifacts `release-dist` and `release-meta` are kept for 14 days. |
 | `verify-candidate` | Calls the same pinned cookbook smoke test in **candidate mode** before anything is published: `mode: candidate`, `candidate_artifact: release-dist`, `candidate_hashes` = the `build` job's `sha256` output, `candidate_source_sha` = the release SHA, and `request_id: cubrid-mcp-server-rc-vX.Y.Z-<run id>` (no run attempt, so `gh run rerun --failed` replaces only the failed cells). The cookbook checks the artifact's file set and every SHA-256, installs only that wheel and runs the release smoke on it. It runs after every successful build, `resume` included; there is no skip. |
-| `require-candidate` | Fails unless the call succeeded and its outputs report `status == success`, `evidence == candidate artifact`, `installed_version == requested_version == X.Y.Z` and `candidate_sha256` equal to the wheel's entry in the `build` job's `sha256` map. It also downloads the candidate report `release-candidate-verification-<request_id>` of this run (the download itself must succeed; a failed one does not stop the check, so every failed reason is listed) and requires it to name this package, `request_id`, version, run and calling repository, the artifact `release-dist`, the release commit as `source_sha`, exactly the `build` job's file map, and the same verified wheel and digest. Every value reaches the check through `env:` or the downloaded file, never through shell interpolation. It holds no permission. `publish` needs this job. |
-| `publish` | In the `pypi` environment: checks `dist/` and `release-meta/` against the `build` job outputs `sha256` and `meta_sha256` (`scripts/verify_dist.py`: exact file set, every digest) and re-checks `SHA256SUMS`, creates the annotated tag `vX.Y.Z` at the SHA (or accepts one already there), creates a **draft** GitHub Release titled exactly `vX.Y.Z` with the notes and `sbom.spdx.json` (an existing Release found on resume must already carry that title, or the job fails closed; it is never renamed), uploads the same artifact to PyPI through `scripts/pypi_duplicate_guard.py` and Trusted Publishing (OIDC), then publishes the Release. |
+| `require-candidate` | Fails unless the call succeeded and its outputs report `status == success`, `evidence == candidate artifact`, `installed_version == requested_version == X.Y.Z` and `candidate_sha256` equal to the wheel's entry in the `build` job's `sha256` map. It also downloads the candidate report `release-candidate-verification-<request_id>` of this run (the download itself must succeed; a failed one does not stop the check, so every failed reason is listed) and requires it to name this package, `request_id`, version, run and calling repository, the artifact `release-dist`, the release commit as `source_sha`, exactly the `build` job's file map, and the same verified wheel and digest. Every value reaches the check through `env:` or the downloaded file, never through shell interpolation. It holds no permission. `publish-production` needs this job. |
+| `publish-production` | In the `production` environment: checks `dist/` and `release-meta/` against the `build` job outputs `sha256` and `meta_sha256` (`scripts/verify_dist.py`: exact file set, every digest) and re-checks `SHA256SUMS`, creates the annotated tag `vX.Y.Z` at the SHA (or accepts one already there), creates a **draft** GitHub Release titled exactly `vX.Y.Z` with the notes and `sbom.spdx.json` (an existing Release found on resume must already carry that title, or the job fails closed; it is never renamed), uploads the same artifact to PyPI through `scripts/pypi_duplicate_guard.py` and Trusted Publishing (OIDC), then publishes the Release. |
 | `verify-cookbook` | Calls the cookbook smoke test (`smoke-test.yml` of cubrid-cookbook-python) as a **reusable workflow** with `package=cubrid-mcp-server`, `version=X.Y.Z` and a `request_id`; its jobs run inside this release run. |
 | `require-cookbook` | Fails unless the called workflow succeeded and its outputs report `status == success` with `installed_version == requested_version == X.Y.Z`. |
 | `summary` | Always runs; one table with SHA, tag, version, artifact hashes, matrix result, candidate verification, PyPI and Release URLs, cookbook run and the final state. |
@@ -424,7 +441,7 @@ While a merged release PR stays `autorelease: pending`, upstream release-please
 only logs "There are untagged, merged release PRs outstanding - aborting" and
 opens no new release PR. To keep that from passing silently,
 `reconcile_release_labels.py` (the first step of **Prepare release**) classifies
-every pending PR it could not mark tagged, using the newest `publish-pypi.yml`
+every pending PR it could not mark tagged, using the newest `publish.yml`
 run at the merge SHA:
 
 | State | When | Prepare release run |
@@ -456,7 +473,7 @@ means: a release was merged, and its publication is not proven. To recover:
    abandoned-release row (remove `autorelease: pending`, merge the fix, set
    `last-release-sha` to the abandoned merge SHA, then dispatch).
 
-If no publisher run exists, check whether the push started `publish-pypi.yml`
+If no publisher run exists, check whether the push started `publish.yml`
 and what `detect` decided. If recovery ran as a dispatch at another SHA
 (`resume` or `verify-only` from the current `main` head), the run at the merge
 SHA stays failed and the PR stays blocked: label it manually (add
@@ -471,19 +488,19 @@ silently green until its failed jobs were re-run.
 
 ### Recovery dispatch (the only manual entry point)
 
-`publish-pypi.yml` has one `workflow_dispatch` with an `action` input. It never
+`publish.yml` has one `workflow_dispatch` with an `action` input. It never
 creates a new version, never moves a tag and never deletes anything.
 
 | `action` | Allowed when | Runs |
 | --- | --- | --- |
-| `resume` | Dispatched from `main`; tag `vX.Y.Z` exists; its commit is on `main`; `__version__` and a dated CHANGELOG section at that commit equal `X.Y.Z`. | consistency → matrix → build → publish → verify at the tag commit (the rebuilt wheel goes through the candidate gate like any other build). For an interrupted release whose run can no longer be rerun (for example the artifacts expired before anything reached PyPI). A rebuilt file that differs from one already on PyPI fails the guard. |
+| `resume` | Dispatched from `main`; tag `vX.Y.Z` exists; its commit is on `main`; `__version__` and a dated CHANGELOG section at that commit equal `X.Y.Z`. | consistency → matrix → build → publish-production → verify at the tag commit (the rebuilt wheel goes through the candidate gate like any other build). For an interrupted release whose run can no longer be rerun (for example the artifacts expired before anything reached PyPI). A rebuilt file that differs from one already on PyPI fails the guard. |
 | `verify-only` | Same conditions as `resume`. | Only `verify-cookbook`, `require-cookbook` and `summary` for the already-published version, through the same reusable cookbook workflow. |
-| `dry-run` | Any branch; `X.Y.Z` must equal `__version__` at the dispatched commit and have a dated CHANGELOG section. | consistency → matrix → build → verify-candidate → require-candidate, **no** tag, Release or upload (`publish` needs `detect`'s `publish == true`, which a dry run never sets, and the `pypi` environment allows only `main`). The cookbook verifies the wheel this run built; the post-publication `verify-cookbook` does not run. |
+| `dry-run` | Any branch; `X.Y.Z` must equal `__version__` at the dispatched commit and have a dated CHANGELOG section. | consistency → matrix → build → verify-candidate → require-candidate, **no** tag, Release or upload (`publish-production` needs `detect`'s `publish == true`, which a dry run never sets, and the `production` environment allows only `main`). The cookbook verifies the wheel this run built; the post-publication `verify-cookbook` does not run. |
 
 ```bash
-gh workflow run publish-pypi.yml -f action=resume -f version=X.Y.Z
-gh workflow run publish-pypi.yml -f action=verify-only -f version=X.Y.Z
-gh workflow run publish-pypi.yml --ref <branch> -f action=dry-run -f version=X.Y.Z
+gh workflow run publish.yml -f action=resume -f version=X.Y.Z
+gh workflow run publish.yml -f action=verify-only -f version=X.Y.Z
+gh workflow run publish.yml --ref <branch> -f action=dry-run -f version=X.Y.Z
 ```
 
 ## Repository settings this relies on
@@ -497,12 +514,12 @@ gh workflow run publish-pypi.yml --ref <branch> -f action=dry-run -f version=X.Y
   pull requests" (for `release-please.yml`).
 - Labels `autorelease: pending`, `autorelease: tagged` and `autorelease: review`
   (release-please applies the first two; the freeze label is applied by hand).
-- Environment `pypi`: deployment branches limited to `main`; PyPI Trusted
-  Publisher for `cubrid-lab/cubrid-mcp-server`, workflow `publish-pypi.yml`,
-  environment `pypi`
+- Environment `production`: deployment branches limited to `main`; PyPI Trusted
+  Publisher for `cubrid-lab/cubrid-mcp-server`, workflow `publish.yml`,
+  environment `production`
   (<https://pypi.org/manage/project/cubrid-mcp-server/settings/publishing/>).
   The workflow filename is part of that Trusted Publisher identity: do not rename
-  `.github/workflows/publish-pypi.yml`. A renamed file fails the PyPI upload with
+  `.github/workflows/publish.yml`. A renamed file fails the PyPI upload with
   "Publisher with matching claims was not found" (the 0.5.0 release run failed
   this way after the file was renamed to `release.yml`). pycubrid and
   sqlalchemy-cubrid use the same filename.
