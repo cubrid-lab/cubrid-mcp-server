@@ -111,7 +111,7 @@ def parse_junit(path: Path) -> dict[str, int] | None:
     """Count the tests of a JUnit file; None if it is missing or unreadable."""
     try:
         root = _load_xml(path)
-    except (OSError, ValueError, ET.ParseError):
+    except (OSError, ValueError, LookupError, ET.ParseError):
         return None
     outcomes: dict[tuple[str, str], str] = {}
     for case in root.iter("testcase"):
@@ -131,7 +131,7 @@ def parse_coverage(path: Path) -> float | None:
     try:
         rate = _load_xml(path).get("line-rate")
         return None if rate is None else round(float(rate) * 100, 2)
-    except (OSError, ET.ParseError, ValueError):
+    except (OSError, ET.ParseError, ValueError, LookupError):
         return None
 
 
