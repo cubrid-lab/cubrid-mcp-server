@@ -138,6 +138,23 @@ def test_junit_with_dtd_or_entity_declaration_cannot_pass(tmp_path: Path, declar
     assert summarize(tmp_path, 0)["status"] == "INCOMPLETE"
 
 
+@pytest.mark.parametrize(
+    "encoding",
+    ["unknown-codec", "utf-7"],
+    ids=["unknown-codec", "unsupported-multibyte"],
+)
+def test_junit_with_unsupported_encoding_cannot_pass(tmp_path: Path, encoding: str) -> None:
+    path = tmp_path / "junit.xml"
+    path.write_bytes(
+        f'<?xml version="1.0" encoding="{encoding}"?>'
+        "<testsuites><testsuite name='pytest'>"
+        "<testcase name='p'/></testsuite></testsuites>".encode()
+    )
+
+    assert report.parse_junit(path) is None
+    assert summarize(tmp_path, 0)["status"] == "INCOMPLETE"
+
+
 def test_explicit_junit_path_is_used(tmp_path: Path) -> None:
     junit_path = tmp_path / "other.xml"
     junit(tmp_path, "pass").replace(junit_path)

@@ -101,14 +101,15 @@ def parse_junit(path: Path) -> dict[str, int] | None:
 
     DTD and entity declarations are rejected before parsing, as in the
     pycubrid report utilities: a JUnit file that carries them is not valid
-    CI evidence and must never produce a PASS.
+    CI evidence and must never produce a PASS. A declared encoding the
+    parser does not support fails closed the same way.
     """
     try:
         payload = path.read_bytes()
         if b"\x00" in payload or b"<!DOCTYPE" in payload.upper() or b"<!ENTITY" in payload.upper():
             return None
         root = ET.fromstring(payload)
-    except (OSError, ET.ParseError):
+    except (OSError, ET.ParseError, LookupError, ValueError):
         return None
     outcomes: dict[tuple[str, str], str] = {}
     for case in root.iter("testcase"):
