@@ -118,6 +118,117 @@ def test_missing_junit_is_incomplete_after_success_and_fail_after_failure(tmp_pa
     assert summarize(tmp_path, 0)["status"] == "INCOMPLETE"
 
 
+@pytest.mark.parametrize(
+    "payload",
+    [
+        b"<!DOCTYPE testsuites><testsuites><testsuite><testcase name='p'/></testsuite></testsuites>",
+        b"<!doctype testsuites><testsuites><testsuite><testcase name='p'/></testsuite></testsuites>",
+        (
+            b"<!DOCTYPE testsuites [<!ENTITY xxe 'ok'>]>"
+            b"<testsuites><testsuite><testcase name='p'/></testsuite></testsuites>"
+        ),
+        b"<!ENTITY xxe 'ok'><testsuites><testsuite><testcase name='p'/></testsuite></testsuites>",
+        b"<testsuites>\x00<testsuite><testcase name='p'/></testsuite></testsuites>",
+        b"\xff\xfe<testsuites><testsuite><testcase name='p'/></testsuite></testsuites>",
+        (
+            b'<?xml version="1.0" encoding="unknown-codec"?>'
+            b"<testsuites><testsuite><testcase name='p'/></testsuite></testsuites>"
+        ),
+        (
+            '<?xml version="1.0" encoding="UTF-16"?>'
+            '<!DOCTYPE testsuites [<!ENTITY x "EXPANDED">]>'
+            '<testsuites><testsuite><testcase name="&x;"/></testsuite></testsuites>'
+        ).encode("utf-16"),
+        (
+            '<?xml version="1.0" encoding="UTF-16"?>'
+            '<!DOCTYPE testsuites [<!ENTITY x "EXPANDED">]>'
+            '<testsuites><testsuite><testcase name="&x;"/></testsuite></testsuites>'
+        ).encode("utf-16-le"),
+        (
+            '<?xml version="1.0" encoding="UTF-16"?>'
+            '<!DOCTYPE testsuites [<!ENTITY x "EXPANDED">]>'
+            '<testsuites><testsuite><testcase name="&x;"/></testsuite></testsuites>'
+        ).encode("utf-16-be"),
+    ],
+    ids=[
+        "doctype",
+        "doctype-lower",
+        "doctype-entity",
+        "entity",
+        "nul-byte",
+        "invalid-bytes",
+        "unknown-codec",
+        "utf16-bom-dtd",
+        "utf16-le-dtd",
+        "utf16-be-dtd",
+    ],
+)
+def test_junit_with_dtd_entity_nul_or_invalid_bytes_never_passes(
+    tmp_path: Path, payload: bytes
+) -> None:
+    junit_path = tmp_path / "junit.xml"
+    junit_path.write_bytes(payload)
+
+    assert report.parse_junit(junit_path) is None
+    summary_ok = summarize(tmp_path, 0)
+    assert summary_ok["status"] == "INCOMPLETE"
+    assert summary_ok["counts"]["passed"] == 0
+    assert summarize(tmp_path, 1)["status"] == "FAIL"
+
+
+def test_junit_with_declared_non_utf8_encoding_passes(tmp_path: Path) -> None:
+    junit_path = tmp_path / "junit.xml"
+    xml = (
+        '<?xml version="1.0" encoding="iso-8859-1"?>'
+        '<testsuites><testsuite><testcase name="café"/></testsuite></testsuites>'
+    )
+    junit_path.write_bytes(xml.encode("iso-8859-1"))
+
+    summary = summarize(tmp_path, 0)
+    assert summary["status"] == "PASS"
+    assert summary["counts"]["passed"] == 1
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        b"<!DOCTYPE coverage><coverage line-rate='0.99'/>",
+        b"<!ENTITY xxe '1'><coverage line-rate='0.99'/>",
+        b"\xff\xfe<coverage line-rate='0.99'/>",
+        b'<?xml version="1.0" encoding="unknown-codec"?><coverage line-rate="0.99"/>',
+        '<?xml version="1.0" encoding="UTF-16"?><!DOCTYPE coverage><coverage line-rate="0.99"/>'.encode(
+            "utf-16"
+        ),
+        '<?xml version="1.0" encoding="UTF-16"?><!DOCTYPE coverage><coverage line-rate="0.99"/>'.encode(
+            "utf-16-le"
+        ),
+        '<?xml version="1.0" encoding="UTF-16"?><!DOCTYPE coverage><coverage line-rate="0.99"/>'.encode(
+            "utf-16-be"
+        ),
+    ],
+    ids=[
+        "doctype",
+        "entity",
+        "invalid-bytes",
+        "unknown-codec",
+        "utf16-bom-dtd",
+        "utf16-le-dtd",
+        "utf16-be-dtd",
+    ],
+)
+def test_coverage_with_dtd_entity_or_invalid_bytes_is_omitted(
+    tmp_path: Path, payload: bytes
+) -> None:
+    junit(tmp_path, "pass")
+    coverage = tmp_path / "coverage.xml"
+    coverage.write_bytes(payload)
+
+    assert report.parse_coverage(coverage) is None
+    summary = summarize(tmp_path, 0, "--coverage", str(coverage))
+    assert summary["status"] == "PASS"
+    assert "coverage" not in summary
+
+
 def test_explicit_junit_path_is_used(tmp_path: Path) -> None:
     junit_path = tmp_path / "other.xml"
     junit(tmp_path, "pass").replace(junit_path)

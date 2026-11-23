@@ -75,6 +75,7 @@ import xml.etree.ElementTree as ET
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
+from xml.parsers import expat
 
 ROOT = Path(__file__).resolve().parents[1]
 SCHEMA_VERSION = 1
@@ -96,11 +97,30 @@ def _outcome(case: ET.Element) -> str:
 _SEVERITY = {"passed": 0, "xfailed": 1, "skipped": 2, "failed": 3, "errors": 4}
 
 
+def _forbid_xml_decl(*_args: object) -> None:
+    raise ET.ParseError("DTD/entity declarations are forbidden")
+
+
+def _load_xml(path: Path) -> ET.Element:
+    """Parse a local XML report, rejecting any DTD or entity declaration regardless of encoding."""
+    payload = path.read_bytes()
+    guard = expat.ParserCreate()
+    guard.StartDoctypeDeclHandler = _forbid_xml_decl
+    guard.EntityDeclHandler = _forbid_xml_decl
+    guard.UnparsedEntityDeclHandler = _forbid_xml_decl
+    guard.NotationDeclHandler = _forbid_xml_decl
+    try:
+        guard.Parse(payload, True)
+    except expat.ExpatError as exc:
+        raise ET.ParseError(str(exc)) from exc
+    return ET.fromstring(payload)
+
+
 def parse_junit(path: Path) -> dict[str, int] | None:
     """Count the tests of a JUnit file; None if it is missing or unreadable."""
     try:
-        root = ET.parse(path).getroot()
-    except (OSError, ET.ParseError):
+        root = _load_xml(path)
+    except (OSError, ValueError, LookupError, ET.ParseError):
         return None
     outcomes: dict[tuple[str, str], str] = {}
     for case in root.iter("testcase"):
@@ -118,9 +138,9 @@ def parse_junit(path: Path) -> dict[str, int] | None:
 def parse_coverage(path: Path) -> float | None:
     """Line coverage percent from a Cobertura ``coverage.xml``; None if unavailable."""
     try:
-        rate = ET.parse(path).getroot().get("line-rate")
+        rate = _load_xml(path).get("line-rate")
         return None if rate is None else round(float(rate) * 100, 2)
-    except (OSError, ET.ParseError, ValueError):
+    except (OSError, ET.ParseError, ValueError, LookupError):
         return None
 
 
