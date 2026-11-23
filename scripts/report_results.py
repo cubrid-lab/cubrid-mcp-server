@@ -67,11 +67,13 @@ from __future__ import annotations
 import argparse
 import html
 import json
+import math
 import os
 import platform
 import re
 import urllib.parse
 import xml.etree.ElementTree as ET
+from xml.parsers import expat
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
@@ -96,6 +98,71 @@ def _outcome(case: ET.Element) -> str:
 _SEVERITY = {"passed": 0, "xfailed": 1, "skipped": 2, "failed": 3, "errors": 4}
 
 
+# Evidence files are local CI artifacts; the cap only bounds what the
+# double parse (detection, then ElementTree) can be made to hold in memory.
+_MAX_XML_BYTES = 64 * 1024 * 1024
+
+
+class _DoctypeFound(Exception):
+    """Abort signal: the doctype handler met a DOCTYPE declaration."""
+
+
+def _declares_doctype(payload: bytes) -> bool:
+    """Whether expat meets a DOCTYPE declaration in the payload.
+
+    Detection runs through expat itself — the same parser, on the same
+    bytes, that ElementTree will use — so no encoding choice can make the
+    check and the parse disagree about the document: UTF-16/32 encodings,
+    a decoy encoding declaration inside a comment, and declaration-like
+    text inside comments or CDATA are all seen exactly as the parser sees
+    them. A malformed payload raises :class:`expat.ExpatError`; the caller
+    fails closed on it.
+    """
+    parser = expat.ParserCreate()
+    seen: list[bool] = []
+
+    def _hit(*_args: object) -> None:
+        seen.append(True)
+        raise _DoctypeFound
+
+    parser.StartDoctypeDeclHandler = _hit
+    try:
+        parser.Parse(payload, True)
+    except _DoctypeFound:
+        pass
+    # The flag, not the exception, carries the result: even if a runtime
+    # swallowed the abort, a met DOCTYPE still fails closed.
+    return bool(seen)
+
+
+def _parse_xml_root(path: Path) -> ET.Element | None:
+    """Parse an XML evidence file, rejecting DTD/entity declarations.
+
+    Entity declarations exist only inside a DOCTYPE, so a document with
+    no DOCTYPE gives ElementTree nothing to expand. Any read, detection
+    or parse failure fails closed as None.
+    """
+    # The boundary is deliberately broad: an evidence file must never make
+    # the reporter raise. Expat reports a declared encoding it does not
+    # know as ExpatError, but pyexpat's codec fallback can surface it as
+    # LookupError or ValueError, and a codec registered in the process can
+    # raise anything at all; every failure fails closed the same way. The
+    # read is bounded and limited to regular files, so a FIFO or an
+    # oversized file cannot hang or exhaust the reporter either.
+    try:
+        if not path.is_file():
+            return None
+        with path.open("rb") as stream:
+            payload = stream.read(_MAX_XML_BYTES + 1)
+        if len(payload) > _MAX_XML_BYTES:
+            return None
+        if _declares_doctype(payload):
+            return None
+        return ET.fromstring(payload)
+    except Exception:
+        return None
+
+
 def parse_junit(path: Path) -> dict[str, int] | None:
     """Count the tests of a JUnit file; None if it is missing or unreadable.
 
@@ -104,12 +171,8 @@ def parse_junit(path: Path) -> dict[str, int] | None:
     CI evidence and must never produce a PASS. A declared encoding the
     parser does not support fails closed the same way.
     """
-    try:
-        payload = path.read_bytes()
-        if b"\x00" in payload or b"<!DOCTYPE" in payload.upper() or b"<!ENTITY" in payload.upper():
-            return None
-        root = ET.fromstring(payload)
-    except (OSError, ET.ParseError, LookupError, ValueError):
+    root = _parse_xml_root(path)
+    if root is None:
         return None
     outcomes: dict[tuple[str, str], str] = {}
     for case in root.iter("testcase"):
@@ -125,12 +188,28 @@ def parse_junit(path: Path) -> dict[str, int] | None:
 
 
 def parse_coverage(path: Path) -> float | None:
-    """Line coverage percent from a Cobertura ``coverage.xml``; None if unavailable."""
-    try:
-        rate = ET.parse(path).getroot().get("line-rate")
-        return None if rate is None else round(float(rate) * 100, 2)
-    except (OSError, ET.ParseError, ValueError):
+    """Line coverage percent from a Cobertura ``coverage.xml``; None if unavailable.
+
+    The file goes through the same declaration-rejecting loader as the
+    JUnit evidence: a coverage file carrying a DTD or entity declarations
+    (for example an entity standing in for the ``line-rate`` value) is not
+    usable evidence either.
+    """
+    root = _parse_xml_root(path)
+    if root is None or root.tag != "coverage":
         return None
+    rate = root.get("line-rate")
+    if rate is None:
+        return None
+    try:
+        value = float(rate)
+    except ValueError:
+        return None
+    # A line-rate is a fraction: nan, inf and out-of-range values are not
+    # usable measurements and are omitted like any other unusable file.
+    if not math.isfinite(value) or not 0.0 <= value <= 1.0:
+        return None
+    return round(value * 100, 2)
 
 
 def decide(counts: dict[str, int] | None, exit_code: int) -> str:
