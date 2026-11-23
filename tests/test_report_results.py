@@ -118,6 +118,302 @@ def test_missing_junit_is_incomplete_after_success_and_fail_after_failure(tmp_pa
     assert summarize(tmp_path, 0)["status"] == "INCOMPLETE"
 
 
+@pytest.mark.parametrize(
+    "declaration",
+    [
+        "<!DOCTYPE testsuites [ <!ENTITY greeting 'hello'> ]>",
+        "<!DOCTYPE testsuites [ <!ENTITY x SYSTEM 'file:///etc/passwd'> ]>",
+        "<!DOCTYPE testsuites>",
+    ],
+    ids=["internal-entity", "external-entity", "bare-doctype"],
+)
+def test_junit_with_dtd_or_entity_declaration_cannot_pass(tmp_path: Path, declaration: str) -> None:
+    path = tmp_path / "junit.xml"
+    path.write_text(
+        f"{declaration}<testsuites><testsuite name='pytest'>"
+        "<testcase name='p'/></testsuite></testsuites>"
+    )
+
+    assert report.parse_junit(path) is None
+    assert summarize(tmp_path, 0)["status"] == "INCOMPLETE"
+
+
+@pytest.mark.parametrize(
+    "encoding",
+    ["unknown-codec", "utf-7"],
+    ids=["unknown-codec", "unsupported-multibyte"],
+)
+def test_junit_with_unsupported_encoding_cannot_pass(tmp_path: Path, encoding: str) -> None:
+    path = tmp_path / "junit.xml"
+    path.write_bytes(
+        f'<?xml version="1.0" encoding="{encoding}"?>'
+        "<testsuites><testsuite name='pytest'>"
+        "<testcase name='p'/></testsuite></testsuites>".encode()
+    )
+
+    assert report.parse_junit(path) is None
+    assert summarize(tmp_path, 0)["status"] == "INCOMPLETE"
+
+
+_UTF16_ENTITY_DOCUMENT = (
+    '<?xml version="1.0" encoding="UTF-16"?>'
+    "<!DOCTYPE testsuites [ <!ENTITY x 'EXPANDED'> ]>"
+    "<testsuites><testsuite name='pytest'>"
+    "<testcase classname='c' name='&x;'/></testsuite></testsuites>"
+)
+
+
+@pytest.mark.parametrize(
+    "data",
+    [
+        b"\xff\xfe" + _UTF16_ENTITY_DOCUMENT.encode("utf-16-le"),
+        b"\xfe\xff" + _UTF16_ENTITY_DOCUMENT.encode("utf-16-be"),
+        _UTF16_ENTITY_DOCUMENT.encode("utf-16-le"),
+        _UTF16_ENTITY_DOCUMENT.encode("utf-16-be"),
+    ],
+    ids=["utf16le-bom", "utf16be-bom", "utf16le-no-bom", "utf16be-no-bom"],
+)
+def test_junit_utf16_dtd_cannot_pass(tmp_path: Path, data: bytes) -> None:
+    # The declaration delimiters are NUL-interleaved in UTF-16, so a raw
+    # byte search cannot see them; detection runs through the parser
+    # itself, which reads the encoding the same way the final parse does.
+    path = tmp_path / "junit.xml"
+    path.write_bytes(data)
+
+    assert report.parse_junit(path) is None
+    assert summarize(tmp_path, 0)["status"] == "INCOMPLETE"
+
+
+def test_junit_utf16_without_dtd_still_counts(tmp_path: Path) -> None:
+    # A legitimate UTF-16 JUnit file is valid evidence: only declarations
+    # are rejected, not the encoding itself.
+    path = tmp_path / "junit.xml"
+    path.write_bytes(
+        b"\xff\xfe"
+        + (
+            '<?xml version="1.0" encoding="UTF-16"?>'
+            "<testsuites><testsuite name='pytest'>"
+            "<testcase classname='c' name='p'/></testsuite></testsuites>"
+        ).encode("utf-16-le")
+    )
+
+    counts = report.parse_junit(path)
+
+    assert counts is not None
+    assert counts["selected"] == 1
+    assert counts["passed"] == 1
+
+
+@pytest.mark.parametrize(
+    "data",
+    [
+        ("<!DOCTYPE coverage [ <!ENTITY r '1'> ]><coverage line-rate='&r;'/>").encode(),
+        b"\xff\xfe"
+        + (
+            '<?xml version="1.0" encoding="UTF-16"?>'
+            "<!DOCTYPE coverage [ <!ENTITY r '1'> ]>"
+            "<coverage line-rate='&r;'/>"
+        ).encode("utf-16-le"),
+    ],
+    ids=["utf8-entity", "utf16-entity"],
+)
+def test_coverage_with_entity_declaration_is_omitted(tmp_path: Path, data: bytes) -> None:
+    # The coverage loader shares the JUnit guard: an entity must not be
+    # able to stand in for the measured line-rate.
+    junit(tmp_path, "pass")
+    coverage = tmp_path / "coverage.xml"
+    coverage.write_bytes(data)
+
+    summary = summarize(tmp_path, 0, "--coverage", str(coverage))
+
+    assert summary["status"] == "PASS"
+    assert "coverage" not in summary
+
+
+_UTF32_ENTITY_DOCUMENT = _UTF16_ENTITY_DOCUMENT.replace('encoding="UTF-16"', 'encoding="UTF-32"')
+
+
+@pytest.mark.parametrize(
+    "data",
+    [
+        b"\xff\xfe\x00\x00" + _UTF32_ENTITY_DOCUMENT.encode("utf-32-le"),
+        b"\x00\x00\xfe\xff" + _UTF32_ENTITY_DOCUMENT.encode("utf-32-be"),
+        _UTF32_ENTITY_DOCUMENT.encode("utf-32-le"),
+        _UTF32_ENTITY_DOCUMENT.encode("utf-32-be"),
+    ],
+    ids=["utf32le-bom", "utf32be-bom", "utf32le-no-bom", "utf32be-no-bom"],
+)
+def test_junit_utf32_dtd_cannot_pass(tmp_path: Path, data: bytes) -> None:
+    # UTF-32 interleaves three NUL bytes per delimiter character; the
+    # parser-level check covers it the same way as UTF-16.
+    path = tmp_path / "junit.xml"
+    path.write_bytes(data)
+
+    assert report.parse_junit(path) is None
+    assert summarize(tmp_path, 0)["status"] == "INCOMPLETE"
+
+
+@pytest.mark.parametrize("encoding", ["base64", "hex", "zip"], ids=["base64", "hex", "zip"])
+def test_junit_with_transformation_codec_declaration_cannot_pass(
+    tmp_path: Path, encoding: str
+) -> None:
+    # A declared encoding naming a non-text codec is attacker-controlled
+    # input: the guard must fail closed, never raise.
+    path = tmp_path / "junit.xml"
+    path.write_bytes(
+        f'<?xml version="1.0" encoding="{encoding}"?>'
+        "<testsuites><testsuite name='pytest'>"
+        "<testcase name='p'/></testsuite></testsuites>".encode()
+    )
+
+    assert report.parse_junit(path) is None
+    assert summarize(tmp_path, 0)["status"] == "INCOMPLETE"
+
+
+@pytest.mark.parametrize(
+    "content",
+    [
+        "<testsuites><testsuite name='pytest'>"
+        "<testcase classname='c' name='p'><system-out>"
+        "<![CDATA[Example XML syntax: <!DOCTYPE example>]]>"
+        "</system-out></testcase></testsuite></testsuites>",
+        "<!-- Documentation mentioning <!ENTITY example> -->"
+        "<testsuites><testsuite name='pytest'>"
+        "<testcase classname='c' name='p'/></testsuite></testsuites>",
+    ],
+    ids=["cdata-mention", "comment-mention"],
+)
+def test_junit_declaration_like_text_in_character_data_still_counts(
+    tmp_path: Path, content: str
+) -> None:
+    # Declaration-like text inside CDATA or a comment is character data,
+    # not a declaration: the file stays valid evidence.
+    path = tmp_path / "junit.xml"
+    path.write_text(content)
+
+    counts = report.parse_junit(path)
+
+    assert counts is not None
+    assert counts["selected"] == 1
+    assert counts["passed"] == 1
+
+
+def test_coverage_decoy_encoding_declaration_cannot_forge_rate(tmp_path: Path) -> None:
+    # A fake encoding declaration inside a comment must not steer the
+    # check away from the encoding the parser will actually use: the real
+    # declaration carries no encoding, the document is UTF-8, and its
+    # DOCTYPE defines the entity that forges a perfect line-rate.
+    junit(tmp_path, "pass")
+    coverage = tmp_path / "coverage.xml"
+    coverage.write_bytes(
+        b'<?xml version="1.0"?>'
+        b'<!-- <?xml version="1.0" encoding="cp037"?> -->'
+        b"<!DOCTYPE coverage [<!ENTITY r '1.0'>]>"
+        b"<coverage line-rate='&r;'/>"
+    )
+
+    summary = summarize(tmp_path, 0, "--coverage", str(coverage))
+
+    assert summary["status"] == "PASS"
+    assert "coverage" not in summary
+
+
+def test_junit_declaration_padded_with_whitespace_cannot_pass(tmp_path: Path) -> None:
+    # A declaration padded with a long whitespace run is still the
+    # document's declaration to the parser; detection must not depend on
+    # the declaration fitting in a fixed-size prefix.
+    path = tmp_path / "junit.xml"
+    padding = " " * 4096
+    path.write_text(
+        f'<?xml version="1.0"{padding}encoding="UTF-8"?>'
+        "<!DOCTYPE testsuites [ <!ENTITY x 'EXPANDED'> ]>"
+        "<testsuites><testsuite name='pytest'>"
+        "<testcase classname='c' name='&x;'/></testsuite></testsuites>"
+    )
+
+    assert report.parse_junit(path) is None
+    assert summarize(tmp_path, 0)["status"] == "INCOMPLETE"
+
+
+def test_junit_external_doctype_cannot_pass(tmp_path: Path) -> None:
+    # Rejection happens at the declaration itself: the external subset is
+    # never fetched, so a target that does not exist rejects the same way.
+    path = tmp_path / "junit.xml"
+    path.write_text(
+        "<!DOCTYPE testsuites SYSTEM 'file:///nonexistent/external.dtd'>"
+        "<testsuites><testsuite name='pytest'>"
+        "<testcase classname='c' name='p'/></testsuite></testsuites>"
+    )
+
+    assert report.parse_junit(path) is None
+    assert summarize(tmp_path, 0)["status"] == "INCOMPLETE"
+
+
+def test_junit_doctype_after_processing_instruction_cannot_pass(tmp_path: Path) -> None:
+    # Processing instructions in the prolog do not hide the DOCTYPE that
+    # follows them from the parser-level check.
+    path = tmp_path / "junit.xml"
+    path.write_text(
+        '<?xml version="1.0"?>'
+        "<?xml-stylesheet type='text/xsl' href='style.xsl'?>"
+        "<!DOCTYPE testsuites [ <!ENTITY x 'EXPANDED'> ]>"
+        "<testsuites><testsuite name='pytest'>"
+        "<testcase classname='c' name='&x;'/></testsuite></testsuites>"
+    )
+
+    assert report.parse_junit(path) is None
+    assert summarize(tmp_path, 0)["status"] == "INCOMPLETE"
+
+
+@pytest.mark.parametrize(
+    "content",
+    [
+        "<testsuites><testsuite name='pytest'/></testsuites><!DOCTYPE testsuites>",
+        "<testsuites><testsuite name='pytest'/></testsuites><!DOCTYPE>",
+        "<testsuites><testsuite name='pytest'><testcase classname='c' name='p'>"
+        "<!DOCTYPE testsuites></testcase></testsuite></testsuites>",
+    ],
+    ids=["after-root", "no-name", "inside-content"],
+)
+def test_junit_misplaced_doctype_is_rejected_without_raising(tmp_path: Path, content: str) -> None:
+    # A DOCTYPE outside the prolog is malformed XML: unusable evidence,
+    # and the reporter must return None rather than raise.
+    path = tmp_path / "junit.xml"
+    path.write_text(content)
+
+    assert report.parse_junit(path) is None
+
+
+def test_junit_path_with_nul_byte_is_rejected_without_raising() -> None:
+    assert report.parse_junit(Path("junit\x00.xml")) is None
+    assert report.parse_coverage(Path("coverage\x00.xml")) is None
+
+
+@pytest.mark.parametrize(
+    "content",
+    [
+        "<coverage line-rate='nan'/>",
+        "<coverage line-rate='inf'/>",
+        "<coverage line-rate='-0.5'/>",
+        "<coverage line-rate='1.5'/>",
+        "<report line-rate='0.5'/>",
+    ],
+    ids=["nan", "inf", "negative", "above-one", "wrong-root"],
+)
+def test_unusable_coverage_values_are_omitted(tmp_path: Path, content: str) -> None:
+    # A line-rate is a fraction of covered lines: non-finite or
+    # out-of-range values, and a root that is not a Cobertura report,
+    # are not usable measurements.
+    junit(tmp_path, "pass")
+    coverage = tmp_path / "coverage.xml"
+    coverage.write_text(content)
+
+    summary = summarize(tmp_path, 0, "--coverage", str(coverage))
+
+    assert summary["status"] == "PASS"
+    assert "coverage" not in summary
+
+
 def test_explicit_junit_path_is_used(tmp_path: Path) -> None:
     junit_path = tmp_path / "other.xml"
     junit(tmp_path, "pass").replace(junit_path)
