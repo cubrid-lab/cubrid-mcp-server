@@ -9,14 +9,16 @@ from __future__ import annotations
 
 import io
 import json
+import logging
 from dataclasses import replace
 from typing import Any
 
 import pytest
 
 from cubrid_mcp_server import server
-from cubrid_mcp_server.audit import AuditLogger, _category, _identifiers
-from cubrid_mcp_server.config import Config
+from cubrid_mcp_server.audit import AuditLogger, _AUDIT_LOGGER_NAME, _category, _identifiers
+from cubrid_mcp_server.config import Config, ConnectionRegistry
+from cubrid_mcp_server.context import AppContext
 from tests.helpers import single_context
 
 _SECRET = "p@ssw0rd-should-never-appear"
@@ -302,3 +304,61 @@ def test_execute_query_no_audit_when_disabled(monkeypatch: pytest.MonkeyPatch) -
     )
     server.execute_query("SELECT 1")
     assert buf.getvalue() == ""
+
+
+@pytest.mark.parametrize("default_audit", [False, True])
+@pytest.mark.parametrize("default_connection", [None, "default"])
+@pytest.mark.parametrize("reporting_connection", ["reporting", "  REPORTING "])
+def test_execute_query_audit_emission_follows_selected_connection(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    request: pytest.FixtureRequest,
+    default_audit: bool,
+    default_connection: str | None,
+    reporting_connection: str,
+) -> None:
+    logger = logging.getLogger(_AUDIT_LOGGER_NAME)
+    previous_level = logger.level
+    request.addfinalizer(lambda: logger.setLevel(previous_level))
+    monkeypatch.setattr(logger, "handlers", [])
+    monkeypatch.setattr(logger, "propagate", logger.propagate)
+
+    registry = ConnectionRegistry(
+        configs={
+            "default": replace(_BASE_CONFIG, audit_log=default_audit, password=_SECRET),
+            "reporting": replace(_BASE_CONFIG, audit_log=not default_audit, password=_SECRET),
+        }
+    )
+    ctx = AppContext(
+        registry=registry,
+        databases={
+            "default": FakeDatabase(rows=[(1,)]),
+            "reporting": FakeDatabase(rows=[(2,), (3,)]),
+        },  # type: ignore[dict-item]
+    )
+    monkeypatch.setattr(server, "_context", ctx)
+
+    literal = "query-literal-should-never-appear"
+    sql = f"SELECT id FROM accounts WHERE token = '{literal}'"
+    for connection, enabled, expected_rows in [
+        (default_connection, default_audit, 1),
+        (reporting_connection, not default_audit, 2),
+    ]:
+        result = server.execute_query(sql, connection=connection)
+        assert result["row_count"] == expected_rows
+
+        captured = capsys.readouterr()
+        assert captured.out == ""
+        assert sql not in captured.err
+        assert literal not in captured.err
+        assert _SECRET not in captured.err
+        records = [json.loads(line) for line in captured.err.splitlines()]
+        if enabled:
+            assert len(records) == 1
+            assert records[0]["tool"] == "execute_query"
+            assert records[0]["status"] == "ok"
+            assert records[0]["category"] == "SELECT"
+            assert records[0]["identifiers"] == ["accounts"]
+            assert records[0]["row_count"] == expected_rows
+        else:
+            assert records == []
