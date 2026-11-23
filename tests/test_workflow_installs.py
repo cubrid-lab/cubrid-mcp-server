@@ -19,7 +19,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 UV_ACTION = "astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2"
 UV_VERSION = "0.12.17"
-# The release gate (integration-full.yml is called by publish-pypi.yml) keeps setup-uv's
+# The release gate (integration-full.yml is called by publish.yml) keeps setup-uv's
 # event guard (`auto`); routine CI always caches.
 WORKFLOWS = {"ci.yml": True, "integration-full.yml": "auto"}
 EXPECTED_JOBS = {"ci.yml": 4, "integration-full.yml": 2}
