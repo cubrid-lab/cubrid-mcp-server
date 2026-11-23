@@ -783,6 +783,58 @@ def test_connection_selector_routes_to_named_database(
     assert len(reporting_db.calls) == 1
 
 
+async def test_schema_resources_use_default_connection_while_tools_honor_connection(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Pin docs/MULTI_CONNECTION.md: resources are default-only, tools take ``connection``."""
+    from cubrid_mcp_server.config import ConnectionRegistry
+
+    default_db = FakeDatabase()
+    reporting_db = FakeDatabase()
+    registry = ConnectionRegistry(
+        configs={
+            "default": _TEST_CONFIG,
+            "reporting": replace(_TEST_CONFIG, host="reporting-db", database="reports"),
+        }
+    )
+    ctx = AppContext(
+        registry=registry,
+        databases={"default": default_db, "reporting": reporting_db},  # type: ignore[dict-item]
+    )
+    monkeypatch.setattr(server, "_context", ctx)
+
+    def queue_table(db: FakeDatabase, table: str, column: str) -> None:
+        db.queue([(table,)])
+        db.queue([(column, "INTEGER", "NO", None)])
+        db.queue([(column,)])
+        db.queue([(f"pk_{table}", "YES", "YES", "NO", "NO", 1, column, 0, "ASC")])
+
+    # Same table name on both databases, distinguishable by column name.
+    # Default: schema index lookup, then the per-table resource read.
+    default_db.queue([("users",)])
+    queue_table(default_db, "users", "default_id")
+    # Reporting is queued for the tool call only; any resource read that leaks
+    # to it would consume these responses and change the payloads below.
+    queue_table(reporting_db, "users", "reporting_id")
+
+    async with Client(server.mcp) as client:
+        index = json.loads((await client.read_resource("cubrid://schema"))[0].text)
+        table = json.loads((await client.read_resource("cubrid://schema/users"))[0].text)
+        assert reporting_db.calls == []  # resources never touched the named database
+        tool_result = await client.call_tool(
+            "describe_table", {"table_name": "users", "connection": "reporting"}
+        )
+
+    assert index == [{"name": "users", "uri": "cubrid://schema/users"}]
+    assert [c["name"] for c in table["columns"]] == ["default_id"]
+    assert table["primary_key"] == ["default_id"]
+    assert [c["name"] for c in tool_result.data["columns"]] == ["reporting_id"]
+    assert tool_result.data["primary_key"] == ["reporting_id"]
+    # Each database served exactly its own calls; the tool never hit the default one.
+    assert len(default_db.calls) == 5  # index (1) + table resource (4)
+    assert len(reporting_db.calls) == 4  # describe_table tool only
+
+
 def test_connection_selector_unknown_raises(monkeypatch: pytest.MonkeyPatch) -> None:
     from cubrid_mcp_server.config import ConfigError
 
