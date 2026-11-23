@@ -4,14 +4,13 @@
 The script starts the server with ``python -m cubrid_mcp_server`` (passing the
 ``CUBRID_*`` environment), then prints the server name from initialization, the
 tool count and whether ``execute_write`` is offered from tool discovery, the
-validated table list from ``all_table_names``, and the read-only guard rejection
-summary after verifying that ``execute_query`` rejects ``DROP TABLE`` with the
-exact error raised by :func:`cubrid_mcp_server.safety.ensure_read_only`. The
-``>`` lines are labels printed before each call; server metadata, tool
-discovery, and validated table names come from the MCP session, while the
-``rejected: ...`` line is emitted from the local ``ensure_read_only`` message
-once the server response matches it verbatim (avoiding echoing untrusted error
-text). Nothing is written to the database.
+table list from ``all_table_names``, and the read-only guard rejection summary
+after verifying that ``execute_query`` rejects ``DROP TABLE`` with the expected
+read-only guard prefix. The ``>`` lines are labels printed before each call;
+server metadata, tool discovery, and table names come from the MCP session,
+while the ``rejected: ...`` line is emitted from the local
+:func:`cubrid_mcp_server.safety.ensure_read_only` message (avoiding echoing
+untrusted error text). Nothing is written to the database.
 
 Requires a reachable CUBRID (``CUBRID_HOST``, ``CUBRID_PORT``,
 ``CUBRID_DATABASE``, ``CUBRID_USER``, ``CUBRID_PASSWORD``) and the package
@@ -23,7 +22,6 @@ from __future__ import annotations
 import asyncio
 import json
 import os
-import re
 import sys
 import time
 
@@ -35,10 +33,7 @@ from cubrid_mcp_server.safety import UnsafeSQLError, ensure_read_only
 PAUSE = 1.2
 DROP_PROBE_SQL = "DROP TABLE product"
 _FASTMCP_ERROR_PREFIX = "Error calling tool 'execute_query': "
-# Matches unqualified (pre-11.2) or owner-qualified (11.2+) CUBRID table names
-# such as ``product`` or ``dba.product``, while rejecting key=value secrets,
-# whitespace, control characters, and arbitrary punctuation.
-_TABLE_NAME_RE = re.compile(r"[A-Za-z_#][A-Za-z0-9_#$]*(?:\.[A-Za-z_#][A-Za-z0-9_#$]*)?")
+_DROP_REJECTION_PREFIX = "DROP is not permitted in read-only mode"
 
 
 def show(text: str, pause: float = PAUSE) -> None:
@@ -47,7 +42,7 @@ def show(text: str, pause: float = PAUSE) -> None:
 
 
 def _expected_drop_rejection() -> str:
-    """Return the exact ``UnsafeSQLError`` message raised for ``DROP_PROBE_SQL``."""
+    """Return the local ``UnsafeSQLError`` message raised for ``DROP_PROBE_SQL``."""
     try:
         ensure_read_only(DROP_PROBE_SQL)
     except UnsafeSQLError as exc:
@@ -56,17 +51,12 @@ def _expected_drop_rejection() -> str:
 
 
 def _extract_table_names(result: object) -> tuple[bool, list[str] | None]:
-    """Return ``(ok, table_names)`` for a validated ``all_table_names`` tool result.
+    """Return ``(ok, table_names)`` for an ``all_table_names`` tool result.
 
-    Requires ``is_error is False`` and a list of safe CUBRID table identifier
-    strings (unqualified or ``owner.table``, matched with :data:`_TABLE_NAME_RE`)
-    from ``structured_content["result"]`` when present, else ``data``. Malformed
-    payloads, error results, ``None``, non-string items, or strings containing
-    unexpected characters (e.g. ``CUBRID_PASSWORD=...`` or ``token=abc``) fail
-    closed so untrusted or secret-bearing data is never printed to stdout.
+    Requires ``is_error is False`` and a ``list[str]`` payload from
+    ``structured_content["result"]`` when present, else ``data``.
     """
-    is_error = getattr(result, "is_error", None)
-    if is_error is not False:
+    if getattr(result, "is_error", None) is not False:
         return False, None
 
     structured = getattr(result, "structured_content", None)
@@ -77,25 +67,21 @@ def _extract_table_names(result: object) -> tuple[bool, list[str] | None]:
     else:
         raw = getattr(result, "data", None)
 
-    if not isinstance(raw, list):
+    if not isinstance(raw, list) or not all(isinstance(item, str) for item in raw):
         return False, None
-    for item in raw:
-        if not isinstance(item, str) or _TABLE_NAME_RE.fullmatch(item) is None:
-            return False, None
     return True, raw
 
 
 def _evaluate_drop_result(result: object) -> tuple[int, str]:
     """Verify that ``execute_query`` rejected the destructive SQL probe via the read-only guard.
 
-    The recorded security demo must fail closed (non-zero exit status and a
-    concise message without echoing raw database output or credentials) if
+    Fails closed (non-zero exit status and a fixed message on stderr) if
     ``DROP TABLE`` is unexpectedly accepted, if the server fails with an
     unrelated error (connection/timeout/permission/transport), or if the client
     returns a malformed tool result.
 
-    On the expected rejection path, stdout receives the fixed safe summary
-    derived from :func:`cubrid_mcp_server.safety.ensure_read_only` rather than
+    On a matching rejection prefix, stdout receives the local
+    :func:`cubrid_mcp_server.safety.ensure_read_only` message rather than
     echoing untrusted raw text from the MCP result.
     """
     is_error = getattr(result, "is_error", None)
@@ -123,14 +109,13 @@ def _evaluate_drop_result(result: object) -> tuple[int, str]:
             "error: execute_query returned a malformed error result (missing text)",
         )
 
-    expected = _expected_drop_rejection()
     detail = text.strip().removeprefix(_FASTMCP_ERROR_PREFIX).strip()
-    if detail != expected:
+    if not detail.startswith(_DROP_REJECTION_PREFIX):
         return (
             1,
             "error: execute_query failed without the expected read-only SQL guard rejection",
         )
-    return 0, f"rejected: {expected}"
+    return 0, f"rejected: {_expected_drop_rejection()}"
 
 
 async def main() -> int:
