@@ -134,6 +134,21 @@ def test_missing_junit_is_incomplete_after_success_and_fail_after_failure(tmp_pa
             b'<?xml version="1.0" encoding="unknown-codec"?>'
             b"<testsuites><testsuite><testcase name='p'/></testsuite></testsuites>"
         ),
+        (
+            '<?xml version="1.0" encoding="UTF-16"?>'
+            '<!DOCTYPE testsuites [<!ENTITY x "EXPANDED">]>'
+            '<testsuites><testsuite><testcase name="&x;"/></testsuite></testsuites>'
+        ).encode("utf-16"),
+        (
+            '<?xml version="1.0" encoding="UTF-16"?>'
+            '<!DOCTYPE testsuites [<!ENTITY x "EXPANDED">]>'
+            '<testsuites><testsuite><testcase name="&x;"/></testsuite></testsuites>'
+        ).encode("utf-16-le"),
+        (
+            '<?xml version="1.0" encoding="UTF-16"?>'
+            '<!DOCTYPE testsuites [<!ENTITY x "EXPANDED">]>'
+            '<testsuites><testsuite><testcase name="&x;"/></testsuite></testsuites>'
+        ).encode("utf-16-be"),
     ],
     ids=[
         "doctype",
@@ -143,6 +158,9 @@ def test_missing_junit_is_incomplete_after_success_and_fail_after_failure(tmp_pa
         "nul-byte",
         "invalid-bytes",
         "unknown-codec",
+        "utf16-bom-dtd",
+        "utf16-le-dtd",
+        "utf16-be-dtd",
     ],
 )
 def test_junit_with_dtd_entity_nul_or_invalid_bytes_never_passes(
@@ -178,8 +196,25 @@ def test_junit_with_declared_non_utf8_encoding_passes(tmp_path: Path) -> None:
         b"<!ENTITY xxe '1'><coverage line-rate='0.99'/>",
         b"\xff\xfe<coverage line-rate='0.99'/>",
         b'<?xml version="1.0" encoding="unknown-codec"?><coverage line-rate="0.99"/>',
+        '<?xml version="1.0" encoding="UTF-16"?><!DOCTYPE coverage><coverage line-rate="0.99"/>'.encode(
+            "utf-16"
+        ),
+        '<?xml version="1.0" encoding="UTF-16"?><!DOCTYPE coverage><coverage line-rate="0.99"/>'.encode(
+            "utf-16-le"
+        ),
+        '<?xml version="1.0" encoding="UTF-16"?><!DOCTYPE coverage><coverage line-rate="0.99"/>'.encode(
+            "utf-16-be"
+        ),
     ],
-    ids=["doctype", "entity", "invalid-bytes", "unknown-codec"],
+    ids=[
+        "doctype",
+        "entity",
+        "invalid-bytes",
+        "unknown-codec",
+        "utf16-bom-dtd",
+        "utf16-le-dtd",
+        "utf16-be-dtd",
+    ],
 )
 def test_coverage_with_dtd_entity_or_invalid_bytes_is_omitted(
     tmp_path: Path, payload: bytes
