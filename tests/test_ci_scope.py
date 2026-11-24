@@ -458,7 +458,7 @@ def _plan(**env: str) -> dict[str, str]:
         # A release must stay full even if a scope/cron would select corners.
         {"RELEASE_SHA": "a" * 40, "EVENT": "schedule", "CRON": "0 3 * * 1-6"},
         {"RELEASE_SHA": "a" * 40, "EVENT": "workflow_dispatch", "DISPATCH_SCOPE": "corners"},
-        # A release call from the recovery dispatch of publish-pypi.yml.
+        # A release call from the recovery dispatch of publish.yml.
         {"RELEASE_SHA": "a" * 40, "EVENT": "workflow_dispatch"},
         {"EVENT": "schedule", "CRON": "0 3 * * 0"},
         # #417: the removed weekday cron string no longer selects corners.
@@ -505,7 +505,7 @@ def test_full_matrix_result_fails_closed() -> None:
 
 
 def test_release_still_gates_on_the_full_matrix() -> None:
-    release = load("publish-pypi.yml")
+    release = load("publish.yml")
     assert release["jobs"]["matrix"]["uses"] == "./.github/workflows/integration-full.yml"
     assert "matrix" in release["jobs"]["build"]["needs"]
 
@@ -555,7 +555,7 @@ def test_matrix_cells_record_the_image_they_ran() -> None:
     [
         ("schedule", "", True),
         ("workflow_dispatch", "", True),
-        # Under workflow_call github.event_name is the caller's event; publish-pypi.yml
+        # Under workflow_call github.event_name is the caller's event; publish.yml
         # always passes the release SHA, so no release run starts the advisory job.
         ("push", "a" * 40, False),
         ("workflow_dispatch", "a" * 40, False),

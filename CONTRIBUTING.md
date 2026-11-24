@@ -6,6 +6,34 @@ enforces, and how to run the integration suite against a live CUBRID.
 
 This repository's own issue, pull request, review and release procedures are described below. For conduct and vulnerability reporting, use the local [Code of Conduct](CODE_OF_CONDUCT.md) and [Security Policy](SECURITY.md). Do not assume external organization instructions are inherited by this repository.
 
+
+## Suggest improvements and credit problem discovery
+
+We welcome **issues proposed by users**, not only pull requests solving
+maintainer-written tasks. Confusing documentation or setup, missing regression
+tests, unexpected behavior, error messages, accessibility and usability
+problems are all useful observations. Open an **Improvement Idea** from
+[New issue](https://github.com/cubrid-lab/cubrid-mcp-server/issues/new/choose); one
+clear observation is sufficient. You do not have to identify the root cause,
+write code, design a solution or supply acceptance criteria just to report it.
+The maintainer will assess duplication, evidence, scope, priority and
+testable completion conditions during triage.
+
+Search for similar reports when practical; do not include secrets, private
+data or security vulnerabilities in public issues. An idea is not permission
+to change public APIs or skip design, CI, security or release reviews.
+A separate issue is **not compulsory solely to precede a small PR** where
+this repository's contribution and implementation rules permit direct PRs.
+Check open PRs, owners and existing issue claims before coding.
+
+When a community report leads to a fix, link the originating issue and
+acknowledge its verified reporter **as a reporter** in PR discussion. Keep
+verified code-author/co-author credits separate, respecting the existing
+release-note credit style and publication checks. When relevant, a curated
+release note may distinguish `reported by @handle` from the implementation
+author; do not invent identities, credit bots as people, or make this a
+mandatory boilerplate field.
+
 ## Prerequisites
 
 - Python 3.11 or later
@@ -259,7 +287,7 @@ the `integration` marker.
 | `integration-full.yml` | `test_ci_scope.py`, `test_latest_server.py`, `test_release_workflows.py`, `test_workflow_installs.py`, `test_workflow_timeouts.py`, plus a **manual `workflow_dispatch` on the PR head, linked from the PR** (not automated; the release gate depends on it) | Unit (3.12) |
 | `pr-title.yml` | Runs itself on the PR; `test_pr_title.py` | Unit (3.12) |
 | `release-please.yml` | `test_release_workflows.py`, `test_release_please_config.py`, `test_workflow_timeouts.py` | Unit (3.12) |
-| `publish-pypi.yml` | `test_release_workflows.py`, `test_pypi_duplicate_guard.py`, `test_prepare_release.py`, `test_workflow_timeouts.py` | Unit (3.12) |
+| `publish.yml` | `test_release_workflows.py`, `test_pypi_duplicate_guard.py`, `test_prepare_release.py`, `test_workflow_timeouts.py` | Unit (3.12) |
 | `upstream-canary.yml` | The all-workflow scans (`test_ci_policy.py`, `test_workflow_timeouts.py`), plus a **manual `workflow_dispatch` on the PR head, linked from the PR** | Unit (3.12) |
 
 If the same PR also edits `pyproject.toml`, `lowest-direct` and the endpoint lanes
@@ -328,7 +356,7 @@ Every executing job sets an integer `timeout-minutes` instead of GitHub's
 docs/release helpers, live lanes, `lowest-direct` and the upstream canaries, and 30
 for the unit lane (observed maximum 8.6).
 Jobs that call a reusable workflow cannot set a timeout; the repo-local callee
-(`publish-pypi.yml` → `integration-full.yml`) is covered through its own jobs, and the
+(`publish.yml` → `integration-full.yml`) is covered through its own jobs, and the
 externally owned callees (the org CodeQL workflow and the cookbook smoke test) are
 an explicit allowlist. `tests/test_workflow_timeouts.py` parses every workflow and
 fails when an executing job lacks a bounded timeout, when a new external caller is
@@ -340,7 +368,7 @@ The full Python {3.11–3.14} × CUBRID {10.2, 11.0, 11.2, 11.4} matrix lives in
 `.github/workflows/integration-full.yml`. It runs weekly (Sunday 03:00 UTC), on
 manual dispatch (`scope` = `full` (default) or `corners`, Python 3.11 × CUBRID 10.2
 and Python 3.14 × CUBRID 11.4), and always in full as the release gate
-(`publish-pypi.yml` calls it at the release commit; a release run that is not full
+(`publish.yml` calls it at the release commit; a release run that is not full
 or not fully green blocks publication). The advisory upstream canaries
 (`upstream-canary.yml`, pycubrid@main and latest FastMCP) run weekly on Monday.
 
@@ -352,7 +380,7 @@ Which CUBRID versions run on which event (#417):
 | Push to `main` | 11.4 only, with the Python 3.11/3.12/3.14 unit lanes and `lowest-direct` |
 | Weekly schedule (Sunday) | The full 4 × 4 matrix, plus the advisory newest-image check below |
 | Manual `integration-full.yml` dispatch | The full 4 × 4 matrix (or the two corners when asked), plus the newest-image check |
-| Release (`workflow_call` from `publish-pypi.yml`) | The full 4 × 4 matrix, fail-closed; never the advisory check |
+| Release (`workflow_call` from `publish.yml`) | The full 4 × 4 matrix, fail-closed; never the advisory check |
 
 So a push to `main` is representative 11.4 evidence; every-version evidence comes
 from the PR lanes its paths selected, the weekly run and the release gate. Until
@@ -410,7 +438,7 @@ an issue, not a pull request:
   [Agent-authored PR review requirements](#agent-authored-pr-review-requirements).
 - **No bypass actor.** The rules also apply to administrators. No workflow pushes
   to `main`: `release-please.yml` pushes only to its `release-please--branches--main`
-  branch and opens a pull request, `publish-pypi.yml` creates only `v*` tags and the
+  branch and opens a pull request, `publish.yml` creates only `v*` tags and the
   GitHub Release, and `dependabot-auto-merge.yml` merges through the pull request
   with the same required checks.
 
@@ -487,6 +515,17 @@ cutoff gating, only `SECTION_POLICY_CUTOFF` differs. Security
 fixes use a `fix:` title plus the `security` label and go under `Security`. Do **not**
 bump the version yourself; maintainers cut releases following
 [`RELEASING.md`](RELEASING.md).
+
+## PR review outcomes
+
+Use the same decision labels for every PR, whether human-authored or AI-assisted:
+
+- **`APPROVE`** a reviewed, non-blocking change; optional suggestions can accompany approval instead of delaying it.
+- **`REQUEST_CHANGES`** for an actionable must-fix defect, with the affected code and required correction clearly identified.
+- **`COMMENT`** when asking a question or when a review is not yet decisive. The author cannot approve their own PR; never imply an AI review is an independent human approval.
+- Code approval and GitHub Actions **run approval** are separate. `action_required`, pending, failed or stale required CI checks do not permit merge, even if a code review is approved. Confirm final-head CI, resolved blocking findings, applicable independent/security/integration requirements and the maintainer's merge decision before merging.
+
+See [AGENTS.md — PR review outcomes](AGENTS.md#pr-review-outcomes-common-decision-rules). Existing repository-specific branch, release, security and required-review safeguards continue to apply.
 
 ## Pull request review and validation
 

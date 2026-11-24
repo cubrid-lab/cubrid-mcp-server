@@ -34,7 +34,7 @@ Run `cubrid-mcp-server --help` or `cubrid-mcp-server --version`. Both exit 0, pr
 
 - **`uvx` not found.** The client launches `uvx cubrid-mcp-server` — install [uv](https://docs.astral.sh/uv/) so `uvx` is on the client's `PATH`, or use an absolute path in the client config (`"command": "/home/you/.local/bin/uvx"`).
 - **Environment variables missing.** `CUBRID_HOST`, `CUBRID_USER`, `CUBRID_PASSWORD`, and `CUBRID_DATABASE` must be present in the client's `env` block — a plain terminal export is not visible to GUI apps like Claude Desktop.
-- **Config file location.** Claude Desktop reads `~/Library/Application Support/Claude/claude_desktop_config.json`; Claude Code reads `.mcp.json` at the project root; Cursor reads `.cursor/mcp.json`. After editing, restart the client.
+- **Config file location.** Claude Desktop reads `~/Library/Application Support/Claude/claude_desktop_config.json` on macOS and `%APPDATA%\Claude\claude_desktop_config.json` on Windows (Settings → Developer → Edit Config opens it); Claude Code reads `.mcp.json` at the project root; Cursor reads `.cursor/mcp.json`. After editing, restart the client.
 
 ## Server shows as connected, but every tool fails
 
