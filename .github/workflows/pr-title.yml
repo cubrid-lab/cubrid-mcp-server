@@ -9,6 +9,7 @@ name: PR title
 # requests: `gh api` lists the PR's commit messages into a file that is read as
 # data only. Also rejects foreign-issue closing keywords in the PR body, and in
 # the title and commit messages, which make up the squash commit.
+# PR_AUTHOR is GitHub's login for the PR author, which the PR cannot set.
 # The job name "PR title" is the required-status-check context; keep it stable.
 
 on:
@@ -33,6 +34,7 @@ jobs:
         env:
           PR_TITLE: ${{ github.event.pull_request.title }}
           PR_BODY: ${{ github.event.pull_request.body }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           PR_COMMIT_COUNT: ${{ github.event.pull_request.commits }}
           GH_TOKEN: ${{ github.token }}
@@ -271,6 +273,14 @@ jobs:
               re.I | re.A,
           )
           local_repo = os.environ.get("GITHUB_REPOSITORY", "").lower()
+          # Dependabot quotes upstream release notes in its PR body and rewrites
+          # their issue links to redirect.github.com. GitHub does not take that
+          # host as a closing reference, so the link closes nothing whoever merges
+          # (#1119). Only such a link is ignored, only from the exact bot login,
+          # which no user can register, and only in the body and outside this
+          # owner. Plain references and github.com links stay checked.
+          upstream_notes = os.environ.get("PR_AUTHOR") == "dependabot[bot]"
+          local_owner = local_repo.split("/")[0]
           # (Foreign issue, where) -> "direct" or "link", in the order found.
           found = {}
           where = "PR body"
@@ -281,6 +291,13 @@ jobs:
                   key = (f"{target}#{number.lstrip('0') or '0'}", where)
                   if found.get(key) != "direct":
                       found[key] = how
+
+          def display_only(text: str, start: int, owner: str) -> bool:
+              # Dependabot's rewritten upstream link, which closes nothing.
+              host = "://redirect.github.com/"
+              before = text[max(0, start - len(host)) : start].lower()
+              in_notes = upstream_notes and where == "PR body"
+              return in_notes and owner.lower() != local_owner and before == host
 
           def gap_ends(text: str, start: int, seen: set, scanned: dict) -> tuple[list, bool]:
               # New positions reachable from start over spaces, a colon, emphasis,
@@ -374,7 +391,8 @@ jobs:
                       owner = match["owner"]
                       if owner == "..":
                           owner = local_repo.split("/")[0]
-                      note(owner, match["repo"], match["number"], "link")
+                      if not display_only(text, match.start(), owner):
+                          note(owner, match["repo"], match["number"], "link")
 
           def without_markup(text: str, instruction_end: str, cdata_end: str) -> str:
               hidden = (

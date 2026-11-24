@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### CI
 
+- **Dependabot bodies may quote upstream closures (#623)** — the cross-repository closing guard in `.github/workflows/pr-title.yml` ignores an issue link only when it is on `redirect.github.com`, sits in the PR body, the author is exactly `dependabot[bot]` and the target is outside cubrid-lab, as cubrid-lab/pycubrid#1150 does. Dependabot PRs such as the ruff 0.17.6 bump failed the required `PR title` check on quoted release notes. Plain references, `github.com` links, sibling repositories, the title and the commit messages are still checked.
 - Standardize the package publisher as `publish.yml` with job `publish-production` and environment `production`, including release tooling and recovery documentation ([#611](https://github.com/cubrid-lab/cubrid-mcp-server/issues/611)).
 
 - **List each change once when composing release notes (#506)** — `scripts/compose_release_changelog.py` drops a generated bullet that references the same issue or pull request as a curated `[Unreleased]` entry. Historical release notes are left unchanged.
