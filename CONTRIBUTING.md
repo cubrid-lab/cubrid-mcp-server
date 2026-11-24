@@ -577,8 +577,12 @@ or as a line that only looks like a fence), later fences and comments are
 checked; after anything that may start an HTML tag, even in prose or inline
 code, later comments are checked; and after a raw-text element name such as
 `<textarea>` or `<select>`, nothing is ignored. Inline code and inline comments
-are always checked. External contributors do not need to install internal agent
-tools or create duplicate work.
+are always checked. The one exception is a Dependabot PR body, which quotes
+upstream release notes: a link it rewrote to `redirect.github.com`, which GitHub
+does not take as a closing reference, may name an issue outside cubrid-lab. Its
+other references, its title and its commit messages are checked as usual.
+External contributors do not need to install internal agent tools or create
+duplicate work.
 
 ### Good first issues and contribution claims
 
