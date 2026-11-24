@@ -263,7 +263,7 @@ This section standardizes review **outcomes**, not branch protection, required r
 
 ## Issue triage lifecycle
 
-Every newly opened issue in this repository starts with `status: needs triage`.
+Every newly opened issue in this repository starts with `needs triage`.
 The issue forms include it, and `issues: opened` automation adds it for
 external submissions. Tools using `GITHUB_TOKEN` must supply it at creation,
 as these issue events may not trigger an additional workflow.
@@ -279,7 +279,7 @@ as these issue events may not trigger an additional workflow.
    existing `size: XS/S/M/L/XL`. Split oversized work when it cannot be
    independently verified; keep contributor ownership and unrelated labels.
 4. **Complete:** re-read the saved issue and its actual labels, scope and
-   duplication decision. Remove `status: needs triage` only after checking
+   duplication decision. Remove `needs triage` only after checking
    type, priority, size and relative queue position. If still uncertain, leave
    the label. Do not auto-score severity or auto-remove it from a workflow.
 
@@ -294,7 +294,7 @@ for maintainers), assign exactly one `priority: <value>` label and exactly one
 `size: <value>` label, alongside a type label (`bug`/`enhancement`/`documentation`/`chore`/`ci`/…) and an
 `area:` label when applicable. These must be GitHub labels, not just text in the
 issue title or body. Outside reporters only describe urgency and effort and do not
-need label-write permission; all new issues first get `status: needs triage`
+need label-write permission; all new issues first get `needs triage`
 and receive final priority/size labels during maintainer review.
 
 Issue titles use `type: description` without a module scope; see [CONTRIBUTING.md](CONTRIBUTING.md) and the local issue forms.
@@ -325,7 +325,7 @@ Rules:
 
 1. **Size reflects effort, not importance** — a one-line fix for a critical bug is still `size: XS`.
 2. **Finalize exactly one `priority:` and one `size:` after triage.**
-   Keep `status: needs triage` while the evidence, scope or classification
+   Keep `needs triage` while the evidence, scope or classification
    remains undecided, even if a provisional label already exists.
 3. **`good first issue` should be `size: XS` or `size: S`.** If a good-first-issue grows
    past `size: S`, re-scope it or drop the `good first issue` label.

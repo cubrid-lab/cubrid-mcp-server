@@ -678,7 +678,7 @@ module (already configured to emit on `stderr`) instead.
 Use the issue and PR's actual state as evidence. Classification, authorization,
 implementation, review and completion are **different decisions**:
 
-1. **Intake / triage:** A newly filed issue starts with `status: needs triage`.
+1. **Intake / triage:** A newly filed issue starts with `needs triage`.
    Check evidence or reproduction, duplicate open/closed issues and overlapping
    PRs, repository scope, type, priority, size, dependencies, and verifiable
    acceptance criteria. A maintainer removes the intake label only after
@@ -707,7 +707,7 @@ implementation, review and completion are **different decisions**:
    deferred integration, fault, security or release verification has passed.
 
 **Tracking without boards:** GitHub Issues and pull requests are the only
-workflow tracker. The sole lifecycle label is `status: needs triage` for
+workflow tracker. The sole lifecycle label is `needs triage` for
 unreviewed intake. Once triage is completed, remove that label after checking
 the actual saved issue metadata; do not create `status: ready`, `status: in
 progress`, or other duplicate workflow labels. Record the **Ready** decision,
