@@ -20,7 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### CI
 
 - Standardize the package publisher as `publish.yml` with job `publish-production` and environment `production`, including release tooling and recovery documentation ([#611](https://github.com/cubrid-lab/cubrid-mcp-server/issues/611)).
-
+- **A Dependabot bump of setup-uv passes the workflow install test (#523)** — `tests/test_workflow_installs.py` no longer hard-codes the `astral-sh/setup-uv` commit SHA. It requires every Python job in `ci.yml` and `integration-full.yml` to pin setup-uv to one shared full 40-character commit SHA, so a bump that moves every ref to the same new SHA passes without a test edit, while two different refs, a tag or a short SHA still fail.
 - **List each change once when composing release notes (#506)** — `scripts/compose_release_changelog.py` drops a generated bullet that references the same issue or pull request as a curated `[Unreleased]` entry. Historical release notes are left unchanged.
 
 ## [0.8.0] - 2026-11-05
