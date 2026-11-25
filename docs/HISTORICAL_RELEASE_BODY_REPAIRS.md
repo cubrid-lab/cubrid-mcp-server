@@ -26,7 +26,7 @@ This script does not itself prove historical claims or contributor identities.
 
    The output gives the current remote-body SHA-256, canonical SHA-256 and
    unified diff. A dry-run never writes to GitHub. Record the Release ID,
-   relevant approval, precise expected remote SHA-256 and source commit SHA.
+   relevant approval, both expected body SHA-256 digests and source commit SHA.
 
 ## Separately authorized publication
 
@@ -40,7 +40,8 @@ python3 scripts/reconcile_historical_release_bodies.py \
   --approved-body-only \
   --exclusive-edit-window \
   --source-sha <approved-40-character-main-SHA> \
-  --expected-remote-sha256 <digest-from-reviewed-dry-run> \
+  --expected-remote-sha256 <remote-digest-from-reviewed-dry-run> \
+  --expected-canonical-sha256 <canonical-digest-from-reviewed-dry-run> \
   --backup-dir <existing-secure-backup-location>
 ```
 
@@ -55,6 +56,7 @@ remains blocked**. Do not run the apply example simply because CI passed.
 
 For an authorized apply, the script rejects unexpected source HEAD, dirty
 working tree, unsupported tag, missing approval/digest/backup arguments,
+a canonical extraction that differs from the approved dry-run digest,
 non-public draft, remote body/metadata drift or an existing backup filename.
 It writes and verifies the original remote JSON backup before sending a
 PATCH with **only the `body` field**. It then reads the Release back and
