@@ -126,19 +126,22 @@ def run(args: argparse.Namespace) -> None:
                 args.approved_body_only,
                 args.source_sha,
                 args.expected_remote_sha256,
+                args.expected_canonical_sha256,
                 args.backup_dir,
                 args.exclusive_edit_window,
             )
         ):
             raise ValueError(
                 "apply requires independently approved source SHA, expected "
-                "remote body SHA-256, backup directory, body-only approval and "
+                "remote and canonical body SHA-256, backup directory, body-only approval and "
                 "a maintainer-confirmed exclusive editing window"
             )
         if source_head() != args.source_sha or not source_is_clean():
             raise ValueError("apply needs a clean checkout at the approved SHA")
 
     proposed = canonical_body(args.tag)
+    if args.apply and digest(proposed) != args.expected_canonical_sha256:
+        raise ValueError("Extracted canonical body differs from the reviewed digest")
     public = api(f"repos/{REPO}/releases/tags/{args.tag}")
     check_public(public, args.tag)
     old_body = public["body"]
@@ -201,6 +204,7 @@ def main() -> int:
     parser.add_argument("--exclusive-edit-window", action="store_true")
     parser.add_argument("--source-sha")
     parser.add_argument("--expected-remote-sha256")
+    parser.add_argument("--expected-canonical-sha256")
     parser.add_argument("--backup-dir", type=Path)
     args = parser.parse_args()
     try:
