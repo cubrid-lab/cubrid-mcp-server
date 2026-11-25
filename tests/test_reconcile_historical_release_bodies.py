@@ -53,6 +53,7 @@ def args(tmp_path, **changes):
         "exclusive_edit_window": True,
         "source_sha": "a" * 40,
         "expected_remote_sha256": MODULE.digest("old"),
+        "expected_canonical_sha256": MODULE.digest("new"),
         "backup_dir": tmp_path,
     }
     options.update(changes)
@@ -92,6 +93,25 @@ def test_backup_cannot_overwrite_and_round_trips(tmp_path) -> None:
 def test_apply_without_explicit_approval_aborts_before_network(tmp_path) -> None:
     with pytest.raises(ValueError, match="apply requires"):
         MODULE.run(args(tmp_path, approved_body_only=False))
+
+
+def test_apply_without_canonical_digest_aborts_before_network(tmp_path) -> None:
+    with pytest.raises(ValueError, match="apply requires"):
+        MODULE.run(args(tmp_path, expected_canonical_sha256=None))
+
+
+def test_canonical_digest_mismatch_aborts_before_network(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(MODULE, "canonical_body", lambda tag: "unreviewed")
+    monkeypatch.setattr(MODULE, "source_head", lambda: "a" * 40)
+    monkeypatch.setattr(MODULE, "source_is_clean", lambda: True)
+
+    def unexpected_api(*args, **kwargs):
+        pytest.fail("No API access is allowed for an unreviewed canonical body")
+
+    monkeypatch.setattr(MODULE, "api", unexpected_api)
+    with pytest.raises(ValueError, match="canonical body differs"):
+        MODULE.run(args(tmp_path))
+    assert not list(tmp_path.iterdir())
 
 
 def test_remote_drift_aborts_before_patch(tmp_path, monkeypatch) -> None:
