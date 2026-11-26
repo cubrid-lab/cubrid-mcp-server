@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **A small `CUBRID_MCP_MAX_ROWS` no longer fetches a 100-row batch (#599)** — `Database.fetch_many` now asks the cursor for only the rows still needed plus one lookahead row (never more than 100 per call), so `execute_query` with `CUBRID_MCP_MAX_ROWS=1` fetches 2 rows instead of up to 100. The returned rows, `truncated`, `row_count`, rollback and cursor closing are unchanged, and an unlimited read still fetches 100 rows per call. Offline fake-cursor tests record the requested sizes for limits 1, 2, 99, 100 and 101, an exact-size result and an empty result; no live CUBRID timing was measured.
+
 ### Fixed
 
 - **Ship a self-consistent sdist and the license inventory NOTICE references (#507)** — the source distribution no longer ships a partial `tests/` tree (test modules without `conftest.py` or `helpers.py`). `THIRD_PARTY_LICENSES.md` is included in both the wheel and the sdist so the file NOTICE refers to is present, and the inventory no longer claims the sdist carries the test suite.

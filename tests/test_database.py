@@ -53,6 +53,7 @@ class FakeCursor:
         self.closed = False
         self._fetch_offset = 0
         self.fetchmany_calls = 0
+        self.fetchmany_sizes: list[int] = []
 
     def execute(self, sql: str, params: tuple[Any, ...] = ()) -> None:
         self.executed.append((sql, params))
@@ -62,6 +63,7 @@ class FakeCursor:
 
     def fetchmany(self, size: int) -> list[tuple[Any, ...]]:
         self.fetchmany_calls += 1
+        self.fetchmany_sizes.append(size)
         chunk = self._rows[self._fetch_offset : self._fetch_offset + size]
         self._fetch_offset += size
         return chunk
@@ -790,6 +792,38 @@ def test_fetch_many_stops_fetching_once_truncated(
     db, created = _counting_db(monkeypatch, rows=[(i,) for i in range(row_count)])
     db.fetch_many("SELECT x FROM t", None, max_rows)
     assert created[0].cursors[0].fetchmany_calls == expected_calls
+
+
+@pytest.mark.parametrize(
+    ("row_count", "max_rows", "expected_sizes", "expected_truncated"),
+    [
+        (500, 1, [2], True),  # tiny limit: one row plus one lookahead, not 100
+        (500, 2, [3], True),
+        (500, 99, [100], True),
+        (500, 100, [100, 1], True),  # one full batch, then a single lookahead row
+        (500, 101, [100, 2], True),
+        (1, 1, [2, 1], False),  # exactly one row available is not truncated
+        (100, 100, [100, 1], False),  # exact-size result: the lookahead comes back empty
+        (0, 5, [6], False),  # empty result
+        (250, None, [100, 100, 100, 100], False),  # unbounded keeps 100-row batches
+    ],
+)
+def test_fetch_many_requests_only_needed_rows_plus_lookahead(
+    monkeypatch: pytest.MonkeyPatch,
+    row_count: int,
+    max_rows: int | None,
+    expected_sizes: list[int],
+    expected_truncated: bool,
+) -> None:
+    rows = [(i,) for i in range(row_count)]
+    db, created = _counting_db(monkeypatch, rows=rows)
+    result, truncated = db.fetch_many("SELECT x FROM t", None, max_rows)
+    conn = created[0]
+    assert conn.cursors[0].fetchmany_sizes == expected_sizes
+    assert truncated is expected_truncated
+    assert result == (rows if max_rows is None else rows[:max_rows])
+    assert conn.rollbacks == 1
+    assert conn.cursors[0].closed is True
 
 
 def test_each_read_ends_its_own_transaction(monkeypatch: pytest.MonkeyPatch) -> None:
