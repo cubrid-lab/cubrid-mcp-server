@@ -513,7 +513,10 @@ class Database:
                 rows: list[tuple[Any, ...]] = []
                 truncated = False
                 while not truncated:
-                    batch = cursor.fetchmany(100)
+                    # With a limit, ask only for the rows still needed plus one lookahead
+                    # row, which is enough to decide ``truncated``; never more than 100.
+                    batch_size = 100 if max_rows is None else min(100, max_rows - len(rows) + 1)
+                    batch = cursor.fetchmany(batch_size)
                     if not batch:
                         break
                     for row in batch:
