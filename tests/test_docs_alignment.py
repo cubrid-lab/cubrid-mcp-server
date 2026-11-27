@@ -130,6 +130,87 @@ def test_quickstart_windows_command_example_is_valid_json() -> None:
             command == "C:\\Users\\you\\cubrid-quickstart\\.venv\\Scripts\\cubrid-mcp-server.exe"
         ), page
 
+def _extract_json_fences(text: str) -> list[str]:
+    """Extract raw contents of top-level fenced json blocks, tracking enclosing fence boundaries."""
+    blocks: list[str] = []
+    current: list[str] = []
+    fence_char = ""
+    fence_len = 0
+    in_json = False
+
+    for line in text.splitlines():
+        stripped = line.lstrip(" \t")
+        if fence_len == 0:
+            match = re.match(r"^(`{3,}|~{3,})(.*)$", stripped)
+            if match:
+                marker, info = match.groups()
+                fence_char = marker[0]
+                fence_len = len(marker)
+                lang = info.strip().split()[0].lower() if info.strip() else ""
+                in_json = lang == "json"
+                current = []
+        else:
+            close_match = re.match(rf"^{re.escape(fence_char)}{{{fence_len},}}[ \t]*$", stripped)
+            if close_match:
+                if in_json:
+                    blocks.append("\n".join(current))
+                fence_char = ""
+                fence_len = 0
+                in_json = False
+                current = []
+            elif in_json:
+                current.append(line)
+
+    return blocks
+
+
+def _assert_valid_json_fences(page: str, text: str) -> list[object]:
+    """Parse every fenced json block in ``text`` and fail with block index on syntax errors."""
+    blocks = _extract_json_fences(text)
+    assert blocks, f"{page} has no fenced json blocks"
+    parsed: list[object] = []
+    for index, block in enumerate(blocks, start=1):
+        try:
+            parsed.append(json.loads(block))
+        except json.JSONDecodeError as exc:
+            raise AssertionError(f"{page} fenced json block #{index} is invalid JSON: {exc}") from exc
+    return parsed
+
+
+def test_tools_reference_json_examples_are_valid_json() -> None:
+    """Every fenced json result example in English and Korean TOOLS.md must parse cleanly (#601)."""
+    for page, text in RESOURCE_PAGES.items():
+        _assert_valid_json_fences(page, text)
+
+    nested_non_json = (
+        "````markdown\n"
+        "```json\n"
+        "{not valid json}\n"
+        "```\n"
+        "````\n"
+    )
+    assert _extract_json_fences(nested_non_json) == []
+
+    malformed_doc = '### Example\n\n```json\n{"ok": true,}\n```\n'
+    try:
+        _assert_valid_json_fences("docs/TOOLS.md", malformed_doc)
+    except AssertionError:
+        pass
+    else:
+        raise AssertionError("Expected malformed fenced json block to fail validation")
+
+
+def test_json_fence_validator_rejects_malformed_block() -> None:
+    """Proves the validator fails on broken JSON, so the main test cannot pass silently (#601)."""
+    sample = '### Example\n\n```json\n{"ok": true,}\n```\n'
+    assert len(_extract_json_fences(sample)) == 1, "extractor must find the sample fence"
+    try:
+        _assert_valid_json_fences("sample.md", sample)
+    except AssertionError as exc:
+        assert "invalid JSON" in str(exc), str(exc)
+    else:
+        raise AssertionError("malformed json block was accepted")
+
 
 async def test_tools_md_lists_every_tool_and_prompt_and_resource() -> None:
     async with Client(server.mcp) as client:
@@ -269,7 +350,6 @@ def test_readme_optional_settings_match_config_defaults() -> None:
 
 
 def test_changelog_lint_rejects_duplicate_subsection_heading(tmp_path: Path) -> None:
-
     script = ROOT / "scripts" / "lint_changelog.py"
     scripts_dir = tmp_path / "scripts"
     scripts_dir.mkdir()
