@@ -143,6 +143,7 @@ async def test_tools_md_lists_every_tool_and_prompt_and_resource() -> None:
     tools.add("execute_write")
     for name in tools:
         assert f"#### `{name}(" in TOOLS_MD, f"tool {name} missing from docs/TOOLS.md"
+        assert f"#### `{name}(" in TOOLS_KO, f"tool {name} missing from docs/ko/TOOLS.md"
     for page, section in PROMPT_SECTIONS.items():
         for name in prompts:
             assert f"| `{name}` |" in section, f"prompt {name} missing from {page} Prompts section"
