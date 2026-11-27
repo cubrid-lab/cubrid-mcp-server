@@ -387,6 +387,9 @@ def table_row_counts(
                 f"too many tables requested ({len(targets)}); limit is {limit} per call"
             )
     results: list[dict[str, Any]] = []
+    # Request-local: a name repeated in one call (in any spelling) is counted once and
+    # reported once per requested name. Nothing is kept between calls or connections.
+    counted: dict[_Table, dict[str, Any]] = {}
     for name in targets:
         try:
             resolved = _match_table(known, name, connection)
@@ -396,17 +399,23 @@ def table_row_counts(
         if resolved is None:
             results.append({"table": name, "row_count": None, "error": "unknown table"})
             continue
+        if resolved in counted:
+            results.append(dict(counted[resolved]))
+            continue
         quoted = _quote_ident(resolved.name)
         if resolved.owner is not None:
             quoted = _quote_ident(resolved.owner) + "." + quoted
         try:
             rows = _db(connection).fetch_all("SELECT COUNT(*) FROM " + quoted)
-            results.append({"table": resolved.display, "row_count": int(rows[0][0]) if rows else 0})
+            entry: dict[str, Any] = {
+                "table": resolved.display,
+                "row_count": int(rows[0][0]) if rows else 0,
+            }
         except Exception as exc:
             logger.error("row count failed for table %s", resolved.display, exc_info=exc)
-            results.append(
-                {"table": resolved.display, "row_count": None, "error": sanitize_error(exc)}
-            )
+            entry = {"table": resolved.display, "row_count": None, "error": sanitize_error(exc)}
+        counted[resolved] = entry
+        results.append(dict(entry))
     return {"tables": results, "truncated": truncated, "total_tables": len(known)}
 
 

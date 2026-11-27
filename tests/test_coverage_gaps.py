@@ -234,6 +234,108 @@ def test_table_row_counts_honors_configured_limit(monkeypatch: pytest.MonkeyPatc
     assert len(server.table_row_counts(db.names[:3])["tables"]) == 3
 
 
+class _OwnedTablesDB:
+    """Owner-qualified catalog (CUBRID 11.2+) that counts each COUNT(*) it receives."""
+
+    def __init__(self, fail_on: str | None = None) -> None:
+        self.counted: list[str] = []
+        self.fail_on = fail_on
+
+    def owner_qualified_names(self) -> bool:
+        return True
+
+    def fetch_all(self, sql: str, params: tuple[Any, ...] | None = None) -> list[tuple[Any, ...]]:
+        if "db_class" in sql:
+            return [("users", "ALICE"), ("users", "BOB"), ("orders", "ALICE")]
+        self.counted.append(sql)
+        if self.fail_on is not None and self.fail_on in sql:
+            raise RuntimeError("count failed")
+        return [(7 if "ALICE" in sql and "users" in sql else 3,)]
+
+
+def test_table_row_counts_counts_a_repeated_name_once(monkeypatch: pytest.MonkeyPatch) -> None:
+    db = _ManyTablesDB(3)
+    monkeypatch.setattr(server, "_db", lambda connection=None: db)
+    monkeypatch.setattr(server, "_cfg", lambda connection=None: _TEST_CONFIG)
+
+    result = server.table_row_counts(["t001", "t001", " T001 ", "t000"])
+
+    assert len(db.counted) == 2
+    assert result["tables"] == [
+        {"table": "t001", "row_count": 1},
+        {"table": "t001", "row_count": 1},
+        {"table": "t001", "row_count": 1},
+        {"table": "t000", "row_count": 1},
+    ]
+    assert result["truncated"] is False
+    assert result["total_tables"] == 3
+
+
+def test_table_row_counts_result_entries_are_independent(monkeypatch: pytest.MonkeyPatch) -> None:
+    db = _ManyTablesDB(1)
+    monkeypatch.setattr(server, "_db", lambda connection=None: db)
+    monkeypatch.setattr(server, "_cfg", lambda connection=None: _TEST_CONFIG)
+
+    first, second = server.table_row_counts(["t000", "t000"])["tables"]
+    first["row_count"] = 99
+
+    assert second["row_count"] == 1
+
+
+def test_table_row_counts_keeps_same_name_of_different_owners_separate(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    db = _OwnedTablesDB()
+    monkeypatch.setattr(server, "_db", lambda connection=None: db)
+    monkeypatch.setattr(server, "_cfg", lambda connection=None: _TEST_CONFIG)
+
+    result = server.table_row_counts(["alice.users", "bob.users", "ALICE.USERS", "bob.users"])
+
+    assert len(db.counted) == 2
+    assert [(r["table"], r["row_count"]) for r in result["tables"]] == [
+        ("alice.users", 7),
+        ("bob.users", 3),
+        ("alice.users", 7),
+        ("bob.users", 3),
+    ]
+
+
+def test_table_row_counts_repeats_errors_and_unknown_names_in_order(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    db = _OwnedTablesDB(fail_on='"orders"')
+    monkeypatch.setattr(server, "_db", lambda connection=None: db)
+    monkeypatch.setattr(server, "_cfg", lambda connection=None: _TEST_CONFIG)
+
+    result = server.table_row_counts(["orders", "ghost", "orders", "ghost", "users"])
+
+    # "orders" fails once and the failure is reported for both requests; "users" is
+    # ambiguous (two owners), so it is an error entry that never reaches COUNT.
+    assert len(db.counted) == 1
+    assert [
+        (r["table"], r.get("row_count"), r.get("error") is not None) for r in result["tables"]
+    ] == [
+        ("alice.orders", None, True),
+        ("ghost", None, True),
+        ("alice.orders", None, True),
+        ("ghost", None, True),
+        ("users", None, True),
+    ]
+    assert result["tables"][1]["error"] == "unknown table"
+    assert "ambiguous table name" in result["tables"][4]["error"]
+
+
+def test_table_row_counts_does_not_cache_between_calls(monkeypatch: pytest.MonkeyPatch) -> None:
+    db = _ManyTablesDB(1)
+    monkeypatch.setattr(server, "_db", lambda connection=None: db)
+    monkeypatch.setattr(server, "_cfg", lambda connection=None: _TEST_CONFIG)
+
+    server.table_row_counts(["t000"])
+    server.table_row_counts(["t000"])
+
+    assert len(db.counted) == 2
+
+
 # ---------------------------------------------------------------------------
 # _coerce oversized binary summary
 # ---------------------------------------------------------------------------
