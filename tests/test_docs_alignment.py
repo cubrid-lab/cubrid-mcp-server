@@ -130,6 +130,46 @@ def test_quickstart_windows_command_example_is_valid_json() -> None:
             command == "C:\\Users\\you\\cubrid-quickstart\\.venv\\Scripts\\cubrid-mcp-server.exe"
         ), page
 
+def _extract_json_fences(text: str) -> list[str]:
+    """Extract raw contents of fenced json blocks, ignoring other languages."""
+    fence = "`" * 3
+    pattern = rf"^[ \t]*{fence}json[ \t]*\r?\n(.*?)\r?\n[ \t]*{fence}[ \t]*$"
+    return re.findall(pattern, text, re.MULTILINE | re.DOTALL)
+
+
+def _assert_valid_json_fences(page: str, text: str) -> list[object]:
+    """Parse every fenced ```json block in ``text``; fail with the block index on syntax errors."""
+    blocks = _extract_json_fences(text)
+    assert blocks, f"{page} has no fenced json blocks"
+    parsed: list[object] = []
+    for index, block in enumerate(blocks, start=1):
+        try:
+            parsed.append(json.loads(block))
+        except json.JSONDecodeError as exc:
+            raise AssertionError(
+                f"{page} fenced json block #{index} is invalid JSON: {exc}"
+            ) from exc
+    return parsed
+
+
+def test_tools_reference_json_examples_are_valid_json() -> None:
+    """Every fenced json result example in English and Korean TOOLS.md must parse (#601)."""
+    for page, text in RESOURCE_PAGES.items():
+        parsed = _assert_valid_json_fences(page, text)
+        assert len(parsed) == 13, f"{page} expected 13 fenced json examples, found {len(parsed)}"
+
+
+def test_json_fence_validator_rejects_malformed_block() -> None:
+    """Proves the validator fails on broken JSON, so the main test cannot pass silently (#601)."""
+    sample = '### Example\n\n```json\n{"ok": true,}\n```\n'
+    assert len(_extract_json_fences(sample)) == 1, "extractor must find the sample fence"
+    try:
+        _assert_valid_json_fences("sample.md", sample)
+    except AssertionError as exc:
+        assert "invalid JSON" in str(exc), str(exc)
+    else:
+        raise AssertionError("malformed json block was accepted")
+
 
 async def test_tools_md_lists_every_tool_and_prompt_and_resource() -> None:
     async with Client(server.mcp) as client:
@@ -269,7 +309,6 @@ def test_readme_optional_settings_match_config_defaults() -> None:
 
 
 def test_changelog_lint_rejects_duplicate_subsection_heading(tmp_path: Path) -> None:
-
     script = ROOT / "scripts" / "lint_changelog.py"
     scripts_dir = tmp_path / "scripts"
     scripts_dir.mkdir()
