@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **`table_row_counts` counts a table once per call (#600)** — a name repeated in one `table_names` list, in any spelling (`users`, ` USERS `, `alice.users`), now issues one `COUNT(*)` instead of one per repetition. The response is unchanged: one entry per requested name, in the requested order, with the same `row_count`, `error`, `truncated` and `total_tables`. The reuse lasts only for that call, same-named tables of different owners stay separate, and nothing is cached between calls or connections. Offline fake-database tests cover repeats, owners, repeated errors and unknown names; no live CUBRID timing was measured.
+
 ### Fixed
 
 - **Ship a self-consistent sdist and the license inventory NOTICE references (#507)** — the source distribution no longer ships a partial `tests/` tree (test modules without `conftest.py` or `helpers.py`). `THIRD_PARTY_LICENSES.md` is included in both the wheel and the sdist so the file NOTICE refers to is present, and the inventory no longer claims the sdist carries the test suite.
