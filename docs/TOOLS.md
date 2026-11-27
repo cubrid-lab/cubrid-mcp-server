@@ -24,6 +24,8 @@ The table, schema and index examples ran on this schema as created. Two writes r
 
 Each response is the tool's JSON text content, pretty-printed. Values such as `server_version` and serial values depend on your server.
 
+These examples were captured in a controlled documentation fixture: a write-enabled session (`CUBRID_MCP_WRITE=1`) running as `dba`. That is not the default or recommended MCP account. For normal use, run the server as a least-privilege `mcp_reader` account, as in the [Quick Start](quickstart.md#step-3-prepare-the-sample-table-and-the-read-only-account) and the [Security Model](SECURITY_MODEL.md#layer-1).
+
 ### Schema inspection
 
 **Table names and owners.** From CUBRID 11.2 on, two users may each own a table with the same name. On those servers the tools return table names as `owner.table` (owner in lower case, for example `dba.product`) and select metadata by owner and table name. A `table_name` argument may be `owner.table` or just `table`. An unqualified name matches a table of that name owned by anyone. If several owners have one, the configured user's own table is used, as CUBRID does for an unqualified name in SQL; otherwise the call fails with `ambiguous table name '…'; qualify it with the owner: …`. `filter_table_names` matches its substring against `owner.table`. On CUBRID 10.2 and 11.0 table names are unique in the database, so names are returned and matched without an owner, as before. The examples below ran on 11.4 as `dba`.
