@@ -26,6 +26,8 @@ CREATE SERIAL order_no START WITH 1000 INCREMENT BY 10;
 
 각 응답은 도구의 JSON 텍스트 콘텐츠를 보기 좋게 정렬한 것입니다. `server_version`이나 시리얼 값 등은 서버에 따라 다릅니다.
 
+이 예시는 통제된 문서 수집 환경에서 캡처했습니다. 즉 `CUBRID_MCP_WRITE=1`이 켜진 세션을 `dba`로 실행한 결과이며, 기본값이나 권장 MCP 계정이 아닙니다. 일반적인 사용에서는 [빠른 시작](quickstart.md#step-3-prepare-the-sample-table-and-the-read-only-account)과 [보안 모델](SECURITY_MODEL.md#layer-1)에서처럼 최소 권한 `mcp_reader` 계정으로 서버를 실행하세요.
+
 ### 스키마 조회
 
 **테이블 이름과 소유자.** CUBRID 11.2부터는 여러 사용자가 같은 이름의 테이블을 각자 소유할 수 있습니다. 이런 서버에서 도구는 테이블 이름을 `owner.table`(소유자는 소문자, 예: `dba.product`)로 반환하고, 메타데이터를 소유자와 테이블 이름으로 선택합니다. `table_name` 인수는 `owner.table`이나 `table`만 쓸 수 있습니다. 소유자 없는 이름은 누가 소유하든 그 이름의 테이블과 일치합니다. 여러 소유자에게 같은 이름이 있으면 SQL에서 CUBRID가 하듯 설정된 사용자 자신의 테이블을 쓰고, 그렇지 않으면 `ambiguous table name '…'; qualify it with the owner: …` 오류로 실패합니다. `filter_table_names`는 부분 문자열을 `owner.table`과 비교합니다. CUBRID 10.2와 11.0에서는 테이블 이름이 데이터베이스 안에서 유일하므로 이전처럼 소유자 없이 반환하고 비교합니다. 아래 예시는 11.4에서 `dba`로 실행했습니다.
