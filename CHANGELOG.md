@@ -23,6 +23,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **List each change once when composing release notes (#506)** — `scripts/compose_release_changelog.py` drops a generated bullet that references the same issue or pull request as a curated `[Unreleased]` entry. Historical release notes are left unchanged.
 
+### Tests
+
+- **Korean tools reference lists every registered MCP tool (#576)** — the docs-alignment test now checks each tool heading in `docs/ko/TOOLS.md` as well as in `docs/TOOLS.md`, still using the existing `####` format and the `execute_write` opt-in exception. Prompt and resource checks are unchanged. Test only; tool contracts are unchanged.
+
 ## [0.8.0] - 2026-11-05
 
 ### Added
