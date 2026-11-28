@@ -130,6 +130,101 @@ def test_quickstart_windows_command_example_is_valid_json() -> None:
             command == "C:\\Users\\you\\cubrid-quickstart\\.venv\\Scripts\\cubrid-mcp-server.exe"
         ), page
 
+def _extract_json_fences(text: str) -> list[str]:
+    """Extract raw contents of top-level fenced json blocks, tracking enclosing fence boundaries."""
+    blocks: list[str] = []
+    current: list[str] = []
+    fence_char = ""
+    fence_len = 0
+    in_json = False
+
+    for line in text.splitlines():
+        stripped = line.lstrip(" \t")
+        if fence_len == 0:
+            match = re.match(r"^(`{3,}|~{3,})(.*)$", stripped)
+            if match:
+                marker, info = match.groups()
+                fence_char = marker[0]
+                fence_len = len(marker)
+                lang = info.strip().split()[0].lower() if info.strip() else ""
+                in_json = lang == "json"
+                current = []
+        else:
+            close_match = re.match(rf"^{re.escape(fence_char)}{{{fence_len},}}[ \t]*$", stripped)
+            if close_match:
+                if in_json:
+                    blocks.append("\n".join(current))
+                fence_char = ""
+                fence_len = 0
+                in_json = False
+                current = []
+            elif in_json:
+                current.append(line)
+
+    return blocks
+
+
+def _validate_readme_mcp_client_section(page: str, heading: str, section: str) -> None:
+    """Validate that fenced json blocks in one README client section define mcpServers.cubrid."""
+    blocks = _extract_json_fences(section)
+    assert blocks, f"{page} {heading} has no fenced json config block"
+    for index, block in enumerate(blocks, start=1):
+        try:
+            payload = json.loads(block)
+        except json.JSONDecodeError as exc:
+            raise AssertionError(
+                f"{page} {heading} json block #{index} is invalid JSON: {exc}"
+            ) from exc
+        assert isinstance(payload, dict), f"{page} {heading} block #{index} must be a JSON object"
+        servers = payload.get("mcpServers")
+        assert isinstance(servers, dict), f"{page} {heading} block #{index} missing mcpServers object"
+        cubrid = servers.get("cubrid")
+        assert isinstance(cubrid, dict), (
+            f"{page} {heading} block #{index} missing mcpServers.cubrid object"
+        )
+        command = cubrid.get("command")
+        assert isinstance(command, str) and command.strip(), (
+            f"{page} {heading} block #{index} missing non-empty command"
+        )
+        env = cubrid.get("env")
+        assert isinstance(env, dict), f"{page} {heading} block #{index} missing env object"
+
+
+def test_readme_mcp_client_json_snippets_are_valid() -> None:
+    """Every MCP client setup snippet in English and Korean READMEs must parse offline (#580)."""
+    client_headings = ("### Claude Desktop", "### Claude Code", "### Cursor")
+    for page in ("README.md", "docs/README.ko.md"):
+        text = _read(*page.split("/"))
+        for heading in client_headings:
+            section = _section(text, heading)
+            _validate_readme_mcp_client_section(page, heading, section)
+
+    unrelated_doc = (
+        "## Other Section\n\n"
+        '```json\n{"unrelated":}\n```\n\n'
+        "### Claude Desktop\n\n"
+        '```json\n{"mcpServers": {"cubrid": {"command": "uvx", "env": {"CUBRID_HOST": "localhost"}}}}\n```\n'
+    )
+    _validate_readme_mcp_client_section(
+        "README.md", "### Claude Desktop", _section(unrelated_doc, "### Claude Desktop")
+    )
+
+    bad_syntax = '```json\n{"mcpServers": {"cubrid": {"command": "uvx",}}}\n```\n'
+    try:
+        _validate_readme_mcp_client_section("README.md", "### Claude Desktop", bad_syntax)
+    except AssertionError:
+        pass
+    else:
+        raise AssertionError("Expected malformed JSON client snippet to fail validation")
+
+    missing_env = '```json\n{"mcpServers": {"cubrid": {"command": "uvx"}}}\n```\n'
+    try:
+        _validate_readme_mcp_client_section("README.md", "### Claude Desktop", missing_env)
+    except AssertionError:
+        pass
+    else:
+        raise AssertionError("Expected client snippet missing env to fail validation")
+
 
 async def test_tools_md_lists_every_tool_and_prompt_and_resource() -> None:
     async with Client(server.mcp) as client:
